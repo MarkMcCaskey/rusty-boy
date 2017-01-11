@@ -82,6 +82,26 @@ impl Cpu {
         self.e = (dev & 0xFF)          as i8;
     }
 
+    fn set_register16(&mut self, reg: CpuRegister16, val: u16) {
+        match reg {
+            BC => self.set_bc(val),
+            DE => self.set_de(val),
+            HL => self.set_hl(val),
+            SP => self.sp = val,
+            _  => panic!("Invalid 16bit register!"),
+        }
+    }
+
+    fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
+        match reg {
+            BC     => self.bc(),
+            DE     => self.de(),
+            HL     => self.hl(),
+            SP     => self.sp, 
+            CpuRegister16::Num(i) => i as u16,
+        }
+    }
+
     fn set_flags(&mut self, z: bool, n: bool, h: bool, c: bool) {
         let zn = (z as i8) << 7;
         let nn = (z as i8) << 6;
@@ -132,6 +152,40 @@ impl Cpu {
             },
             _               => panic!("Cannot set non-8bit values"),
         } 
+    }
+
+
+    fn ldnnn(&mut self, nn: CpuRegister, n: u8) {
+        self.set_register(nn, n as i8);
+    }
+
+    fn ldr1r2(&mut self, r1: CpuRegister, r2:CpuRegister) {
+        let val = self.access_register(r2).expect("Invalid register");
+        self.set_register(r1, val);
+    }
+
+    fn ldan(&mut self, n: CpuRegister) {
+        let val = self.access_register(n).expect("Invalid register");
+        self.set_register(CpuRegister::A, val);
+    }
+
+    fn ldan16(&mut self, n: CpuRegister16) {
+        let addr = self.access_register16(n);
+        let val = self.mem[addr as usize];
+
+        self.set_register(CpuRegister::A, val);
+    }
+
+    fn ldna(&mut self, n: CpuRegister) {
+        let val = self.access_register(CpuRegister::A).expect("Invalid register");
+        self.set_register(n, val);
+    }
+
+    fn ldna16(&mut self, n: CpuRegister16) {
+        let val = self.access_register(CpuRegister::A).expect("Invalid register");
+        let addr = self.access_register16(n);
+
+        self.set_mem(addr as usize, val);
     }
 
     //TODO: rename this awfully named function
@@ -631,15 +685,48 @@ impl Cpu {
         self.pc = n as u16;
     }
 
+    fn pop_from_stack(&mut self) -> u16 {
+        let old_sp = self.sp;
+        let val1 = self.mem[old_sp as usize];
+        let val2 = self.mem[(old_sp+1) as usize];
+
+        ((val2 as u16) << 8) | (val1 as u16)
+    }
+
+    fn ret(&mut self) {
+        let new_addr = self.pop_from_stack();
+
+        self.pc = new_addr;
+    }
+
+    fn retcc(&mut self, cc: Cc) {
+        let will_jump = 1 ==
+            match cc {
+                NZ => !((self.f >> 7) & 1),
+                Z  => (self.f >> 7) & 1,
+                NC => !((self.f >> 4) & 1),
+                C  => (self.f >> 4) & 1,
+            };
+
+        if will_jump {
+            self.ret();
+        } else {
+            ()
+        }
+    }
+
+    fn reti(&mut self) {
+        let new_addr = self.pop_from_stack();
+
+        self.pc = new_addr;
+        self.ei();
+    }
+
     /*
     HALT
     STOP
     DI
     EI
-    RST
-    RET
-    RET
-    RETI
      */
 
 
@@ -682,7 +769,7 @@ impl Cpu {
                     match z {
                         0 =>
                             match y {
-                                0        => (),//self.nop(), 
+                                0        => self.nop(),
                                 1        => /*AF*/ (),
                                 2        => /*DJNZ*/(),
                                 3        => (),//self.jr(),
