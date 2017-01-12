@@ -1,7 +1,6 @@
 #ifndef RUSTY_BOY_GRAPHICS_H
 #define RUSTY_BOY_GRAPHICS_H
 
-#define TILE_SIZE 8
 #define PIXEL_SIZE 1
 
 #include "linked_list.h"
@@ -33,6 +32,7 @@ bool free_window(Window *window);
 void draw_pixel(Window *window, int x, int y, SDL_Color color, uint8_t alpha);
 bool load_sprite(Window *window, const char* file);
 bool unload_sprite(Window *window);
-// TODO: Add drawing system
+void draw_sprite(Window *window, int index, int x, int y);
+void present_changes(Window *window);
 
 #endif //RUSTY_BOY_GRAPHICS_H

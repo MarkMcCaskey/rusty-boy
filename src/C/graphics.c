@@ -110,4 +110,23 @@ bool unload_sprite(Window *window) {
     return true;
 }
 
-// Draw a sprite
+// Draw a sprite onto the screen
+void draw_sprite(Window *window, int index, int x, int y) {
+    SDL_Rect dst;
+    dst.x = x;
+    dst.y = y;
+
+    SDL_Texture **sprite;
+    int w,
+        h;
+    SDL_QueryTexture(*sprite, NULL, NULL, &w, &h);
+    dst.w = w;
+    dst.h = h;
+
+    dereference_index(sprite, &window->sprite_list, index);
+    SDL_RenderCopy(window->ren, *sprite, NULL, &dst);
+}
+
+void present_changes(Window *window) {
+    SDL_RenderPresent(window->ren);
+}
