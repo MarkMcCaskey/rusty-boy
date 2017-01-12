@@ -97,7 +97,9 @@ bool load_sprite(Window *window, const char* file) {
     }
 
     SDL_Texture **data;
-    dereference_index(data, &window->sprite_list, window->index++);
+    bool success = dereference_index(data, &window->sprite_list, window->index++);
+    if (!success)
+        return false;
     *data = sprite;
     return true;
 }
