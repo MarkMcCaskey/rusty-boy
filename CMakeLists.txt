@@ -10,7 +10,7 @@ find_package(SDL2_Image REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(SDL2_Mixer REQUIRED)
 
-set(SOURCE_FILES src/C/graphics.c)
+set(SOURCE_FILES src/C/graphics.c src/C/linked_list.c)
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCE_FILES})
 include_directories(${SDL2_INCLUDE_DIR}
         ${SDL2_IMAGE_INCLUDE_DIR}

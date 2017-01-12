@@ -3,7 +3,6 @@
 //
 
 #include "linked_list.h"
-#include <stdbool.h>
 #include <stdio.h>
 
 // Constructor for a linked list
@@ -46,7 +45,7 @@ List new_empty_list() {
 
 // Constructor for a linked list
 // Creates empty list of desired length
-List new_empty_list_n(size_t n) {
+List new_empty_list_n(int n) {
     // Create new list
     List new_list;
 
@@ -196,7 +195,7 @@ void delete(List *list, Node *node) {
 
 // Dereference node at index storing it in data
 // Returns boolean indicating success or failure
-bool dereference_index(SDL_Texture **data, List *list, size_t index) {
+bool dereference_index(SDL_Texture **data, List *list, int index) {
     // Checks to see if index is out of range
     if (index < 0 || index > list->size - 1) {
         fprintf(stderr, "Dereferenced value out of list range");

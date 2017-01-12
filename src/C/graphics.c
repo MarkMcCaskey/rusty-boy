@@ -31,6 +31,7 @@ bool create_window(Window* win, char* window_name, int width, int height, SDL_Wi
     win->width = width;
     win->height = height;
     win->index = 0;
+    win->sprite_list = new_empty_list_n(10);
     win->win = SDL_CreateWindow(window_name, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                     width, height, win_flags);
     if (win->win == NULL) {
@@ -86,7 +87,7 @@ void draw_pixel(Window *window, int x, int y, SDL_Color color, uint8_t alpha) {
 // Loads a sprite into the window's sprite cache
 bool load_sprite(Window *window, const char* file) {
     if (window->index >= 10) {
-        fprintf(stderr, "Too many sprites loaded: Max 10");
+        fprintf(stderr, "Too many sprites loaded: Max 10 | Aborting command");
         return false;
     }
 
@@ -96,9 +97,19 @@ bool load_sprite(Window *window, const char* file) {
         return false;
     }
 
-    window->sprite_arr[window->index] = sprite;
+    SDL_Texture **data;
+    dereference_index(data, &window->sprite_list, window->index++);
+    *data = sprite;
     return true;
 }
 
-// Unloads a sprite from the window's sprite cache
-// Can unload from middle of sprite cache, but it is recommended to pop from the end
+// Unloads a sprite from the  end of the window's sprite cache
+bool unload_sprite(Window *window) {
+    if (window->index < 0) {
+        fprintf(stderr, "Tried to unload sprite with no sprites in cache | Aborting command");
+        return false;
+    }
+
+    pop_back(&window->sprite_list);
+    return true;
+}

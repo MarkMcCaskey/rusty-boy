@@ -24,7 +24,7 @@ typedef struct Window {
     SDL_Renderer *ren;
 
     // The sprites Maximum 10
-    SDL_Texture *sprite_arr[10];
+    List sprite_list;
     int index; // Default initialised to 0
 } Window;
 
