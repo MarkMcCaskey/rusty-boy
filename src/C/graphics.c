@@ -33,6 +33,8 @@ bool create_window(Window* win, char* window_name, int width, int height, SDL_Wi
     win->sprite_list = new_empty_list_n(10);
     win->win = SDL_CreateWindow(window_name, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                     width, height, win_flags);
+    win->win_flags = win_flags;
+    win->ren_flags = ren_flags;
     if (win->win == NULL) {
         logSDLError("Unable to create SDL_Window");
         return false;
