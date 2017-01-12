@@ -1,6 +1,5 @@
 #include <SDL2/SDL.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <SDL_image.h>
 #include "graphics.h"
 
@@ -111,5 +110,6 @@ bool unload_sprite(Window *window) {
     }
 
     pop_back(&window->sprite_list);
+    --window->index;
     return true;
 }

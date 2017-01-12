@@ -28,8 +28,11 @@ typedef struct Window {
     int index; // Default initialised to 0
 } Window;
 
-_Bool create_window(Window* win, char* window_name, int width, int height, SDL_WindowFlags win_flags, short ren_index, SDL_RendererFlags ren_flags);
-_Bool free_window(Window *window);
+bool create_window(Window* win, char* window_name, int width, int height, SDL_WindowFlags win_flags, short ren_index, SDL_RendererFlags ren_flags);
+bool free_window(Window *window);
 void draw_pixel(Window *window, int x, int y, SDL_Color color, uint8_t alpha);
+bool load_sprite(Window *window, const char* file);
+bool unload_sprite(Window *window);
+// TODO: Add drawing system
 
 #endif //RUSTY_BOY_GRAPHICS_H
