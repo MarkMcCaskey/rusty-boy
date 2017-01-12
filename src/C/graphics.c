@@ -73,14 +73,8 @@ bool free_window(Window *window) {
 
 // Draws a pixel, what else did you expect
 void draw_pixel(Window *window, int x, int y, SDL_Color color, uint8_t alpha) {
-    SDL_Rect draw_dst;
-    draw_dst.x = x;
-    draw_dst.y = y;
-    draw_dst.w = PIXEL_SIZE;
-    draw_dst.h = PIXEL_SIZE;
-
     SDL_SetRenderDrawColor(window->ren, color.r, color.g, color.b, alpha);
-    SDL_RenderDrawRect(window->ren, &draw_dst);
+    SDL_RenderDrawPoint(window->ren, x, y);
 }
 
 // Loads a sprite into the window's sprite cache
@@ -115,3 +109,5 @@ bool unload_sprite(Window *window) {
     --window->index;
     return true;
 }
+
+// Draw a sprite
