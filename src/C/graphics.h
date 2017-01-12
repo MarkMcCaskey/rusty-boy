@@ -4,6 +4,8 @@
 #define TILE_SIZE 8
 #define PIXEL_SIZE 1
 
+#include "linked_list.h"
+
 // Little wrapper for SDL to make it into a nice neat bun
 typedef struct Window {
     // Name of the window
@@ -20,6 +22,10 @@ typedef struct Window {
     // Renderer object
     SDL_RendererFlags ren_flags;
     SDL_Renderer *ren;
+
+    // The sprites Maximum 10
+    SDL_Texture *sprite_arr[10];
+    int index; // Default initialised to 0
 } Window;
 
 _Bool create_window(Window* win, char* window_name, int width, int height, SDL_WindowFlags win_flags, short ren_index, SDL_RendererFlags ren_flags);
