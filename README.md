@@ -1,4 +1,6 @@
 # rusty-boy
-Kappa (gameboy emulator in Rust)
+[![Build Status](https://travis-ci.org/MarkMcCaskey/rusty-boy.svg?branch=master)](https://travis-ci.org/MarkMcCaskey/rusty-boy)
 
-Gameboy emulator in Rust!  Making this live on twitch.tv/maoeurk
+A Gameboy emulator in Rust (with possible rendering also in C).
+
+Making this live on twitch.tv/maoeurk
