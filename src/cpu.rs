@@ -84,20 +84,20 @@ impl Cpu {
 
     fn set_register16(&mut self, reg: CpuRegister16, val: u16) {
         match reg {
-            BC => self.set_bc(val),
-            DE => self.set_de(val),
-            HL => self.set_hl(val),
-            SP => self.sp = val,
+            CpuRegister16::BC => self.set_bc(val),
+            CpuRegister16::DE => self.set_de(val),
+            CpuRegister16::HL => self.set_hl(val),
+            CpuRegister16::SP => self.sp = val,
             _  => panic!("Invalid 16bit register!"),
         }
     }
 
     fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
         match reg {
-            BC     => self.bc(),
-            DE     => self.de(),
-            HL     => self.hl(),
-            SP     => self.sp, 
+            CpuRegister16::BC     => self.bc(),
+            CpuRegister16::DE     => self.de(),
+            CpuRegister16::HL     => self.hl(),
+            CpuRegister16::SP     => self.sp, 
             CpuRegister16::Num(i) => i as u16,
         }
     }
@@ -460,7 +460,7 @@ impl Cpu {
     }
 
     fn rrca(&mut self) {
-        let old_bit0 = (self.a & 1);
+        let old_bit0 = self.a & 1;
 
         let new_a = (self.a >> 1) | (old_bit0 << 7);
         self.a = new_a;
@@ -472,7 +472,7 @@ impl Cpu {
     }
 
     fn rra(&mut self) {
-        let old_bit0 = (self.a & 1);
+        let old_bit0 = self.a & 1;
         let old_flags = (self.f & cl) >> 4;
 
         let new_a = (self.a >> 1) | (old_flags << 7);
@@ -601,10 +601,10 @@ impl Cpu {
     fn jpccnn(&mut self, cc: Cc, nn: u16) {
         let will_jump = 1 ==
             match cc {
-                NZ => !((self.f >> 7) & 1),
-                Z  => (self.f >> 7) & 1,
-                NC => !((self.f >> 4) & 1),
-                C  => (self.f >> 4) & 1,
+                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::Z  => (self.f >> 7) & 1,
+                Cc::NC => !((self.f >> 4) & 1),
+                Cc::C  => (self.f >> 4) & 1,
         };
 
         if will_jump {
@@ -630,10 +630,10 @@ impl Cpu {
     fn jrccn(&mut self, cc: Cc, n: i8) {
         let will_jump = 1 ==
             match cc {
-                NZ => !((self.f >> 7) & 1),
-                Z  => (self.f >> 7) & 1,
-                NC => !((self.f >> 4) & 1),
-                C  => (self.f >> 4) & 1,
+                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::Z  => (self.f >> 7) & 1,
+                Cc::NC => !((self.f >> 4) & 1),
+                Cc::C  => (self.f >> 4) & 1,
             };
 
         let old_pc = self.pc;
@@ -664,10 +664,10 @@ impl Cpu {
     fn callccnn(&mut self, cc: Cc, nn: u16) {
         let will_jump = 1 ==
             match cc {
-                NZ => !((self.f >> 7) & 1),
-                Z  => (self.f >> 7) & 1,
-                NC => !((self.f >> 4) & 1),
-                C  => (self.f >> 4) & 1,
+                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::Z  => (self.f >> 7) & 1,
+                Cc::NC => !((self.f >> 4) & 1),
+                Cc::C  => (self.f >> 4) & 1,
             };
 
         if will_jump {
@@ -702,10 +702,10 @@ impl Cpu {
     fn retcc(&mut self, cc: Cc) {
         let will_jump = 1 ==
             match cc {
-                NZ => !((self.f >> 7) & 1),
-                Z  => (self.f >> 7) & 1,
-                NC => !((self.f >> 4) & 1),
-                C  => (self.f >> 4) & 1,
+                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::Z  => (self.f >> 7) & 1,
+                Cc::NC => !((self.f >> 4) & 1),
+                Cc::C  => (self.f >> 4) & 1,
             };
 
         if will_jump {
@@ -746,12 +746,7 @@ impl Cpu {
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
     */
     pub fn dispatch_opcode(&mut self) {
-        enum ThreeBit {
-            no, pa, re, ci, vo, mu, xa, ze,
-        }
-        enum TwoBit {
-            no, pa, re, ci,
-        }
+        /*
         let first_byte = self.read_instruction();
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
@@ -798,6 +793,7 @@ impl Cpu {
         }
 
         self.inc_pc();
+        */
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
@@ -840,6 +836,7 @@ impl Cpu {
 #[cfg(test)]
 mod test {
     use super::*;
+    use cpu::*;
 
     macro_rules! test_op {
         ($func:ident, $e:expr) => {
