@@ -3,7 +3,7 @@ extern crate clap;
 mod cpu;
 
 use cpu::*;
-use clap::{Arg,App,SubCommand};
+use clap::{Arg, App};
 
 fn main() {
     let matches = App::new("rusty-boy")
@@ -11,11 +11,11 @@ fn main() {
         .author("Mark McCaskey and friends")
         .about("Kappa")
         .arg(Arg::with_name("game")
-             .short("g")
-             .long("game")
-             .value_name("FILE")
-             .help("Specifies ROM to load")
-             .takes_value(true))
+            .short("g")
+            .long("game")
+            .value_name("FILE")
+            .help("Specifies ROM to load")
+            .takes_value(true))
         .get_matches();
 
     let rom_file = matches.value_of("game").expect("Failed to load ROM");
@@ -24,4 +24,3 @@ fn main() {
     gameboy.load_rom(rom_file);
     gameboy.play();
 }
-

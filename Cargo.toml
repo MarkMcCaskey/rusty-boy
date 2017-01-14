@@ -6,4 +6,3 @@ authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 [dependencies]
 nom = "^2.0"
 clap = "2"
-piston_window = "0.44.0"
