@@ -104,11 +104,12 @@ impl Cpu {
 
     fn set_flags(&mut self, z: bool, n: bool, h: bool, c: bool) {
         let zn = (z as i8) << 7;
-        let nn = (z as i8) << 6;
-        let hn = (z as i8) << 5;
-        let cn = (z as i8) << 4;
+        let nn = (n as i8) << 6;
+        let hn = (h as i8) << 5;
+        let cn = (c as i8) << 4;
 
         self.f = zn | nn | hn | cn;
+        println!("Hello from set_flags!  Value is: {}.  Booleans: {}, {}, {}, {}", self.f, z, n, h, c);
     }
 
 
@@ -219,49 +220,70 @@ impl Cpu {
           }) as i32
     }
 
+    fn reg_or_const(&mut self, reg: CpuRegister) -> i16 {
+        if let Some(r) = self.access_register(reg) {
+            r as i16
+        } else { //constant value
+            if let CpuRegister::Num(v) = reg {
+                v as i16
+            } else { unreachable!("The impossible happened!") }
+        }
+    }
+
     
-    //TODO: set flags based on results
     fn add(&mut self, reg: CpuRegister) {
+        let old_a = self.a as i16;
+        let old_b = self.reg_or_const(reg);
+
         let new_a = self.alu_dispatch(reg, |a: i8, b: i8| (a as i16) + (b as i16));
+
         self.a = new_a as i8;
 
-        //TODO: implement half carry bitflag
         self.set_flags((new_a as i8) == 0,
                        false,
-                       new_a > u8::max_value() as i16,
-                       false);
+                       ((old_a % 16) + (old_b % 16)) > 15,
+                       (old_a + old_b) > i8::max_value() as i16);
     }
 
     fn adc(&mut self, reg: CpuRegister) {
+        let old_a = self.a as i16;
+        let old_b = self.reg_or_const(reg);
         let cf: i8 = self.f & hl >> 5;
         self.add(reg);
 
         let new_a: i16 = (cf + self.a) as i16;
 
 
-        //TODO: Verify flag difference between add and adc
-        self.f |= if new_a > (u8::max_value() as i16) { hl } else { 0 };
+        self.f |= if (old_a + old_b) > (i8::max_value() as i16) { hl } else { 0 };
+        self.f |= if ((old_a % 16) + (old_b % 16)) > 15 { cl } else { 0 };
     }
 
     fn sub(&mut self, reg: CpuRegister) {
+        let old_a = self.a as i16;
+        let old_b = self.reg_or_const(reg);
         let new_a: i16 = self.alu_dispatch(reg, |a: i8, b: i8| (a as i16) - (b as i16));
+
         self.a = new_a as i8;
-        //TODO: review this after sleeping
-        //TODO: implement half carry bitflag
         self.set_flags((new_a as i8) == 0,
                        true,
-                       new_a > u8::max_value() as i16,
-                       false);
+                       (old_a & 0xF) >= (old_b & 0xF),
+                       old_b <= old_a as i16);
     }
 
     fn sbc(&mut self, reg: CpuRegister) {
+        let old_a = self.a as i16;
+        let old_b = self.reg_or_const(reg);
+        let old_c = (old_a - old_b) as i8;
         let cf: i8 = self.f & hl >> 5;
-        self.add(reg);
+        self.sub(reg);
 
         //NOTE: find out whether this should be self.a - cf
-        let new_a: i16 = (cf + self.a) as i16;
-
-        self.f |= if new_a > (i8::max_value() as i16) { hl } else { 0 };
+        let new_a: i16 = (self.a - cf) as i16;
+        self.a = new_a as i8;
+        self.set_flags((new_a as i8) == 0,
+                       true,
+                       (old_c & 0xF) >= cf,
+                       cf <= old_c);
     }
 
     fn and(&mut self, reg: CpuRegister) {
@@ -272,7 +294,7 @@ impl Cpu {
     }
 
     fn or(&mut self, reg: CpuRegister) {
-        let new_a: i16 = self.alu_dispatch(reg, |a: i8, b: i8| (a as i16) | (b as i16));
+        let new_a: i16 = self.alu_dispatch(reg, |a: i8, b: i8| ((a as u16) | (b as u16)) as i16);
 
         self.a = new_a as i8;
         self.set_flags(new_a == 0, false, false, false);
@@ -286,6 +308,10 @@ impl Cpu {
     }
 
     fn cp(&mut self, reg: CpuRegister) {
+        let old_a = self.a;
+        self.sub(reg);
+        self.a = old_a;
+        self.f |= nl;
     }
 
     fn inc(&mut self, reg: CpuRegister) {
@@ -575,7 +601,7 @@ impl Cpu {
     fn bit(&mut self, b: u8, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_flags = (self.f & cl) >> 4;
-            
+        
         self.set_flags((reg_val >> b) & 1 == 1,
                        false,
                        true,
@@ -605,7 +631,7 @@ impl Cpu {
                 Cc::Z  => (self.f >> 7) & 1,
                 Cc::NC => !((self.f >> 4) & 1),
                 Cc::C  => (self.f >> 4) & 1,
-        };
+            };
 
         if will_jump {
             self.pc = nn;
@@ -744,7 +770,7 @@ impl Cpu {
     2. prefix byte, prefix byte, displacement byte, opcode
     
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
-    */
+     */
     pub fn dispatch_opcode(&mut self) {
         /*
         let first_byte = self.read_instruction();
@@ -758,48 +784,48 @@ impl Cpu {
 
         if first_byte == 0xCB { //prefixed instruction
 
-        } else { //unprefixed instruction
-            match x {
-                0 =>
-                    match z {
-                        0 =>
-                            match y {
-                                0        => self.nop(),
-                                1        => /*AF*/ (),
-                                2        => /*DJNZ*/(),
-                                3        => (),//self.jr(),
-                                v @ 4...7 => /*jr cc*/(),
-                                _        => unreachable!(uf),
-                            },
+    } else { //unprefixed instruction
+        match x {
+        0 =>
+        match z {
+        0 =>
+        match y {
+        0        => self.nop(),
+        1        => /*AF*/ (),
+        2        => /*DJNZ*/(),
+        3        => (),//self.jr(),
+        v @ 4...7 => /*jr cc*/(),
+        _        => unreachable!(uf),
+    },
 
-                        1 =>
-                            match q {
-                                0 => (),//ld
-                                1 => (),//add hl
-                                _ => unreachable!(uf),
-                        },
+        1 =>
+        match q {
+        0 => (),//ld
+        1 => (),//add hl
+        _ => unreachable!(uf),
+    },
 
-                        2 =>
-                            match q {
-                                0 => (),
-                                1 => (),
-                                _ => unreachable!(uf),
-                            },
+        2 =>
+        match q {
+        0 => (),
+        1 => (),
+        _ => unreachable!(uf),
+    },
 
-                        _ => unreachable!(uf),
-                    },
-                _ => panic!("The impossible happened!"),
-            }
-        }
+        _ => unreachable!(uf),
+    },
+        _ => panic!("The impossible happened!"),
+    }
+    }
 
         self.inc_pc();
-        */
+         */
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
         use std::fs::File;
         use std::io::Read;
-         
+        
 
         let mut rom = File::open(file_path).expect("Could not open rom file");
         let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
@@ -819,85 +845,112 @@ impl Cpu {
         }
     }
 
-//    fn controller_input(&mut self, value)
+    //    fn controller_input(&mut self, value)
 }
 
 
-    /*
-    LD:
-    B: 06 = 00000110
-    C: 0E = 00001110
-    D: 16 = 00010110
-    E: 1E = 00011110
-    H: 26 = 00100110
-    L: 2E = 00101110
-*/
+/*
+LD:
+B: 06 = 00000110
+C: 0E = 00001110
+D: 16 = 00010110
+E: 1E = 00011110
+H: 26 = 00100110
+L: 2E = 00101110
+ */
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use cpu::*;
+    use cpu;
 
     macro_rules! test_op {
-        ($func:ident, $e:expr) => {
+        ($func:ident, $method:ident, $input:expr, $output_reg:ident,
+         $expected_output:expr, $flag_find_value:expr,
+         $flag_expected_value:expr, $pre_exec:expr) => {
 
+            #[test]
+            fn $func() {
+                let mut cpu = Cpu::new();
+
+                let (in_set, in_arg) = $input;
+
+                //skip register preset if constant value
+                if let CpuRegister::Num(_) = in_arg {
+                    ()
+                } else {
+                    cpu.set_register(in_arg, $pre_exec);
+                }
+
+                cpu.$output_reg = in_set;
+                cpu.$method(in_arg);
+
+                println!("{:?} `op` {:?} = {:?}", in_set, $pre_exec, cpu.$output_reg);
+                
+                assert_eq!(cpu.$output_reg, $expected_output);
+                assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
+            }
         }
     }
+     
+    test_op!(add_const, add, (5, CpuRegister::Num(5)), a, 5 + 5, |flags| flags & zl, 0,5);
+    test_op!(add_reg, add, (5, CpuRegister::B), a, 5 + -5, |flags| flags, zl, -5);
+    test_op!(add_mem_half_carry, add, (1, CpuRegister::HL), a, 15 + 1, |flags| flags, hl, 15);
+    test_op!(add_mem_half_carry1, add, (15, CpuRegister::HL), a, 15 + 1, |flags| flags, hl, 1);
+
+    test_op!(adc_test, adc, (10, CpuRegister::E), a, 10 + 1, |flags| flags, 0, 1);
+//    test_op!(adc_carry, adc, (10, CpuRegister::F), a, 10 + 1, |flags| flags, 0, cl);
+
         
-    #[test]
-    fn add() {
-        let mut cpu = Cpu::new();
 
-        cpu.a = 5;
-        cpu.add(CpuRegister::Num(5));
+    test_op!(sub_const, sub, (5, CpuRegister::Num(5)), a, 5 - 5, |flags| flags, zl | nl | hl | cl, 0);
+    test_op!(sub_reg, sub, (10, CpuRegister::B), a, 20, |flags| flags, nl | hl | cl, -10);
+    test_op!(sub_reg2, sub, (10, CpuRegister::C), a, 0, |flags| flags, zl | nl | hl | cl, 10);
+    test_op!(sub_reg_borrow, sub, (0, CpuRegister::D), a, -10, |flags| flags, nl, 10);
+    //TODO: write half carry only test:
+//    test_op!(sub_reg_borrow_half, sub, (130, CpuRegister::D), a, 40, |flags| flags, nl | hl, 32);
 
-        assert_eq!(cpu.a, 10);
-        assert_eq!(cpu.f & zl, 0);
+    test_op!(and_test, and, (0xF, CpuRegister::B), a, 0xF, |flags| flags, hl, 0xF);
+    test_op!(and_test1, and, (0xF, CpuRegister::C), a, 0x1, |flags| flags, hl, 0x1);
+    test_op!(and_test2, and, (0xF, CpuRegister::E), a, 0, |flags| flags, zl | hl, 0x70);
 
-        cpu.b = -10;
-        cpu.add(CpuRegister::B);
+    test_op!(or_test, or, (0xF, CpuRegister::C), a, 0xF, |flags| flags, 0, 0xF);
+    test_op!(or_test1, or, (0xF, CpuRegister::D), a, 0xF, |flags| flags, 0, 0);
+    test_op!(or_test2, or, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0);
+    test_op!(or_test3, or, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
 
-        assert_eq!(cpu.a, 0);
-        assert_eq!(cpu.f & zl, zl);
-    }
+    test_op!(xor_test, xor, (0xF, CpuRegister::C), a, 0, |flags| flags, zl, 0xF);
+    test_op!(xor_test1, xor, (0xF, CpuRegister::D), a, 0xF, |flags| flags, 0, 0);
+    test_op!(xor_test2, xor, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0);
+    test_op!(xor_test3, xor, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
 
-    #[test]
-    fn sub() {
-        let mut cpu = Cpu::new();
+    
+    test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
+    test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
+    // TODO: verify hl and cl flags here make sense:
+    test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
+    test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl | cl, 0);
 
-        cpu.a = 5;
-        cpu.sub(CpuRegister::Num(5));
-        
-        assert_eq!(cpu.a, 0);
-        assert_eq!(cpu.f & zl, zl);
+//    test_op!(addhl_test, add_hl, (0xFFFF, CpuRegister16::AB), a, 0x10000, |flags| flags, zl | nl  | hl | cl, 1);
+  //  test_op!(addhl_test1, add_hl, (1256, CpuRegister16::CD), a, 1256, |flags| flags, nl | hl | cl, 0);
 
-        cpu.b = -10;
-        cpu.sub(CpuRegister::B);
 
-        assert_eq!(cpu.a, 10);
-        assert_eq!(cpu.f & zl, 0);
-    }
+    /*
+    test_op!(inc_test,  inc, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
+    test_op!(inc_test1, inc, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
+    test_op!(inc_test2, inc, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
 
-    #[test]
-    fn bcd() {
-        let mut cpu = Cpu::new();
+    */
 
-        cpu.a = 0x15;
-        cpu.daa();
+    //dec
 
-        assert_eq!(cpu.a, 0x15);
 
-        cpu.a = 0x70;
-        cpu.daa();
-        assert_eq!(cpu.a, 0x70);
 
-        cpu.a = 0x79;
-        cpu.daa();
-        assert_eq!(cpu.a, 0x79);
-
-        cpu.a = 0x3F;
-        cpu.daa();
-        assert_eq!(cpu.a, 0x45);
-    }
+   /* //TODO: flag tests on BCD
+    test_op!(bcd_test1, daa, (0x15, ), a, 0x15, |_| 0, 0, 0x15);
+    test_op!(bcd_test1, daa, (0x70, ), a, 0x70, |_| 0, 0, 0x70);
+    test_op!(bcd_test1, daa, (0x79, ), a, 0x79, |_| 0, 0, 0x79);
+    test_op!(bcd_test1, daa, (0x3F, ), a, 0x3F, |_| 0, 0, 0x3F);
+    */
 }
 
