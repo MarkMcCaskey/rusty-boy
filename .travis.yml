@@ -1,4 +1,9 @@
 language: rust
+sudo: true
+
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-et install -y libsdl2-dev
 rust:
   - stable
   - beta
