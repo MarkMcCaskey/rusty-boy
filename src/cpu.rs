@@ -14,7 +14,7 @@ pub struct Cpu {
     l:   i8,
     sp:  u16,
     pc:  u16,
-    mem: [i8; 0xFFFF + 1] //TODO: Verify this
+    mem: [i8; 0xFFFF + 1],
 }
 
 /*
@@ -38,21 +38,132 @@ enum Cc {
     NZ, Z, NC, C,
 }
 
+fn cc_dispatch(num: u8) -> Cc {
+    match num {
+        0 => Cc::NZ,
+        1 => Cc::Z,
+        2 => Cc::NC,
+        3 => Cc::C,
+        _ => panic!("Invalid number for Cc dispatch"),
+    }
+}
+
+fn cpu16_dispatch(num: u8) -> CpuRegister16 {
+    match num {
+        0 => CpuRegister16::BC,
+        1 => CpuRegister16::DE,
+        2 => CpuRegister16::HL,
+        3 => CpuRegister16::SP,
+        _ => panic!("Invalid number for 16bit register dispatch"),
+    }
+}
+
+macro_rules! even_odd_dispatch {
+    ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
+     $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
+     $f1pcincs:expr) => {
+
+        if $num % 2 == 0 {
+            let adjusted_number:u8 = $num / 2;
+            $cpu.$func0($f0dispfunc(adjusted_number));
+            
+            // TODO: Verify this executes it n-1 times
+            for i in 1..($f0pcincs) {
+                $cpu.inc_pc();
+            }
+        } else {
+            let adjusted_number:u8 = $num / 2;
+            $cpu.$func1($f1dispfunc(adjusted_number));
+            
+            for i in 1..($f1pcincs) {
+                $cpu.inc_pc();
+            }
+        }
+    }
+}
+
+
+//macro_rules! special_register($name:ident, $location:expr)
+
 impl Cpu {
     pub fn new() -> Cpu {
-        Cpu {
-            a:   0,
+        let mut new_cpu = Cpu {
+            // TODO: abstract this later~
+            a:   0x01, //for GB/SGB (GBP & GBC need different values)
             b:   0,
             c:   0,
             d:   0,
             e:   0,
-            f:   0,
+            f:   0xB0,
             h:   0,
             l:   0,
             sp:  0xFFFE,
             pc:  0x100,
             mem: [0; 0xFFFF + 1]
-        }
+        };
+
+        //boot sequence (maybe do this by running it as a proper rom?)
+        new_cpu.set_bc(0x0013);
+        new_cpu.set_de(0x00D8);
+        new_cpu.set_hl(0x014D);
+        new_cpu.mem[0xFF05] = 0x00;
+        new_cpu.mem[0xFF06] = 0x00;
+        new_cpu.mem[0xFF07] = 0x00;
+        new_cpu.mem[0xFF10] = 0x80;
+        new_cpu.mem[0xFF11] = 0xBF;
+        new_cpu.mem[0xFF12] = 0xF3;
+        new_cpu.mem[0xFF14] = 0xBF;
+        new_cpu.mem[0xFF16] = 0x3F;
+        new_cpu.mem[0xFF17] = 0x00;
+        new_cpu.mem[0xFF19] = 0xBF;
+        new_cpu.mem[0xFF1A] = 0x7F;
+        new_cpu.mem[0xFF1B] = 0xFF;
+        new_cpu.mem[0xFF1C] = 0x9F;
+        new_cpu.mem[0xFF1E] = 0xBF;
+        new_cpu.mem[0xFF20] = 0xFF;
+        new_cpu.mem[0xFF21] = 0x00;
+        new_cpu.mem[0xFF22] = 0x00;
+        new_cpu.mem[0xFF23] = 0xBF;
+        new_cpu.mem[0xFF24] = 0x77;
+        new_cpu.mem[0xFF25] = 0xF3;
+        new_cpu.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
+        new_cpu.mem[0xFF40] = 0x91;
+        new_cpu.mem[0xFF42] = 0x00;
+        new_cpu.mem[0xFF43] = 0x00;
+        new_cpu.mem[0xFF45] = 0x00;
+        new_cpu.mem[0xFF47] = 0xFC;
+        new_cpu.mem[0xFF48] = 0xFF;
+        new_cpu.mem[0xFF49] = 0xFF;
+        new_cpu.mem[0xFF4A] = 0x00;
+        new_cpu.mem[0xFF4B] = 0x00;
+        new_cpu.mem[0xFFFF] = 0x00;
+
+        new_cpu
+    }
+
+    fn ldpanic(&self, reg:CpuRegister16) {
+        panic!("(load) opcode not implemented!");
+    }
+
+   /* fn get_vblank(&self) -> [u8; 8] {
+        let mut ret_arr = [0u8; 8];
+
+    } */
+
+//    fn get_timer_interrupt(&self) -> bool  {}
+
+    
+
+    fn enable_interrupts(&mut self) {
+        self.set_mem(0xFFFF, 1); //verify value to be written here
+    }
+
+    fn disable_interrupts(&mut self) {
+        self.set_mem(0xFFFF, 0); //verify value to be written here
+    }
+
+    fn get_interrupts_enabled(&self) -> bool {
+        self.mem[0xFFFF] == 1 // TODO: verify this value!
     }
 
     fn hl(&self) -> u16 {
@@ -113,6 +224,11 @@ impl Cpu {
     }
 
 
+    /*
+    NOTE: serial I/O is done by accessing memory addresses.
+    It is read at 8192Hz, one bit at a time if external clock is used.
+    See documentation and read carefully before implementing this.
+     */
     fn set_mem(&mut self, address: usize, value: i8) {
         match address {
             ad @ 0xE000 ... 0xFE00 | ad @ 0xC000 ... 0xDE00
@@ -120,6 +236,7 @@ impl Cpu {
                     self.mem[ad]                     = value;
                     self.mem[ad ^ (0xE000 - 0xC000)] = value;
                 },
+            0xFF04 => self.mem[0xFF04] = 0,
             n => self.mem[n] = value,
         }
     }
@@ -453,10 +570,12 @@ impl Cpu {
 
     //TODO:
     fn di(&mut self) {
+        self.disable_interrupts();
     }
 
     //TODO:
     fn ei(&mut self) {
+        self.enable_interrupts();
     }
 
     fn rlca(&mut self) {
@@ -587,10 +706,10 @@ impl Cpu {
     }
 
     fn srl(&mut self, reg: CpuRegister) {
-        let reg_val = self.access_register(reg).expect("invalid register");
+        let reg_val = self.access_register(reg).expect("invalid register") as u8;
         let old_bit0 = reg_val & 1;
 
-        self.set_register(reg, reg_val >> 1);
+        self.set_register(reg, (reg_val >> 1) as i8);
 
         self.set_flags((reg_val >> 1) == 0,
                        false,
@@ -756,8 +875,14 @@ impl Cpu {
      */
 
 
-    fn read_instruction(&self) -> i8 {
-        self.mem[self.pc as usize]
+    fn read_instruction(&self) -> (u8, u8, u8, u8) {
+        if self.pc > (0xFFFF - 3) {
+            panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
+        }
+        (self.mem[self.pc as usize] as u8,
+         self.mem[(self.pc + 1) as usize] as u8,
+         self.mem[(self.pc + 2) as usize] as u8,
+         self.mem[(self.pc + 3) as usize] as u8)
     }
 
     fn inc_pc(&mut self) {
@@ -772,8 +897,9 @@ impl Cpu {
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
      */
     pub fn dispatch_opcode(&mut self) {
-        /*
-        let first_byte = self.read_instruction();
+        
+        let (first_byte, second_byte, third_byte, fourth_byte)
+            = self.read_instruction();
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
@@ -784,42 +910,42 @@ impl Cpu {
 
         if first_byte == 0xCB { //prefixed instruction
 
-    } else { //unprefixed instruction
-        match x {
-        0 =>
-        match z {
-        0 =>
-        match y {
-        0        => self.nop(),
-        1        => /*AF*/ (),
-        2        => /*DJNZ*/(),
-        3        => (),//self.jr(),
-        v @ 4...7 => /*jr cc*/(),
-        _        => unreachable!(uf),
-    },
+        } else { //unprefixed instruction
+            match x {
+                0 =>
+                    match z {
+                        0 =>
+                            match y {
+                                0        => self.nop(), //0x00
+                                1        => panic!("unimplemented opcode"), //0x08
+                                2        => self.stop(), //0x10
+                                3        => { self.jrn(second_byte as i8);
+                                              self.inc_pc() },  //0x18
+                                v @ 4...7 => { self.jrccn(cc_dispatch(v-4), second_byte as i8);
+                                               self.inc_pc() },  //0x20, 0x28, 0x30, 0x38
+                                _        => unreachable!(uf),
+                            },
+                    
+                        1 =>  //00yy y001
+                            even_odd_dispatch!(y, self, ldpanic, add_hl, cpu16_dispatch, cpu16_dispatch, 3, 1 ),
+                        
+                        2 => //00yy y010
+                            even_odd_dispatch!(y, self, ldpanic, ldpanic, cpu16_dispatch, cpu16_dispatch, 1, 1),
 
-        1 =>
-        match q {
-        0 => (),//ld
-        1 => (),//add hl
-        _ => unreachable!(uf),
-    },
+                        3 => //00yy y011
+                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1),
 
-        2 =>
-        match q {
-        0 => (),
-        1 => (),
-        _ => unreachable!(uf),
-    },
+                        4 =>() //00yy y100
+                            ,
 
-        _ => unreachable!(uf),
-    },
+                        _ => unreachable!(uf),
+                    },
         _ => panic!("The impossible happened!"),
-    }
-    }
-
+            }
+        }
+        
         self.inc_pc();
-         */
+        
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
@@ -953,4 +1079,5 @@ mod test {
     test_op!(bcd_test1, daa, (0x3F, ), a, 0x3F, |_| 0, 0, 0x3F);
     */
 }
+
 

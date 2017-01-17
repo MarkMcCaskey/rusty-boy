@@ -8,10 +8,15 @@
 *** DONE Refactor opcodes
 **** DONE Flag setting
 *** TODO Add timing
+*** DONE ALU
+**** DONE 8bit
+**** DONE 16bit
+*** DONE Control flow
 ** TODO Tests!
 *** TODO opcodes
-** TODO Split into multiple files
+** TODO Split CPU into multiple files
 
+** TODO Special Registers!!
 
 * TODO Graphics
 ** TODO Gameboy screen itself

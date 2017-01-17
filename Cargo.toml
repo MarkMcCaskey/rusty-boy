@@ -6,3 +6,4 @@ authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 [dependencies]
 nom = "^2.0"
 clap = "2"
+sdl2 = "0.27"
