@@ -48,6 +48,20 @@ fn cc_dispatch(num: u8) -> Cc {
     }
 }
 
+fn cpu_dispatch(num: u8) -> CpuRegister {
+    match num {
+        0 => CpuRegister::B,
+        1 => CpuRegister::C,
+        2 => CpuRegister::D,
+        3 => CpuRegister::E,
+        4 => CpuRegister::H,
+        5 => CpuRegister::L,
+        6 => CpuRegister::HL,
+        7 => CpuRegister::A,
+        _ => panic!("Invalid 8bit register in cpu_dispatch!"),
+    }
+}
+
 fn cpu16_dispatch(num: u8) -> CpuRegister16 {
     match num {
         0 => CpuRegister16::BC,
@@ -903,13 +917,38 @@ impl Cpu {
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
-        let p = (y >> 1)          & 0x3;
-        let q = y                 & 0x1;
 
         let uf = "The impossible happened!";
 
         if first_byte == 0xCB { //prefixed instruction
+            let x = (second_byte >> 6) & 0x3;
+            let y = (second_byte >> 3) & 0x7;
+            let z = second_byte        & 0x7;
 
+            match x { // xxyy yzzz
+                0 => match y {
+                    //(cpu_dispatch(z))
+                    0 => self.rlc(cpu_dispatch(z)),
+                    1 => self.rrc(cpu_dispatch(z)),
+                    2 => self.rl(cpu_dispatch(z)),
+                    3 => self.rr(cpu_dispatch(z)),
+                    4 => self.sla(cpu_dispatch(z)),
+                    5 => self.sra(cpu_dispatch(z)),
+                    6 => self.swap(cpu_dispatch(z)),
+                    7 => self.srl(cpu_dispatch(z)),
+                    _ => unreachable!(uf),
+                },
+
+                1 => self.bit(y, cpu_dispatch(z)),
+
+                2 => self.res(y, cpu_dispatch(z)),
+
+                3 => self.set(y, cpu_dispatch(z)),
+
+                _ => unreachable!(uf),
+            }
+
+            self.inc_pc();
         } else { //unprefixed instruction
             match x {
                 0 =>
@@ -935,12 +974,142 @@ impl Cpu {
                         3 => //00yy y011
                             even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1),
 
-                        4 =>() //00yy y100
-                            ,
+                        4 => //00yy y100
+                            self.inc(cpu_dispatch(y)),
+
+                        5 =>
+                            self.dec(cpu_dispatch(y)),
+
+                        6 =>
+                            {
+                                self.ldnnn(cpu_dispatch(y), second_byte);
+                                self.inc_pc();
+                            },
+
+                        7 => match y { //00yy y111
+                            0 => self.rlca(),
+                            1 => self.rrca(),
+                            2 => self.rla(),
+                            3 => self.rra(),
+                            4 => self.daa(),
+                            5 => self.cpl(),
+                            6 => self.scf(),
+                            7 => self.ccf(),
+                            _ => unreachable!(uf),
+                        },
 
                         _ => unreachable!(uf),
+                    }, //end x=0
+
+                1 => match (z,y) {
+                    (6,6) => self.halt(),
+                    (n,m) => self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n)),
+                }, //end x = 1
+
+                2 => match y //10yy y000
+                {
+                    0 => self.add(cpu_dispatch(z)),
+                    1 => self.adc(cpu_dispatch(z)),
+                    2 => self.sub(cpu_dispatch(z)),
+                    3 => self.sbc(cpu_dispatch(z)),
+                    4 => self.and(cpu_dispatch(z)),
+                    5 => self.xor(cpu_dispatch(z)),
+                    6 => self.or(cpu_dispatch(z)),
+                    7 => self.cp(cpu_dispatch(z)),
+                    _ => unreachable!(uf),
+                }, //end x = 2
+
+                3 => match z //11yy y000
+                {
+
+                    0 => match y {
+                        v @ 0...3 => self.retcc(cc_dispatch(v)),
+                        n =>  panic!("unimplemented opcode!"),
                     },
-        _ => panic!("The impossible happened!"),
+
+                    1 => if y % 2 == 0 {
+                        let adjusted_value = y / 2;
+                        let val = self.pop_from_stack();
+                        self.set_register16(cpu16_dispatch(adjusted_value), val);
+                    } else {
+                        let adjusted_value = y / 2;
+                        match adjusted_value {
+                            0 => self.ret(),
+                            1 => self.reti(),
+                            2 => self.jphl(),
+                            3 => panic!("Unimplemented opcode"),
+                            _ => unreachable!(uf),
+                        }
+                    },
+
+                    2 => match y {
+                        v @ 0...3 => {
+                            // verify endianness
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            self.jpccnn(cc_dispatch(v), const_val);
+                            self.inc_pc();
+                            self.inc_pc();
+                        },
+                        n => panic!("unimplemented load opcodes!"),
+                        _ => unreachable!(uf),
+                    },
+
+                    3 => match y {
+                        0 => {
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            self.jpnn(const_val);
+                            self.inc_pc();
+                            self.inc_pc();
+                        },
+                        6 => self.di(),
+                        7 => self.ei(),
+                        n => panic!("Illegal opcode"),
+                    },
+
+                    4 => {
+
+                        let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                        self.callccnn(cc_dispatch(y), const_val);
+                        self.inc_pc();
+                        self.inc_pc();
+                    },
+
+                    5 => {
+                        if y % 2 == 0 {
+                            let value = self.access_register16(cpu16_dispatch(y / 2));
+                            self.push_onto_stack(value);
+                        } else if y == 1 {
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            self.callnn(const_val);
+                            self.inc_pc();
+                            self.inc_pc();
+                        } else {
+                            panic!("Invalid opcode: {}", first_byte)
+                        }
+                    },
+
+                    6 => {
+                        match y {
+                            0 => self.add(CpuRegister::Num(second_byte as i8)),
+                            1 => self.adc(CpuRegister::Num(second_byte as i8)),
+                            2 => self.sub(CpuRegister::Num(second_byte as i8)),
+                            3 => self.sbc(CpuRegister::Num(second_byte as i8)),
+                            4 => self.and(CpuRegister::Num(second_byte as i8)),
+                            5 => self.xor(CpuRegister::Num(second_byte as i8)),
+                            6 => self.or(CpuRegister::Num(second_byte as i8)),
+                            7 => self.cp(CpuRegister::Num(second_byte as i8)),
+                            _ => unreachable!(uf),
+                        };
+                        self.inc_pc();
+                    },
+
+                    7 => {
+                        self.rst(8*y);
+                    },
+                        
+                    _ => unreachable!(uf),
+                },
+                _ => panic!("The impossible happened!"),
             }
         }
         

@@ -1,7 +1,7 @@
 * TODO CPU
-** TODO Dispatch
-*** TODO Prefixed
-*** TODO Unprefixed
+** DONE Dispatch
+*** DONE Prefixed
+*** DONE Unprefixed
 ** TODO Opcodes
 *** TODO Interrupts
 *** TODO Loads
@@ -22,6 +22,10 @@
 ** TODO Gameboy screen itself
 ** TODO Memory visualization
 *** TODO Interactive debugging tools?!
+
+    
+* DONE Etc
+** DONE Controller input
 
 * TODO Tools
 ** TODO Assembler
