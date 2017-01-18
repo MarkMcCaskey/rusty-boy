@@ -72,6 +72,11 @@ fn cpu16_dispatch(num: u8) -> CpuRegister16 {
     }
 }
 
+//macro for dispatching on opcodes where the LSB of the "y" set of
+// octets determines which opcode to run
+/*
+(bit layout is xxyy yzzz) so LSB of y bits is MSB of first nibble
+*/
 macro_rules! even_odd_dispatch {
     ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
      $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
