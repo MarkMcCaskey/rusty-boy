@@ -24,6 +24,7 @@ fn main() {
     let mut gameboy = Cpu::new();
     let sdl_context = sdl2::init().unwrap();
     let controller_subsystem = sdl_context.game_controller().unwrap();
+    controller_subsystem.load_mappings("controllers/sneslayout.txt").unwrap();
 
     let available = match controller_subsystem.num_joysticks() {
         Ok(n) => n,
@@ -66,6 +67,15 @@ fn main() {
         use sdl2::event::Event;
 
         match event {
+            Event::ControllerAxisMotion{ axis, value: val, .. } => {
+                // Axis motion is an absolute value in the range
+                // [-32768, 32767]. Let's simulate a very rough dead
+                // zone to ignore spurious events.
+                let dead_zone = 10000;
+                if val > dead_zone || val < -dead_zone {
+                    println!("Axis {:?} moved to {}", axis, val);
+                }
+            }
             Event::ControllerButtonDown { button, .. } => println!("Button {:?} down", button),
             Event::ControllerButtonUp { button, .. } => println!("Button {:?} up", button),
             Event::Quit { .. } => break,
