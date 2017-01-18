@@ -40,8 +40,6 @@ fn main() {
 
             match controller_subsystem.open(id) {
                 Ok(c) => {
-                    // We managed to find and open a game controller,
-                    // exit the loop
                     println!("Success: opened \"{}\"", c.name());
                     controller = Some(c);
                     break;
@@ -60,7 +58,7 @@ fn main() {
         None => panic!("Couldn't open any controller"),
     };
 
-    print!("wat: {}", controller.mapping());
+    print!("{}", controller.mapping());
 
 
     for event in sdl_context.event_pump().unwrap().wait_iter() {
@@ -68,9 +66,6 @@ fn main() {
 
         match event {
             Event::ControllerAxisMotion{ axis, value: val, .. } => {
-                // Axis motion is an absolute value in the range
-                // [-32768, 32767]. Let's simulate a very rough dead
-                // zone to ignore spurious events.
                 let dead_zone = 10000;
                 if val > dead_zone || val < -dead_zone {
                     println!("Axis {:?} moved to {}", axis, val);
