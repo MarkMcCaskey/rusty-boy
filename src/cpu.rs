@@ -1051,7 +1051,7 @@ impl Cpu {
                             self.inc_pc();
                         },
                         n => panic!("unimplemented load opcodes!"),
-                        _ => unreachable!(uf),
+                       // _ => unreachable!(uf),
                     },
 
                     3 => match y {
