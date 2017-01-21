@@ -77,6 +77,7 @@ fn cpu16_dispatch(num: u8) -> CpuRegister16 {
     }
 }
 
+
 macro_rules! setter_unsetter_and_getter {
     ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
      $memory_location:expr) => {
@@ -117,12 +118,11 @@ setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
 setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
 setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
 
-
 //macro for dispatching on opcodes where the LSB of the "y" set of
 // octets determines which opcode to run
 /*
 (bit layout is xxyy yzzz) so LSB of y bits is MSB of first nibble
- */
+*/
 macro_rules! even_odd_dispatch {
     ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
      $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
