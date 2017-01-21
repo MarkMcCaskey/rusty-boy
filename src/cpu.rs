@@ -1,7 +1,12 @@
-const zl: i8 = 0x80;
-const nl: i8 = 0x40;
-const hl: i8 = 0x20;
-const cl: i8 = 0x10;
+#![allow(overflowing_literals)]
+#![allow(dead_code)]
+
+use std::str::from_utf8;
+
+pub const zl: i8 = 0x80;
+pub const nl: i8 = 0x40;
+pub const hl: i8 = 0x20;
+pub const cl: i8 = 0x10;
 
 pub struct Cpu {
     a:   i8,
@@ -72,11 +77,52 @@ fn cpu16_dispatch(num: u8) -> CpuRegister16 {
     }
 }
 
+macro_rules! setter_unsetter_and_getter {
+    ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
+     $memory_location:expr) => {
+        macro_rules! $name_setter {
+            ($name:ident, $location:expr) => {
+                fn $name(&mut self) {
+                    let orig_val = self.mem[$memory_location];
+
+                    self.mem[$memory_location] = orig_val | $location;
+                }
+            }
+        }
+
+        macro_rules! $name_unsetter {
+            ($name:ident, $location:expr) => {
+                fn $name(&mut self) {
+                    let orig_val = self.mem[$memory_location];
+
+                    self.mem[$memory_location] = orig_val & (!$location);
+                }
+            }
+        }
+
+        macro_rules! $name_getter {
+            ($name:ident, $location:expr) => {
+                fn $name(&self) -> bool{
+                    (self.mem[$memory_location] & $location)
+                        == $location
+                }
+            }
+        }
+    }
+}
+//NOTE: look into separate sound on/off storage outside of
+// GB memory to prevent subtle "bug"/non-correct behavior
+
+setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
+setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
+setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
+
+
 //macro for dispatching on opcodes where the LSB of the "y" set of
 // octets determines which opcode to run
 /*
 (bit layout is xxyy yzzz) so LSB of y bits is MSB of first nibble
-*/
+ */
 macro_rules! even_odd_dispatch {
     ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
      $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
@@ -101,6 +147,26 @@ macro_rules! even_odd_dispatch {
     }
 }
 
+
+/* Unfortunately, there's just no way to prevent this boiler plate in
+Rust right now... The concat_idents! does not work for new identifiers
+and interpolate_idents! seems to have problems and only supports nightly 
+anyway.
+TODO: fix Rust macro system to allow this or update interpolate_idents
+ */
+macro_rules! button {
+    ($press_button:ident, $unpress_button:ident, $location:expr) => {
+        pub fn $press_button(&mut self) {
+            let old_val = self.mem[0xFF00];
+            self.mem[0xFF00] = old_val | $location;
+        }
+        
+        pub fn $unpress_button(&mut self) {
+            let old_val = self.mem[0xFF00];
+            self.mem[0xFF00] = old_val & (!$location);
+        }
+    }
+}
 
 //macro_rules! special_register($name:ident, $location:expr)
 
@@ -164,25 +230,136 @@ impl Cpu {
         panic!("(load) opcode not implemented!");
     }
 
-   /* fn get_vblank(&self) -> [u8; 8] {
-        let mut ret_arr = [0u8; 8];
+    /* fn get_vblank(&self) -> [u8; 8] {
+    let mut ret_arr = [0u8; 8];
 
-    } */
+} */
 
-//    fn get_timer_interrupt(&self) -> bool  {}
+    //FF04 Div
+    /*
+     * This needs to be called 16384 (~16779 on SGB) times a second
+     */
+    fn inc_div(&mut self) {
+        let old_val: u16 = self.mem[0xFF04] as u16;
+        self.mem[0xFF04] = (old_val + 1) as i8;
+    }
 
-    
+    fn timer_cycle(&mut self) {
+        if self.is_timer_on() {
+            self.inc_timer();
+        }
+    }
+
+    fn is_timer_on(&self) -> bool {
+        (self.mem[0xFF07] & 0x4) >> 2 == 1
+    }
+
+    fn inc_timer(&mut self) {
+        let old_val: u16 = self.mem[0xFF05] as u16;
+        let new_val = self.mem[0xFF06];
+
+        self.mem[0xFF05] =
+            if old_val + 1 > 255 {
+                if self.get_interrupts_enabled() {
+                    self.set_timer_interrupt_bit();
+                }
+                new_val
+            } else {old_val as i8};
+    }
+
+
+    set_interrupt_bit!(set_vblank_interrupt_bit, 0x1);
+    set_interrupt_bit!(set_lcdc_interrupt_bit, 0x2);
+    set_interrupt_bit!(set_timer_interrupt_bit, 0x4);
+    set_interrupt_bit!(set_serial_io_interrupt_bit, 0x8);
+    set_interrupt_bit!(set_input_interrupt_bit, 0x10);
+
+    unset_interrupt_bit!(unset_vblank_interrupt_bit, 0x1);
+    unset_interrupt_bit!(unset_lcdc_interrupt_bit, 0x2);
+    unset_interrupt_bit!(unset_timer_interrupt_bit, 0x4);
+    unset_interrupt_bit!(unset_serial_io_interrupt_bit, 0x8);
+    unset_interrupt_bit!(unset_input_interrupt_bit, 0x10);
+
+    get_interrupt!(get_vblank_interrupt, 0x1);
+    get_interrupt!(get_lcdc_interrupt, 0x2);
+    get_interrupt!(get_timer_interrupt, 0x4);
+    get_interrupt!(get_serial_io_interrupt, 0x8);
+    get_interrupt!(get_input_interrupt, 0x10);
+
+
+    /*
+     * SOUND:
+     */
+
+    set_sound_on!(set_sound1, 0x1);
+    set_sound_on!(set_sound2, 0x2);
+    set_sound_on!(set_sound3, 0x4);
+    set_sound_on!(set_sound4, 0x8);
+    set_sound_on!(set_sound_all, 0x80);
+
+    unset_sound_on!(unset_sound1, 0x1);
+    unset_sound_on!(unset_sound2, 0x2);
+    unset_sound_on!(unset_sound3, 0x4);
+    unset_sound_on!(unset_sound4, 0x8);
+    unset_sound_on!(unset_sound_all, 0x80);
+
+    set_interrupt_enabled!(set_vblank_interrupt_enabled, 0x1);
+    set_interrupt_enabled!(set_lcdc_interrupt_enabled, 0x2);
+    set_interrupt_enabled!(set_timer_interrupt_enabled, 0x4);
+    set_interrupt_enabled!(set_serial_io_interrupt_enabled, 0x8);
+    set_interrupt_enabled!(set_input_interrupt_enabled, 0x10);
+    set_interrupt_enabled!(set_interrupts_enabled, 0x1F);
+
+    unset_interrupt_enabled!(unset_vblank_interrupt_enabled, 0x1);
+    unset_interrupt_enabled!(unset_lcdc_interrupt_enabled, 0x2);
+    unset_interrupt_enabled!(unset_timer_interrupt_enabled, 0x4);
+    unset_interrupt_enabled!(unset_serial_io_interrupt_enabled, 0x8);
+    unset_interrupt_enabled!(unset_input_interrupt_enabled, 0x10);
+    unset_interrupt_enabled!(unset_interrupts_enabled, 0x1F);
+
+    get_interrupt_enabled!(get_vblank_interrupt_enabled, 0x1);
+    get_interrupt_enabled!(get_lcdc_interrupt_enabled, 0x2);
+    get_interrupt_enabled!(get_timer_interrupt_enabled, 0x4);
+    get_interrupt_enabled!(get_serial_io_interrupt_enabled, 0x8);
+    get_interrupt_enabled!(get_input_interrupt_enabled, 0x10);
+    get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
+ 
+
+    //input register for joypad
+    /*
+     * 0x80 = start
+     * 0x40 = select
+     * 0x20 = B
+     * 0x10 = A
+     * 0x8  = Down
+     * 0x4  = Up
+     * 0x2  = Left
+     * 0x1  = Right
+     */
+    /* Input : */
+    /* NOTE: see comment next to definition of button! for why this 
+    has to be done with so much boiler plate */
+    button!(press_start,  unpress_start,  0x80);
+    button!(press_select, unpress_select, 0x40);
+    button!(press_b,      unpress_b,      0x20);
+    button!(press_a,      unpress_a,      0x10);
+    button!(press_down,   unpress_down,   0x8);
+    button!(press_up,     unpress_up,     0x4);
+    button!(press_left,   unpress_left,   0x2);
+    button!(press_right,  unpress_right,  0x1);
+
+ /*   pub fn get_game_name(&self) -> &str {
+        use std::iter::FromIterator;
+        let name = self.mem[0x134..0x144];
+//        from_utf8(name).unwrap()
+    }*/
 
     fn enable_interrupts(&mut self) {
-        self.set_mem(0xFFFF, 1); //verify value to be written here
+        self.set_mem(0xFFFF, 0x1F); //verify value to be written here
     }
 
     fn disable_interrupts(&mut self) {
         self.set_mem(0xFFFF, 0); //verify value to be written here
-    }
-
-    fn get_interrupts_enabled(&self) -> bool {
-        self.mem[0xFFFF] == 1 // TODO: verify this value!
     }
 
     fn hl(&self) -> u16 {
@@ -587,12 +764,10 @@ impl Cpu {
 
     }
 
-    //TODO:
     fn di(&mut self) {
         self.disable_interrupts();
     }
 
-    //TODO:
     fn ei(&mut self) {
         self.enable_interrupts();
     }
@@ -1029,7 +1204,7 @@ impl Cpu {
 
                     0 => match y {
                         v @ 0...3 => self.retcc(cc_dispatch(v)),
-                        n =>  panic!("unimplemented opcode!"),
+                        _ =>  panic!("unimplemented opcode!"),
                     },
 
                     1 => if y % 2 == 0 {
@@ -1055,7 +1230,7 @@ impl Cpu {
                             self.inc_pc();
                             self.inc_pc();
                         },
-                        n => panic!("unimplemented load opcodes!"),
+                        _ => panic!("unimplemented load opcodes!"),
                        // _ => unreachable!(uf),
                     },
 
@@ -1068,7 +1243,7 @@ impl Cpu {
                         },
                         6 => self.di(),
                         7 => self.ei(),
-                        n => panic!("Illegal opcode"),
+                        _ => panic!("Illegal opcode"),
                     },
 
                     4 => {
@@ -1137,15 +1312,6 @@ impl Cpu {
         }
 
     }
-
-
-    pub fn play(&mut self) {
-        loop {
-            self.dispatch_opcode();
-        }
-    }
-
-    //    fn controller_input(&mut self, value)
 }
 
 

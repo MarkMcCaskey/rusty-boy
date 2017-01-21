@@ -7,3 +7,4 @@ authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 nom = "^2.0"
 clap = "2"
 sdl2 = "0.27"
+conrod = "0.48"

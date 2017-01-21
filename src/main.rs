@@ -7,6 +7,8 @@ use cpu::*;
 use clap::{Arg, App};
 use sdl2::*;
 
+use std::time::Duration;
+
 fn main() {
     let matches = App::new("rusty-boy")
         .version("-0.1")
@@ -23,8 +25,15 @@ fn main() {
     let rom_file = matches.value_of("game").expect("Failed to load ROM");
     let mut gameboy = Cpu::new();
     let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
     let controller_subsystem = sdl_context.game_controller().unwrap();
     controller_subsystem.load_mappings("controllers/sneslayout.txt").unwrap();
+
+    let window = video_subsystem.window("", 640, 480)
+        .position_centered().build().unwrap();
+
+    let mut renderer = window.renderer()
+        .accelerated().build().unwrap();
 
     let available = match controller_subsystem.num_joysticks() {
         Ok(n) => n,
@@ -61,21 +70,52 @@ fn main() {
     print!("{}", controller.mapping());
 
 
-    for event in sdl_context.event_pump().unwrap().wait_iter() {
-        use sdl2::event::Event;
+    loop {
+        for event in sdl_context.event_pump().unwrap().poll_iter() {
+            use sdl2::event::Event;
 
-        match event {
-            Event::ControllerAxisMotion{ axis, value: val, .. } => {
-                let dead_zone = 10000;
-                if val > dead_zone || val < -dead_zone {
-                    println!("Axis {:?} moved to {}", axis, val);
+            match event {
+                Event::ControllerAxisMotion { axis, value: val, .. } => {
+                    let dead_zone = 10000;
+                    if val > dead_zone || val < -dead_zone {
+                        println!("Axis {:?} moved to {}", axis, val);
+ /*                   match axis {
+                        controller::Axis::LeftX =>,
+                        controller::Axis::LeftY =>,
+                        _ => (),
+                    }
+                    */
+                    }
                 }
+                Event::ControllerButtonDown { button, .. } => {
+                    println!("Button {:?} down", button);
+                    match button {
+                        controller::Button::A     => gameboy.press_a(),
+                        controller::Button::B     => gameboy.press_b(),
+                        controller::Button::Back  => gameboy.press_select(),
+                        controller::Button::Start => gameboy.press_start(),
+                        _ => (),
+                    }
+                },
+                Event::ControllerButtonUp { button, .. } => {
+                    println!("Button {:?} up", button);
+                    match button {
+                        controller::Button::A     => gameboy.unpress_a(),
+                        controller::Button::B     => gameboy.unpress_b(),
+                        controller::Button::Back  => gameboy.unpress_select(),
+                        controller::Button::Start => gameboy.unpress_start(),
+                        _ => (),
+                    }
+                },
+                Event::Quit { .. } => break,
+                _ => (),
             }
-            Event::ControllerButtonDown { button, .. } => println!("Button {:?} down", button),
-            Event::ControllerButtonUp { button, .. } => println!("Button {:?} up", button),
-            Event::Quit { .. } => break,
-            _ => (),
         }
+
+        renderer.clear();
+        renderer.present();
+
+        std::thread::sleep(Duration::from_millis(100));
     }
     //   gameboy.play();
 }
