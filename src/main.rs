@@ -70,6 +70,7 @@ fn main() {
     print!("{}", controller.mapping());
 
 
+
     loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
