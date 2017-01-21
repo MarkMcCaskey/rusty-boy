@@ -15,9 +15,11 @@
 ** TODO Tests!
 *** TODO opcodes
 ** TODO Split CPU into multiple files
-
 ** TODO Special Registers!!
-
+*** TODO Sound
+*** TODO Video
+*** DONE Timer
+*** TODO 
 * TODO Graphics
 ** TODO Gameboy screen itself
 ** TODO Memory visualization
