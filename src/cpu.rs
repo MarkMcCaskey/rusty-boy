@@ -490,6 +490,11 @@ impl Cpu {
         self.set_register(CpuRegister::A, val);
     }
 
+    fn ldan16c(&mut self, b1: u8, b2: u8) {
+        let val = self.mem[(((b2 as u16) << 8) | (b1 as u16)) as usize];
+        self.set_register(CpuRegister::A, val);
+    }
+
     fn ldna(&mut self, n: CpuRegister) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
         self.set_register(n, val);
@@ -502,6 +507,97 @@ impl Cpu {
         self.set_mem(addr as usize, val);
     }
 
+    fn ldna16c(&mut self, b1: u8, b2: u8) {
+        let val = self.access_register(CpuRegister::A).expect("Invalid register");
+        self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, val);
+    }
+
+    fn ldac(&mut self) {
+        let val = self.mem[0xFF00] + self.c;
+        self.set_register(CpuRegister::A, val);
+    }
+
+    fn ldca(&mut self) {
+        let addr = 0xFF00 + self.c;
+        let val = self.a;
+        self.set_mem(addr as usize, val);
+    }
+
+    fn lddahl(&mut self) {
+        let addr = self.hl();
+        let val = self.mem[addr as usize];
+
+        self.set_register(CpuRegister::A, val);
+        self.dec16(CpuRegister16::HL);
+    }
+
+    fn lddhla(&mut self) {
+        let val = self.a;
+        let addr = self.hl();
+
+        self.set_mem(addr as usize, val);
+        self.dec16(CpuRegister16::HL);
+    }
+
+    fn ldiahl(&mut self) {
+        let addr = self.hl();
+        let val = self.mem[addr as usize];
+
+        self.set_register(CpuRegister::A, val);
+        self.inc16(CpuRegister16::HL);
+    }
+
+    fn ldihla(&mut self) {
+        let val = self.a;
+        let addr = self.hl();
+
+        self.set_mem(addr as usize, val);
+        self.inc16(CpuRegister16::HL);
+    }
+
+    fn ldhna(&mut self, n: u8) {
+        let val = self.a;
+        self.set_mem((0xFF00 + n) as usize, val);
+    }
+
+    fn ldhan(&mut self, n: u8) {
+        let val = self.mem[(0xFF00 + n) as usize];
+        self.set_register(CpuRegister::A, val);
+    }
+
+    fn ldnnn16(&mut self, n: CpuRegister16, b1: u8, b2: u8) {
+        self.set_register16(n, ((b2 as u16) << 8) | (b1 as u16));
+    }
+
+    fn ldsphl(&mut self) {
+        let val = self.hl();
+        self.set_register16(CpuRegister16::SP, val);
+    }
+
+    fn ldhlspn(&mut self, n: u8) {
+        let val = (self.sp as i16) + (n as i16);
+        self.set_register16(CpuRegister16::HL, val as u16);
+
+        self.set_flags(false, false, false, false); //last two need to be checked; TODO:
+    }
+
+    fn ldnnsp(&mut self, b1: u8, b2: u8) {
+        let old_sp = self.sp;
+
+        self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, old_sp as i8);
+    }
+
+    fn pushnn(&mut self, nn: CpuRegister16) {
+        let val = self.access_register16(nn);
+
+        self.push_onto_stack(val);
+    }
+
+    fn popnn(&mut self, nn: CpuRegister16) {
+        let val = self.pop_from_stack();
+        self.set_register16(nn, val);
+    }
+    
     //TODO: rename this awfully named function
     fn alu_dispatch<F>(&self, reg: CpuRegister, f: F) -> i16 where
         F: FnOnce(i8, i8) -> i16 {
@@ -1136,7 +1232,11 @@ impl Cpu {
                         0 =>
                             match y {
                                 0        => self.nop(), //0x00
-                                1        => panic!("unimplemented opcode"), //0x08
+                                1        => {
+                                    self.ldnnsp(second_byte, third_byte);
+                                    self.inc_pc();
+                                    self.inc_pc();
+                                }, //0x08
                                 2        => self.stop(), //0x10
                                 3        => { self.jrn(second_byte as i8);
                                               self.inc_pc() },  //0x18

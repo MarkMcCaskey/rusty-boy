@@ -4,7 +4,7 @@
 *** DONE Unprefixed
 ** TODO Opcodes
 *** TODO Interrupts
-*** TODO Loads
+*** DONE Loads
 *** DONE Refactor opcodes
 **** DONE Flag setting
 *** TODO Add timing
