@@ -28,12 +28,12 @@ enum ControllerInput {
 }
 */
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,PartialEq)]
 enum CpuRegister {
     A, B, C, D, E, H, L, HL, Num(i8),
 }
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,PartialEq)]
 enum CpuRegister16 {
     BC, DE, HL, SP, Num(i16),
 }
@@ -111,12 +111,28 @@ macro_rules! setter_unsetter_and_getter {
         }
     }
 }
+
+macro_rules! make_getter {
+    ($name_m:ident, $memory_location:expr) => {
+        macro_rules! $ident {
+            ($name:ident, $location:expr) => {
+                fn $name(&self) -> bool {
+                    (self.mem[$memory_location] & $location)
+                        == $location
+                }
+            }
+        }
+    }
+}
+
+
 //NOTE: look into separate sound on/off storage outside of
 // GB memory to prevent subtle "bug"/non-correct behavior
 
 setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
 setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
 setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
+
 
 //macro for dispatching on opcodes where the LSB of the "y" set of
 // octets determines which opcode to run
@@ -183,7 +199,7 @@ impl Cpu {
             h:   0,
             l:   0,
             sp:  0xFFFE,
-            pc:  0x100,
+            pc:  0,
             mem: [0; 0xFFFF + 1]
         };
 
@@ -323,7 +339,107 @@ impl Cpu {
     get_interrupt_enabled!(get_serial_io_interrupt_enabled, 0x8);
     get_interrupt_enabled!(get_input_interrupt_enabled, 0x10);
     get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
- 
+
+    pub fn lcdc_on(&self) -> bool {
+        (self.mem[0xFF40] >> 7) & 1 == 1
+    }
+    pub fn lcdc_tile_map(&self) -> bool {
+        (self.mem[0xFF40] >> 6) & 1 == 1
+    }
+    pub fn lcdc_window_on(&self) -> bool {
+        (self.mem[0xFF40] >> 5) & 1 == 1
+    }
+    pub fn lcdc_bg_win_tile_data(&self) -> bool {
+        (self.mem[0xFF40] >> 4) & 1 == 1
+    }
+    pub fn lcdc_bg_tile_map(&self) -> bool {
+        (self.mem[0xFF40] >> 3) & 1 == 1
+    }
+    pub fn lcdc_sprite_size(&self) -> bool {
+        (self.mem[0xFF40] >> 2) & 1 == 1
+    }
+    pub fn lcdc_sprite_display(&self) -> bool {
+        (self.mem[0xFF40] >> 1) & 1 == 1
+    }
+    pub fn lcdc_bg_win_display(&self) -> bool {
+        self.mem[0xFF40] & 1 == 1
+    }
+
+
+    pub fn scy(&self) -> u8 {
+        self.mem[0xFF42] as u8
+    }
+    pub fn scx(&self) -> u8 {
+        self.mem[0xFF43] as u8
+    }
+
+    pub fn ly(&self) -> u8 {
+        self.mem[0xFF44] as u8
+    }
+
+    pub fn inc_ly(&mut self) {
+        let v = (self.ly() + 1) % 154;
+        self.mem[0xFF44] = v as i8;
+        //maybe set flags for being in vblank or whatever here?
+    }
+
+    pub fn lyc(&self) -> u8 {
+        self.mem[0xFF45] as u8
+    }
+
+    pub fn lyc_compare(&mut self) {
+        let ly = self.ly();
+        let lyc = self.lyc();
+
+        if ly == lyc {
+            //TODO: set STAT coincident flag...
+        }
+    }
+
+    fn dma(&mut self) {
+        let addr = (self.mem[0xFF46] as u16) << 8;
+        
+        //TODO: ensure this doesn't include end value
+        for i in 0..0xA0 { //number of values to be copied
+            let val = self.mem[(addr + i) as usize];
+            self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
+        }
+    }
+
+    pub fn bgp(&self) -> (u8, u8, u8, u8) {
+        let v4 = ((self.mem[0xFF47] >> 6) & 0x3) as u8;
+        let v3 = ((self.mem[0xFF47] >> 4) & 0x3) as u8;
+        let v2 = ((self.mem[0xFF47] >> 2) & 0x3) as u8;
+        let v1 = ((self.mem[0xFF47] >> 0) & 0x3) as u8;
+
+        (v1,v2,v3,v4)
+    }
+
+    pub fn obp0(&self) -> (u8, u8, u8, u8) {
+        let v4 = ((self.mem[0xFF48] >> 6) & 0x3) as u8;
+        let v3 = ((self.mem[0xFF48] >> 4) & 0x3) as u8;
+        let v2 = ((self.mem[0xFF48] >> 2) & 0x3) as u8;
+        let v1 = ((self.mem[0xFF48] >> 0) & 0x3) as u8;
+
+        (v1,v2,v3,v4)
+    }
+
+    pub fn obp1(&self) -> (u8, u8, u8, u8) {
+        let v4 = ((self.mem[0xFF49] >> 6) & 0x3) as u8;
+        let v3 = ((self.mem[0xFF49] >> 4) & 0x3) as u8;
+        let v2 = ((self.mem[0xFF49] >> 2) & 0x3) as u8;
+        let v1 = ((self.mem[0xFF49] >> 0) & 0x3) as u8;
+
+        (v1,v2,v3,v4)
+    }
+
+    pub fn wy(&self) -> u8 {
+        self.mem[0xFF4A] as u8
+    }
+
+    pub fn wx(&self) -> u8 {
+        self.mem[0xFF4B] as u8
+    }
 
     //input register for joypad
     /*
@@ -348,11 +464,12 @@ impl Cpu {
     button!(press_left,   unpress_left,   0x2);
     button!(press_right,  unpress_right,  0x1);
 
- /*   pub fn get_game_name(&self) -> &str {
-        use std::iter::FromIterator;
-        let name = self.mem[0x134..0x144];
-//        from_utf8(name).unwrap()
-    }*/
+    /*   pub fn get_game_name(&self) -> &str {
+    use std::iter::FromIterator;
+    let name = self.mem[0x134..0x144];
+    //        from_utf8(name).unwrap()
+}*/
+
 
     fn enable_interrupts(&mut self) {
         self.set_mem(0xFFFF, 0x1F); //verify value to be written here
@@ -416,7 +533,6 @@ impl Cpu {
         let cn = (c as i8) << 4;
 
         self.f = zn | nn | hn | cn;
-        println!("Hello from set_flags!  Value is: {}.  Booleans: {}, {}, {}, {}", self.f, z, n, h, c);
     }
 
 
@@ -433,6 +549,11 @@ impl Cpu {
                     self.mem[ad ^ (0xE000 - 0xC000)] = value;
                 },
             0xFF04 => self.mem[0xFF04] = 0,
+            0xFF44 => self.mem[0xFF44] = 0,
+            0xFF46 => {
+                self.mem[0xFF46] = value;
+                self.dma();
+            }
             n => self.mem[n] = value,
         }
     }
@@ -639,6 +760,12 @@ impl Cpu {
         }
     }
 
+    fn addspn(&mut self, n:i8) {
+        let new_sp = (self.sp as i16) + (n as i16);
+        self.sp = new_sp as u16;
+
+        self.set_flags(false, false, false, false); //TODO: review last tw
+    }
     
     fn add(&mut self, reg: CpuRegister) {
         let old_a = self.a as i16;
@@ -1033,7 +1160,7 @@ impl Cpu {
         self.pc = nn; //NOTE: Verify this byte order
     }
 
-    fn jpccnn(&mut self, cc: Cc, nn: u16) {
+    fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
         let will_jump = 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
@@ -1047,6 +1174,8 @@ impl Cpu {
         } else {
             ()
         }
+
+        will_jump
     }
 
     //TODO: Double check (HL) HL thing
@@ -1062,7 +1191,7 @@ impl Cpu {
         self.pc = ((old_pc as i32) + (n as i32)) as u16;
     }
 
-    fn jrccn(&mut self, cc: Cc, n: i8) {
+    fn jrccn(&mut self, cc: Cc, n: i8) -> bool {
         let will_jump = 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
@@ -1077,6 +1206,8 @@ impl Cpu {
         } else {
             ()
         }
+
+        will_jump
     }
 
     //TODO: Verify if SP should be incremented first
@@ -1096,7 +1227,7 @@ impl Cpu {
         self.sp -= 2;
     }
 
-    fn callccnn(&mut self, cc: Cc, nn: u16) {
+    fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
         let will_jump = 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
@@ -1110,6 +1241,8 @@ impl Cpu {
         } else {
             ()
         }
+
+        will_jump
     }
 
     fn rst(&mut self, n: u8) {
@@ -1134,7 +1267,7 @@ impl Cpu {
         self.pc = new_addr;
     }
 
-    fn retcc(&mut self, cc: Cc) {
+    fn retcc(&mut self, cc: Cc) -> bool {
         let will_jump = 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
@@ -1148,6 +1281,8 @@ impl Cpu {
         } else {
             ()
         }
+
+        will_jump
     }
 
     fn reti(&mut self) {
@@ -1185,14 +1320,19 @@ impl Cpu {
     2. prefix byte, prefix byte, displacement byte, opcode
     
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
+    
+    Returned value is number of cycles that the instruction took
      */
-    pub fn dispatch_opcode(&mut self) {
-        
+    pub fn dispatch_opcode(&mut self) -> u8 {
+        let mut inst_time = 4;
         let (first_byte, second_byte, third_byte, fourth_byte)
             = self.read_instruction();
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
+
+        println!("Running instruction at {}", self.pc);
+        println!("{}", first_byte);
 
         let uf = "The impossible happened!";
 
@@ -1224,6 +1364,9 @@ impl Cpu {
                 _ => unreachable!(uf),
             }
 
+            inst_time =
+                if CpuRegister::HL == cpu_dispatch(z) {16} else {8};
+
             self.inc_pc();
         } else { //unprefixed instruction
             match x {
@@ -1236,35 +1379,82 @@ impl Cpu {
                                     self.ldnnsp(second_byte, third_byte);
                                     self.inc_pc();
                                     self.inc_pc();
+                                    inst_time = 20;
                                 }, //0x08
                                 2        => self.stop(), //0x10
-                                3        => { self.jrn(second_byte as i8);
-                                              self.inc_pc() },  //0x18
-                                v @ 4...7 => { self.jrccn(cc_dispatch(v-4), second_byte as i8);
-                                               self.inc_pc() },  //0x20, 0x28, 0x30, 0x38
+                                3        => {
+                                    self.jrn(second_byte as i8);
+                                    self.inc_pc();
+                                    inst_time = 8;
+                                },  //0x18
+                                v @ 4...7 => {
+                                    inst_time = 8 + if
+                                        self.jrccn(cc_dispatch(v-4),
+                                                   second_byte as i8) {4}
+                                    else {0};
+                                    self.inc_pc();
+                                },  //0x20, 0x28, 0x30, 0x38
                                 _        => unreachable!(uf),
                             },
-                    
+                        
                         1 =>  //00yy y001
-                            even_odd_dispatch!(y, self, ldpanic, add_hl, cpu16_dispatch, cpu16_dispatch, 3, 1 ),
+                        {
+                            inst_time = if y % 2 == 0 {
+                                self.ldnnn16(cpu16_dispatch(y/2),
+                                             second_byte, third_byte);
+                                self.inc_pc();
+                                self.inc_pc();
+                                12
+                            } else {
+                                self.add_hl(cpu16_dispatch(y/2));
+                                8
+                            };
+                        },
                         
                         2 => //00yy y010
-                            even_odd_dispatch!(y, self, ldpanic, ldpanic, cpu16_dispatch, cpu16_dispatch, 1, 1),
+                        {
+                            match y {
+                                0 | 2 => self.ldna16(cpu16_dispatch(y/2)),
+                                1 | 3 => self.ldan16(cpu16_dispatch(y/2)),
+                                4 => self.ldihla(),
+                                5 => self.ldiahl(),
+                                6 => self.lddhla(),
+                                7 => self.lddahl(),
+                                _ => unreachable!(uf),
+                            }
+                            inst_time = 8;
+                        },
 
                         3 => //00yy y011
-                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1),
+                        {
+                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1);
+                            inst_time = 8;
+                        },
 
                         4 => //00yy y100
-                            self.inc(cpu_dispatch(y)),
-
+                        {
+                            self.inc(cpu_dispatch(y));
+                            inst_time =
+                                if cpu_dispatch(y) == CpuRegister::HL {
+                                    12} else {4};
+                        },
+                        
                         5 =>
-                            self.dec(cpu_dispatch(y)),
+                        {
+                            self.dec(cpu_dispatch(y));
+                            inst_time =
+                                if cpu_dispatch(y) == CpuRegister::HL {
+                                    12} else {4};
+                        },
 
                         6 =>
-                            {
-                                self.ldnnn(cpu_dispatch(y), second_byte);
-                                self.inc_pc();
-                            },
+                        {
+                            self.ldnnn(cpu_dispatch(y), second_byte);
+                            self.inc_pc();
+                            inst_time =
+                                if cpu_dispatch(y) == CpuRegister::HL {
+                                    12} else {8};
+                        },
 
                         7 => match y { //00yy y111
                             0 => self.rlca(),
@@ -1283,63 +1473,126 @@ impl Cpu {
 
                 1 => match (z,y) {
                     (6,6) => self.halt(),
-                    (n,m) => self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n)),
+                    (n,m) => {
+                        self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n));
+                        inst_time = match (cpu_dispatch(m), cpu_dispatch(n)) {
+                            (CpuRegister::HL,_) => 8,
+                            (_,CpuRegister::HL) => 8,
+                            _                   => 4,
+                        }
+                    },
                 }, //end x = 1
 
-                2 => match y //10yy y000
-                {
-                    0 => self.add(cpu_dispatch(z)),
-                    1 => self.adc(cpu_dispatch(z)),
-                    2 => self.sub(cpu_dispatch(z)),
-                    3 => self.sbc(cpu_dispatch(z)),
-                    4 => self.and(cpu_dispatch(z)),
-                    5 => self.xor(cpu_dispatch(z)),
-                    6 => self.or(cpu_dispatch(z)),
-                    7 => self.cp(cpu_dispatch(z)),
-                    _ => unreachable!(uf),
+                2 => { match y //10yy y000
+                       {
+                           0 => self.add(cpu_dispatch(z)),
+                           1 => self.adc(cpu_dispatch(z)),
+                           2 => self.sub(cpu_dispatch(z)),
+                           3 => self.sbc(cpu_dispatch(z)),
+                           4 => self.and(cpu_dispatch(z)),
+                           5 => self.xor(cpu_dispatch(z)),
+                           6 => self.or(cpu_dispatch(z)),
+                           7 => self.cp(cpu_dispatch(z)),
+                           _ => unreachable!(uf),
+                       };
+                       //TODO: double check the line below 
+                       inst_time = if z == 6 {8} else {4};
                 }, //end x = 2
 
                 3 => match z //11yy y000
                 {
 
                     0 => match y {
-                        v @ 0...3 => self.retcc(cc_dispatch(v)),
-                        _ =>  panic!("unimplemented opcode!"),
+                        v @ 0...3 => inst_time = if
+                            self.retcc(cc_dispatch(v)) {20} else {8},
+                        4 => {
+                            self.ldhna(second_byte);
+                            self.inc_pc();
+                            inst_time = 12;
+                        },
+                        5 => { //0xE8
+                            self.addspn(second_byte as i8);
+                            self.inc_pc();
+                            inst_time = 16;
+                        },
+                        6 => {
+                            self.ldhan(second_byte);
+                            self.inc_pc();
+                            inst_time = 12;
+                        },
+                        7 => {
+                            self.ldhlspn(second_byte);
+                            self.inc_pc();
+                            inst_time = 12;
+                        },
+                        _ => unreachable!(uf),
                     },
 
-                    1 => if y % 2 == 0 {
+                    1 => if y % 2 == 0 { //11yy y001
                         let adjusted_value = y / 2;
                         let val = self.pop_from_stack();
                         self.set_register16(cpu16_dispatch(adjusted_value), val);
+                        inst_time = 12;
                     } else {
                         let adjusted_value = y / 2;
                         match adjusted_value {
-                            0 => self.ret(),
-                            1 => self.reti(),
+                            0 => {
+                                self.ret();
+                                inst_time = 16;
+                            },
+                            1 => {
+                                self.reti();
+                                inst_time = 16;
+                            },
                             2 => self.jphl(),
-                            3 => panic!("Unimplemented opcode"),
+                            3 => {
+                                self.ldsphl();
+                                inst_time = 8;
+                            },
                             _ => unreachable!(uf),
                         }
                     },
 
                     2 => match y {
-                        v @ 0...3 => {
-                            // verify endianness
+                        v @ 0...3 => { // 11yy y010
                             let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                            self.jpccnn(cc_dispatch(v), const_val);
+                            inst_time = if
+                                self.jpccnn(cc_dispatch(v),
+                                            const_val) {16} else {12};
                             self.inc_pc();
                             self.inc_pc();
                         },
-                        _ => panic!("unimplemented load opcodes!"),
-                       // _ => unreachable!(uf),
+                        4 => { // 0xE2
+                            self.ldca();
+                            inst_time = 8;
+                        },
+                        5 => { //0xEA
+                            self.ldan16c(second_byte, third_byte);
+                            self.inc_pc();
+                            self.inc_pc();
+                            inst_time = 16;
+                        },
+                        6 => { //0xF2
+                            self.ldac();
+                            inst_time = 8;
+                        },
+                        7 => { //0xFA
+                            self.ldan16c(second_byte, third_byte);
+                            self.inc_pc();
+                            self.inc_pc();
+                            inst_time = 16;
+                        },
+                        _ => unreachable!(uf),
                     },
 
-                    3 => match y {
+                    3 => match y { //11yy y011
                         0 => {
                             let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
                             self.jpnn(const_val);
                             self.inc_pc();
                             self.inc_pc();
+
+                            inst_time = 16;
                         },
                         6 => self.di(),
                         7 => self.ei(),
@@ -1349,7 +1602,9 @@ impl Cpu {
                     4 => {
 
                         let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                        self.callccnn(cc_dispatch(y), const_val);
+                        inst_time =
+                            if self.callccnn(cc_dispatch(y),
+                                             const_val) {24} else {12};
                         self.inc_pc();
                         self.inc_pc();
                     },
@@ -1358,11 +1613,13 @@ impl Cpu {
                         if y % 2 == 0 {
                             let value = self.access_register16(cpu16_dispatch(y / 2));
                             self.push_onto_stack(value);
+                            inst_time = 16;
                         } else if y == 1 {
                             let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
                             self.callnn(const_val);
                             self.inc_pc();
                             self.inc_pc();
+                            inst_time = 24;
                         } else {
                             panic!("Invalid opcode: {}", first_byte)
                         }
@@ -1380,11 +1637,13 @@ impl Cpu {
                             7 => self.cp(CpuRegister::Num(second_byte as i8)),
                             _ => unreachable!(uf),
                         };
+                        inst_time = 8;
                         self.inc_pc();
                     },
 
                     7 => {
                         self.rst(8*y);
+                        inst_time = 16;
                     },
                         
                     _ => unreachable!(uf),
@@ -1394,7 +1653,8 @@ impl Cpu {
         }
         
         self.inc_pc();
-        
+
+        inst_time
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
@@ -1406,6 +1666,7 @@ impl Cpu {
         let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 
         rom.read(&mut rom_buffer).unwrap();
+
 
         for i in 0..0x8000 {
             self.set_mem(i, rom_buffer[i] as i8);
