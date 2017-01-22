@@ -4,10 +4,12 @@
 *** DONE Unprefixed
 ** TODO Opcodes
 *** TODO Interrupts
+**** TODO Throw
+**** TODO Handle
 *** DONE Loads
 *** DONE Refactor opcodes
 **** DONE Flag setting
-*** TODO Add timing
+*** DONE Add timing
 *** DONE ALU
 **** DONE 8bit
 **** DONE 16bit
@@ -17,9 +19,8 @@
 ** TODO Split CPU into multiple files
 ** TODO Special Registers!!
 *** TODO Sound
-*** TODO Video
+*** DONE Video
 *** DONE Timer
-*** TODO 
 * TODO Graphics
 ** TODO Gameboy screen itself
 ** TODO Memory visualization

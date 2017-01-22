@@ -8,6 +8,8 @@ use clap::{Arg, App};
 use sdl2::*;
 
 use std::time::Duration;
+use sdl2::pixels;
+use sdl2::keyboard::Keycode;
 
 fn main() {
     let matches = App::new("rusty-boy")
@@ -29,11 +31,20 @@ fn main() {
     let controller_subsystem = sdl_context.game_controller().unwrap();
     controller_subsystem.load_mappings("controllers/sneslayout.txt").unwrap();
 
+    gameboy.load_rom(rom_file);
+
     let window = video_subsystem.window("", 640, 480)
-        .position_centered().build().unwrap();
+        .position_centered()
+        .build()
+        .unwrap();
 
     let mut renderer = window.renderer()
-        .accelerated().build().unwrap();
+        .accelerated()
+        .build()
+        .unwrap();
+
+
+    let mut timer = sdl_context.timer().unwrap();
 
     let available = match controller_subsystem.num_joysticks() {
         Ok(n) => n,
@@ -42,6 +53,7 @@ fn main() {
 
 
     let mut controller = None;
+    let mut prev_time = 0;
 
     for id in 0..available {
         if controller_subsystem.is_game_controller(id) {
@@ -69,9 +81,9 @@ fn main() {
 
     print!("{}", controller.mapping());
 
+    let mut cycle_count = 0;
 
-
-    loop {
+    'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
 
@@ -80,43 +92,61 @@ fn main() {
                     let dead_zone = 10000;
                     if val > dead_zone || val < -dead_zone {
                         println!("Axis {:?} moved to {}", axis, val);
- /*                   match axis {
-                        controller::Axis::LeftX =>,
-                        controller::Axis::LeftY =>,
-                        _ => (),
-                    }
-                    */
+                        //                   match axis {
+                        // controller::Axis::LeftX =>,
+                        // controller::Axis::LeftY =>,
+                        // _ => (),
+                        // }
+                        //
                     }
                 }
                 Event::ControllerButtonDown { button, .. } => {
                     println!("Button {:?} down", button);
                     match button {
-                        controller::Button::A     => gameboy.press_a(),
-                        controller::Button::B     => gameboy.press_b(),
-                        controller::Button::Back  => gameboy.press_select(),
+                        controller::Button::A => gameboy.press_a(),
+                        controller::Button::B => gameboy.press_b(),
+                        controller::Button::Back => gameboy.press_select(),
                         controller::Button::Start => gameboy.press_start(),
                         _ => (),
                     }
-                },
+                }
                 Event::ControllerButtonUp { button, .. } => {
                     println!("Button {:?} up", button);
                     match button {
-                        controller::Button::A     => gameboy.unpress_a(),
-                        controller::Button::B     => gameboy.unpress_b(),
-                        controller::Button::Back  => gameboy.unpress_select(),
+                        controller::Button::A => gameboy.unpress_a(),
+                        controller::Button::B => gameboy.unpress_b(),
+                        controller::Button::Back => gameboy.unpress_select(),
                         controller::Button::Start => gameboy.unpress_start(),
                         _ => (),
                     }
-                },
-                Event::Quit { .. } => break,
+                }
+                Event::Quit { .. } => break 'main,
+                Event::KeyDown { keycode: Some(keycode), .. } => {
+                    if keycode == Keycode::Escape {
+                        break 'main;
+                    }
+                }
                 _ => (),
             }
         }
 
-        renderer.clear();
-        renderer.present();
+        cycle_count += gameboy.dispatch_opcode() as u64;
 
-        std::thread::sleep(Duration::from_millis(100));
+        let ticks = cycle_count - prev_time;
+
+        // 16384hz, call inc_div
+        // CPU is at 4.194304MHz (or 1.05MHz) 105000000hz
+        // hsync at 9198KHz = 9198000hz
+        // vsync at 59.73Hz
+
+        if ticks >= 70224 {
+            prev_time = cycle_count;
+            renderer.clear();
+
+            renderer.present();
+
+        }
+
+        //       std::thread::sleep(Duration::from_millis(100));
     }
-    //   gameboy.play();
 }
