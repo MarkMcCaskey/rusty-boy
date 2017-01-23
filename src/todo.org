@@ -1,17 +1,35 @@
 * TODO CPU
-** TODO Refactor opcodes
-*** TODO Flag setting 
+** DONE Dispatch
+*** DONE Prefixed
+*** DONE Unprefixed
+** TODO Opcodes
+*** TODO Interrupts
+**** TODO Throw
+**** TODO Handle
+*** DONE Loads
+*** DONE Refactor opcodes
+**** DONE Flag setting
+*** DONE Add timing
+*** DONE ALU
+**** DONE 8bit
+**** DONE 16bit
+*** DONE Control flow
 ** TODO Tests!
 *** TODO opcodes
-*** TODO Quickcheck (property-based testing)
-
+** TODO Split CPU into multiple files
+** TODO Special Registers!!
+*** TODO Sound
+*** DONE Video
+*** DONE Timer
 * TODO Graphics
-
 ** TODO Gameboy screen itself
-
 ** TODO Memory visualization
-
 *** TODO Interactive debugging tools?!
+
+    
+* DONE Etc
+** DONE Controller input
+
 * TODO Tools
 ** TODO Assembler
 ** TODO Disassembler

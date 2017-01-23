@@ -1,0 +1,4 @@
+03000000bd12000015d0000010010000,2Axes 11Keys Game  Pad,platform:Linux,x:b0,a:b1,b:b2,y:b3,back:b8,start:b9,leftshoulder:b4,rightshoulder:b5,leftx:a0,lefty:a1,
+
+03000000bd12000015d0000010010000,2Axes 11Keys Game  Pad,platform:Linux,x:b0,a:b1,b:b2,y:b3,back:b8,start:b9,leftshoulder:b4,rightshoulder:b5,leftx:a0,lefty:a1,
+
