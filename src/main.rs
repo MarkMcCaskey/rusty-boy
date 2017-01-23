@@ -65,6 +65,7 @@ fn main() {
 
 
     let mut controller = None;
+    let mut prev_time = 0;
 
     for id in 0..available {
         if controller_subsystem.is_game_controller(id) {
