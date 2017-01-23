@@ -1,6 +1,9 @@
 #![allow(overflowing_literals)]
 #![allow(dead_code)]
 
+#[macro_use] mod macros;
+mod tests;
+
 use std::str::from_utf8;
 
 pub const zl: i8 = 0x80;
@@ -21,12 +24,6 @@ pub struct Cpu {
     pc:  u16,
     mem: [i8; 0xFFFF + 1],
 }
-
-/*
-enum ControllerInput {
-
-}
-*/
 
 #[derive(Clone,Copy,PartialEq)]
 enum CpuRegister {
@@ -77,114 +74,6 @@ fn cpu16_dispatch(num: u8) -> CpuRegister16 {
     }
 }
 
-
-macro_rules! setter_unsetter_and_getter {
-    ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
-     $memory_location:expr) => {
-        macro_rules! $name_setter {
-            ($name:ident, $location:expr) => {
-                fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location];
-
-                    self.mem[$memory_location] = orig_val | $location;
-                }
-            }
-        }
-
-        macro_rules! $name_unsetter {
-            ($name:ident, $location:expr) => {
-                fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location];
-
-                    self.mem[$memory_location] = orig_val & (!$location);
-                }
-            }
-        }
-
-        macro_rules! $name_getter {
-            ($name:ident, $location:expr) => {
-                fn $name(&self) -> bool{
-                    (self.mem[$memory_location] & $location)
-                        == $location
-                }
-            }
-        }
-    }
-}
-
-macro_rules! make_getter {
-    ($name_m:ident, $memory_location:expr) => {
-        macro_rules! $ident {
-            ($name:ident, $location:expr) => {
-                fn $name(&self) -> bool {
-                    (self.mem[$memory_location] & $location)
-                        == $location
-                }
-            }
-        }
-    }
-}
-
-
-//NOTE: look into separate sound on/off storage outside of
-// GB memory to prevent subtle "bug"/non-correct behavior
-
-setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
-setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
-setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
-
-
-//macro for dispatching on opcodes where the LSB of the "y" set of
-// octets determines which opcode to run
-/*
-(bit layout is xxyy yzzz) so LSB of y bits is MSB of first nibble
-*/
-macro_rules! even_odd_dispatch {
-    ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
-     $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
-     $f1pcincs:expr) => {
-
-        if $num % 2 == 0 {
-            let adjusted_number:u8 = $num / 2;
-            $cpu.$func0($f0dispfunc(adjusted_number));
-            
-            // TODO: Verify this executes it n-1 times
-            for i in 1..($f0pcincs) {
-                $cpu.inc_pc();
-            }
-        } else {
-            let adjusted_number:u8 = $num / 2;
-            $cpu.$func1($f1dispfunc(adjusted_number));
-            
-            for i in 1..($f1pcincs) {
-                $cpu.inc_pc();
-            }
-        }
-    }
-}
-
-
-/* Unfortunately, there's just no way to prevent this boiler plate in
-Rust right now... The concat_idents! does not work for new identifiers
-and interpolate_idents! seems to have problems and only supports nightly 
-anyway.
-TODO: fix Rust macro system to allow this or update interpolate_idents
- */
-macro_rules! button {
-    ($press_button:ident, $unpress_button:ident, $location:expr) => {
-        pub fn $press_button(&mut self) {
-            let old_val = self.mem[0xFF00];
-            self.mem[0xFF00] = old_val | $location;
-        }
-        
-        pub fn $unpress_button(&mut self) {
-            let old_val = self.mem[0xFF00];
-            self.mem[0xFF00] = old_val & (!$location);
-        }
-    }
-}
-
-//macro_rules! special_register($name:ident, $location:expr)
 
 impl Cpu {
     pub fn new() -> Cpu {
@@ -1146,13 +1035,11 @@ impl Cpu {
 
     fn set(&mut self, b: u8, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-
         self.set_register(reg, reg_val | (1 << b));
     }
 
     fn res(&mut self, b: u8, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-
         self.set_register(reg, reg_val & (!(1 << b)));
     }
 
@@ -1161,53 +1048,41 @@ impl Cpu {
     }
 
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
-        let will_jump = 1 ==
+        if 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
                 Cc::Z  => (self.f >> 7) & 1,
                 Cc::NC => !((self.f >> 4) & 1),
                 Cc::C  => (self.f >> 4) & 1,
-            };
-
-        if will_jump {
-            self.pc = nn;
-        } else {
-            ()
-        }
-
-        will_jump
+            } {
+                self.pc = nn;
+                true
+            } else { false }
     }
 
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let addr = self.hl();
-
         self.pc = addr;
     }
 
     fn jrn(&mut self, n: i8) {
         let old_pc = self.pc;
-
         self.pc = ((old_pc as i32) + (n as i32)) as u16;
     }
 
     fn jrccn(&mut self, cc: Cc, n: i8) -> bool {
-        let will_jump = 1 ==
+        if 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
                 Cc::Z  => (self.f >> 7) & 1,
                 Cc::NC => !((self.f >> 4) & 1),
                 Cc::C  => (self.f >> 4) & 1,
-            };
-
-        let old_pc = self.pc;
-        if will_jump {
-            self.pc = ((old_pc as i32) + (n as i32)) as u16;
-        } else {
-            ()
-        }
-
-        will_jump
+            } {
+                let old_pc = self.pc;
+                self.pc = ((old_pc as i32) + (n as i32)) as u16;
+                true
+            } else { false }
     }
 
     //TODO: Verify if SP should be incremented first
@@ -1228,21 +1103,16 @@ impl Cpu {
     }
 
     fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
-        let will_jump = 1 ==
+        if 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
                 Cc::Z  => (self.f >> 7) & 1,
                 Cc::NC => !((self.f >> 4) & 1),
                 Cc::C  => (self.f >> 4) & 1,
-            };
-
-        if will_jump {
-            self.callnn(nn);
-        } else {
-            ()
-        }
-
-        will_jump
+            } {
+                self.callnn(nn);
+                true
+            } else { false }
     }
 
     fn rst(&mut self, n: u8) {
@@ -1263,26 +1133,20 @@ impl Cpu {
 
     fn ret(&mut self) {
         let new_addr = self.pop_from_stack();
-
         self.pc = new_addr;
     }
 
     fn retcc(&mut self, cc: Cc) -> bool {
-        let will_jump = 1 ==
+        if 1 ==
             match cc {
                 Cc::NZ => !((self.f >> 7) & 1),
                 Cc::Z  => (self.f >> 7) & 1,
                 Cc::NC => !((self.f >> 4) & 1),
                 Cc::C  => (self.f >> 4) & 1,
-            };
-
-        if will_jump {
-            self.ret();
-        } else {
-            ()
-        }
-
-        will_jump
+            } {
+                self.ret();
+                true
+            } else { false }
     }
 
     fn reti(&mut self) {
@@ -1291,14 +1155,6 @@ impl Cpu {
         self.pc = new_addr;
         self.ei();
     }
-
-    /*
-    HALT
-    STOP
-    DI
-    EI
-     */
-
 
     fn read_instruction(&self) -> (u8, u8, u8, u8) {
         if self.pc > (0xFFFF - 3) {
@@ -1331,8 +1187,8 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        println!("Running instruction at {}", self.pc);
-        println!("{}", first_byte);
+        trace!("Running instruction at {}", self.pc);
+        trace!("First byte of instruction is: {}", first_byte);
 
         let uf = "The impossible happened!";
 
@@ -1673,112 +1529,6 @@ impl Cpu {
         }
 
     }
-}
-
-
-/*
-LD:
-B: 06 = 00000110
-C: 0E = 00001110
-D: 16 = 00010110
-E: 1E = 00011110
-H: 26 = 00100110
-L: 2E = 00101110
- */
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use cpu;
-
-    macro_rules! test_op {
-        ($func:ident, $method:ident, $input:expr, $output_reg:ident,
-         $expected_output:expr, $flag_find_value:expr,
-         $flag_expected_value:expr, $pre_exec:expr) => {
-
-            #[test]
-            fn $func() {
-                let mut cpu = Cpu::new();
-
-                let (in_set, in_arg) = $input;
-
-                //skip register preset if constant value
-                if let CpuRegister::Num(_) = in_arg {
-                    ()
-                } else {
-                    cpu.set_register(in_arg, $pre_exec);
-                }
-
-                cpu.$output_reg = in_set;
-                cpu.$method(in_arg);
-
-                println!("{:?} `op` {:?} = {:?}", in_set, $pre_exec, cpu.$output_reg);
-                
-                assert_eq!(cpu.$output_reg, $expected_output);
-                assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
-            }
-        }
-    }
-     
-    test_op!(add_const, add, (5, CpuRegister::Num(5)), a, 5 + 5, |flags| flags & zl, 0,5);
-    test_op!(add_reg, add, (5, CpuRegister::B), a, 5 + -5, |flags| flags, zl, -5);
-    test_op!(add_mem_half_carry, add, (1, CpuRegister::HL), a, 15 + 1, |flags| flags, hl, 15);
-    test_op!(add_mem_half_carry1, add, (15, CpuRegister::HL), a, 15 + 1, |flags| flags, hl, 1);
-
-    test_op!(adc_test, adc, (10, CpuRegister::E), a, 10 + 1, |flags| flags, 0, 1);
-//    test_op!(adc_carry, adc, (10, CpuRegister::F), a, 10 + 1, |flags| flags, 0, cl);
-
-        
-
-    test_op!(sub_const, sub, (5, CpuRegister::Num(5)), a, 5 - 5, |flags| flags, zl | nl | hl | cl, 0);
-    test_op!(sub_reg, sub, (10, CpuRegister::B), a, 20, |flags| flags, nl | hl | cl, -10);
-    test_op!(sub_reg2, sub, (10, CpuRegister::C), a, 0, |flags| flags, zl | nl | hl | cl, 10);
-    test_op!(sub_reg_borrow, sub, (0, CpuRegister::D), a, -10, |flags| flags, nl, 10);
-    //TODO: write half carry only test:
-//    test_op!(sub_reg_borrow_half, sub, (130, CpuRegister::D), a, 40, |flags| flags, nl | hl, 32);
-
-    test_op!(and_test, and, (0xF, CpuRegister::B), a, 0xF, |flags| flags, hl, 0xF);
-    test_op!(and_test1, and, (0xF, CpuRegister::C), a, 0x1, |flags| flags, hl, 0x1);
-    test_op!(and_test2, and, (0xF, CpuRegister::E), a, 0, |flags| flags, zl | hl, 0x70);
-
-    test_op!(or_test, or, (0xF, CpuRegister::C), a, 0xF, |flags| flags, 0, 0xF);
-    test_op!(or_test1, or, (0xF, CpuRegister::D), a, 0xF, |flags| flags, 0, 0);
-    test_op!(or_test2, or, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0);
-    test_op!(or_test3, or, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
-
-    test_op!(xor_test, xor, (0xF, CpuRegister::C), a, 0, |flags| flags, zl, 0xF);
-    test_op!(xor_test1, xor, (0xF, CpuRegister::D), a, 0xF, |flags| flags, 0, 0);
-    test_op!(xor_test2, xor, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0);
-    test_op!(xor_test3, xor, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
-
-    
-    test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
-    test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
-    // TODO: verify hl and cl flags here make sense:
-    test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
-    test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl | cl, 0);
-
-//    test_op!(addhl_test, add_hl, (0xFFFF, CpuRegister16::AB), a, 0x10000, |flags| flags, zl | nl  | hl | cl, 1);
-  //  test_op!(addhl_test1, add_hl, (1256, CpuRegister16::CD), a, 1256, |flags| flags, nl | hl | cl, 0);
-
-
-    /*
-    test_op!(inc_test,  inc, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
-    test_op!(inc_test1, inc, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
-    test_op!(inc_test2, inc, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
-
-    */
-
-    //dec
-
-
-
-   /* //TODO: flag tests on BCD
-    test_op!(bcd_test1, daa, (0x15, ), a, 0x15, |_| 0, 0, 0x15);
-    test_op!(bcd_test1, daa, (0x70, ), a, 0x70, |_| 0, 0, 0x70);
-    test_op!(bcd_test1, daa, (0x79, ), a, 0x79, |_| 0, 0, 0x79);
-    test_op!(bcd_test1, daa, (0x3F, ), a, 0x3F, |_| 0, 0, 0x3F);
-    */
 }
 
 
