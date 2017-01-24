@@ -22,7 +22,7 @@ pub struct Cpu {
     l:   i8,
     sp:  u16,
     pc:  u16,
-    mem: [i8; 0xFFFF + 1],
+    pub mem: [i8; 0xFFFF + 1],
 }
 
 #[derive(Clone,Copy,PartialEq)]
@@ -38,6 +38,34 @@ enum CpuRegister16 {
 #[derive(Clone,Copy)]
 enum Cc {
     NZ, Z, NC, C,
+}
+
+#[derive(Debug, PartialEq)]
+enum CartridgeType  {
+    RomOnly = 0,
+    RomMBC1 = 1,
+    RomMBC1Ram = 2,
+    RomMBC1RamBatt = 3,
+    RomMBC2 = 5,
+    RomMBC2Batt = 6,
+    RomRam = 8,
+    RomRamBatt = 9,
+    RomMMM01 = 0xB,
+    RomMMM01SRam = 0xC,
+    RomMMM01SRamBatt = 0xD,
+    RomMBC3TimerRamBatt = 0x10,
+    RomMBC3 = 0x11,
+    RomMBC3Ram = 0x12,
+    RomMBC3RamBatt = 0x13,
+    RomMBC5 = 0x19,
+    RomMBC5Ram = 0x1A,
+    RomMBC5RamBatt = 0x1B,
+    RomMBC5RumbleSRam = 0x1D,
+    RomMBC5RumbleSRamBatt = 0x1E,
+    PocketCamera = 0x1F,
+    BandaiTAMA5 = 0xFD,
+    HudsonHuC3 = 0xFE,
+    HudsonHuC1 = 0xFF,
 }
 
 fn cc_dispatch(num: u8) -> Cc {
@@ -149,7 +177,17 @@ impl Cpu {
         self.mem[0xFF04] = (old_val + 1) as i8;
     }
 
-    fn timer_cycle(&mut self) {
+    pub fn timer_frequency(&self) -> u16 {
+        match self.mem[0xFF07] & 0x3 {
+            0 => 4,
+            1 => 262,
+            2 => 65,
+            3 => 16,
+            _ => unreachable!("The impossible happened!"),
+        }
+    }
+
+    pub fn timer_cycle(&mut self) {
         if self.is_timer_on() {
             self.inc_timer();
         }
@@ -254,6 +292,41 @@ impl Cpu {
         self.mem[0xFF40] & 1 == 1
     }
 
+    
+    pub fn get_background_tiles(&self) -> [[u8; 64]; (32 * 32)] {
+        let mut tiles = [[0u8; 64]; (32*32)];
+        let tile_map_base_addr = if self.lcdc_bg_tile_map() {0x8000} else {0x9000};
+        let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {0x9C00} else {0x9800};
+//        debug!("Getting {}th tile at offset {}", offset, tile_map_base_addr);
+
+        if tile_map_base_addr == 0x9C00 {
+            for j in 0..(32 * 32) {
+                let tile_pointer = self.mem[(tile_map_base_addr + j) as usize];
+                for i in 0..16 {
+                    for k in 0..4 {
+                    //multiply offset by tile size
+                        tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as i16) + ((tile_pointer as i16) * 0x40)) as usize] as u8)
+                                          >> (k*2)) & 0x3;
+                    }
+                }
+            }
+        } else {
+            for j in 0..(32 * 32) {
+                let tile_pointer = self.mem[(tile_map_base_addr + j) as usize] as u8;
+                for i in 0..16 {
+                    for k in 0..4 {
+                    //multiply offset by tile size
+                        tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as u16) + ((tile_pointer as u16) * 0x40)) as usize] as u8)
+                                         >> (k * 2)) & 0x3;
+                    }
+                }
+            }
+
+        }
+
+        tiles
+    }
+
 
     pub fn scy(&self) -> u8 {
         self.mem[0xFF42] as u8
@@ -353,11 +426,19 @@ impl Cpu {
     button!(press_left,   unpress_left,   0x2);
     button!(press_right,  unpress_right,  0x1);
 
-    /*   pub fn get_game_name(&self) -> &str {
-    use std::iter::FromIterator;
-    let name = self.mem[0x134..0x144];
-    //        from_utf8(name).unwrap()
-}*/
+    pub fn get_game_name(&self) -> String {
+        let mut name_data: Vec<u8> = vec!();
+        for i in 0..16 {
+            if self.mem[0x134 + i] != 0 {
+                name_data.push(self.mem[0x134 + i] as u8);
+            }
+        }
+        String::from_utf8(name_data).unwrap()
+    }
+
+    pub fn get_cartridge_type(&self) -> u8 {
+        self.mem[0x147] as u8
+    }
 
 
     fn enable_interrupts(&mut self) {
@@ -741,15 +822,15 @@ impl Cpu {
 
     fn inc(&mut self, reg: CpuRegister) {
         let old_c = (self.f & hl) == hl;
-        let old_3bit = self.a & 0x8; //TODO: rename this/redo this
+        let old_3bit = self.access_register(reg).expect("invalid register") & 0x8;
         //old_3bit is used to detect overflow of 3rd bit
 
-        let new_a: i16 = self.alu_dispatch(reg, |_, b: i8| (b + 1) as i16);
-        self.a = new_a as i8;
-        self.set_flags(new_a == 0,
+        let new_val: i16 = self.alu_dispatch(reg, |_, b: i8| (b + 1) as i16);
+        self.set_register(reg, new_val as i8);
+        self.set_flags(new_val == 0,
                        false,
-                       old_c,
-                       old_3bit == 0x8 && (new_a & 0x8 == 0));
+                       old_3bit == 0x8 && (new_val & 0x8 == 0),
+                       old_c);
     }
 
     fn dec(&mut self, reg: CpuRegister) {
@@ -868,6 +949,7 @@ impl Cpu {
 
     //TODO:
     fn halt(&mut self) {
+        debug!("HALT");
         
     }
 
@@ -1187,8 +1269,8 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        trace!("Running instruction at {}", self.pc);
-        trace!("First byte of instruction is: {}", first_byte);
+        trace!("Running instruction at 0x{:X}", self.pc);
+        trace!("First byte of instruction is: 0x{:X}", first_byte);
 
         let uf = "The impossible happened!";
 
