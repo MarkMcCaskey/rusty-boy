@@ -28,6 +28,27 @@ macro_rules! test_op {
     }
 }
 
+macro_rules! test_op_no_arg {
+    ($func:ident, $method:ident, $output_reg:expr, $input:expr,
+     $expected_output:expr, $flag_find_value:expr,
+     $flag_expected_value:expr) => {
+        
+        #[test]
+        fn $func() {
+            let mut cpu = Cpu::new();
+            
+            cpu.set_register($output_reg, $input);
+            cpu.$method($output_reg);
+            
+            assert_eq!(
+                cpu.access_register($output_reg).expect("invalid register")
+                    , $expected_output);
+            assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
+        }
+    }
+}
+
+
 test_op!(add_const, add, (5, CpuRegister::Num(5)), a, 5 + 5, |flags| flags & zl, 0,5);
 test_op!(add_reg, add, (5, CpuRegister::B), a, 5 + -5, |flags| flags, zl, -5);
 test_op!(add_mem_half_carry, add, (1, CpuRegister::HL), a, 15 + 1, |flags| flags, hl, 15);
@@ -70,12 +91,14 @@ test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl | 
   //  test_op!(addhl_test1, add_hl, (1256, CpuRegister16::CD), a, 1256, |flags| flags, nl | hl | cl, 0);
 
 
-    /*
-    test_op!(inc_test,  inc, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
-    test_op!(inc_test1, inc, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
-    test_op!(inc_test2, inc, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
+    
+test_op_no_arg!(inc_test,  inc, CpuRegister::A, 0xE, 0xF, |flags| flags & 0xE0, 0);
+test_op_no_arg!(inc_test1,  inc, CpuRegister::B, 0x0, 0x1, |flags| flags & 0xE0, 0);
+test_op_no_arg!(inc_test2,  inc, CpuRegister::C, -1, 0, |flags| flags & 0xE0, zl | hl);
+ //   test_op_no_arg!(inc_t`oest1, inc, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
+   // test_op_no_arg!(inc_test2, inc, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
 
-    */
+    
 
     //dec
 

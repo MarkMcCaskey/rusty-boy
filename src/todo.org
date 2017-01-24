@@ -16,7 +16,7 @@
 *** DONE Control flow
 ** TODO Tests!
 *** TODO opcodes
-** TODO Split CPU into multiple files
+** DONE Split CPU into multiple files
 ** TODO Special Registers!!
 *** TODO Sound
 *** DONE Video
@@ -33,3 +33,6 @@
 * TODO Tools
 ** TODO Assembler
 ** TODO Disassembler
+*** TODO Internal representation
+**** TODO Recognize control flow?
+*** TODO Generate text

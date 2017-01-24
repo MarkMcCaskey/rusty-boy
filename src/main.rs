@@ -18,20 +18,18 @@ use log4rs::config::{Appender, Config, Logger, Root};
 use std::time::Duration;
 use sdl2::pixels;
 use sdl2::keyboard::Keycode;
+use sdl2::rect::Point;
 
 fn main() {
     /*Set up logging*/
     let stdout = ConsoleAppender::builder().build();
 
-    let requests = FileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build("log/requests.log")
-        .unwrap();
-
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
+        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
         .unwrap();
+
+    let handle = log4rs::init_config(config).unwrap();
 
 
     /*Command line arguments*/
@@ -101,7 +99,7 @@ fn main() {
     /*Set up graphics and window*/
     trace!("Opening window");
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("", 640, 480)
+    let window = video_subsystem.window(gameboy.get_game_name().as_str(), 640, 480)
         .position_centered()
         .build()
         .unwrap();
@@ -117,6 +115,7 @@ fn main() {
     let mut prev_time = 0;
 
     let mut cycle_count = 0;
+    let mut clock_cycles = 0;
 
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
@@ -169,23 +168,105 @@ fn main() {
             }
         }
 
-        cycle_count += gameboy.dispatch_opcode() as u64;
+        let current_op_time = gameboy.dispatch_opcode() as u64;
+        cycle_count += current_op_time;
+        clock_cycles += current_op_time;
+        let timer_khz = gameboy.timer_frequency();
+        let time_in_ms_per_cycle = (1000.0 / ((timer_khz as f64) * 1000.0)) as u64;
+        clock_cycles += cycle_count;
 
         let ticks = cycle_count - prev_time;
+
+        let time_in_cpu_cycle_per_cycle = ((time_in_ms_per_cycle as f64)/ (1.0 / (4.19 * 1000.0 * 1000.0))) as u64;
+
+        if clock_cycles >= time_in_cpu_cycle_per_cycle {
+            trace!("Incrementing the timer!");
+            gameboy.timer_cycle();
+            clock_cycles = 0;
+        }
+
+        /*
+         * Gameboy screen is 256x256
+         * only 160x144 are displayed at a time
+         *
+         * Background tile map is 32x32 of tiles. Scrollx and scrolly
+         * determine how this is actually rendered (it wraps)
+         * These numbers index the tile data table
+         */
 
         // 16384hz, call inc_div
         // CPU is at 4.194304MHz (or 1.05MHz) 105000000hz
         // hsync at 9198KHz = 9198000hz
         // vsync at 59.73Hz
 
+        let color1 = sdl2::pixels::Color::RGBA(0,0,0,255);
+        let color2 = sdl2::pixels::Color::RGBA(255,0,0,255);
+        let color3 = sdl2::pixels::Color::RGBA(0,0,255,255);
+        let color4 = sdl2::pixels::Color::RGBA(255,255,255,255);
+        let color_lookup = [color1, color2, color3, color4];
+
+        gameboy.timer_cycle();
+        
+        renderer.set_scale(12.0,12.0);
         if ticks >= 70224 {
             prev_time = cycle_count;
+            renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
 
-            renderer.present();
+            let background = gameboy.get_background_tiles();
 
+            
+            
+            /*j
+            let mut i = 0;
+            let mut j = 0;
+            //[[;64];(32*32)]
+            for &tile in background.iter() {
+                for &pixel in tile.iter() {
+                    renderer.set_draw_color(color_lookup[pixel as usize]);
+                    let point = Point::new((i % 32),(j % 32));
+                    renderer.draw_point(point);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }*/
+
+            /*
+             * macro location = Grid of 32x32 tiles, 
+             * micro location = tiles are each 64 pixels (8x8)
+             *
+             * macro location % 32 is your macro x location 
+             * macro location \ 32 (the quotient) is your macro y location
+             * micro location % 8 is your micro x location 
+             * micro location \ 8 (the quotient) is your micro y location
+
+             * real x = macro + micro x
+             * real y = macro + micro y
+             */
+
+
+            for num_tiles in 0..(32*32) { 
+                for num_pixels in 0..64 {
+                    renderer.set_draw_color(color_lookup[background[num_tiles as usize][num_pixels as usize] as usize]);
+                    let macro_x = num_tiles % 32;
+                    let macro_y = num_tiles / 32;
+                    let micro_x = num_pixels % 8;
+                    let micro_y = num_pixels / 8;
+
+                    let point = Point::new(macro_x + micro_x, macro_y + micro_y);
+                    renderer.draw_point(point);
+                }
+            }
+            /*
+             *   00111100 1110001 00001000
+             *   01111110 1110001 00010100
+             *   11111111 1110001 00101010
+             */
+
+
+            renderer.present();
+            std::thread::sleep(Duration::from_millis(100));
         }
 
-        //       std::thread::sleep(Duration::from_millis(100));
     }
 }
