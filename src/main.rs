@@ -4,6 +4,7 @@ extern crate log4rs;
 extern crate sdl2;
 
 mod cpu;
+mod disasm;
 
 use cpu::*;
 use clap::{Arg, App};
@@ -16,17 +17,18 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Logger, Root};
 
 use std::time::Duration;
-use sdl2::pixels;
 use sdl2::keyboard::Keycode;
 use sdl2::rect::Point;
 
 fn main() {
     /*Set up logging*/
-    let stdout = ConsoleAppender::builder().build();
+    let stdout = ConsoleAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
+        .build();
 
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
+        .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
         .unwrap();
 
     let handle = log4rs::init_config(config).unwrap();

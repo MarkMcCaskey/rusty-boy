@@ -17,10 +17,6 @@ Feel free to submit issues and pull requests.
 First install `libsdl2-dev`.  If you're new to Rust, install `rustup`
 to install `rustc` and `cargo`.
 
-Note: There seems to be problems building this with the `stable`
-branch of `rustc`, change your default to `nightly` before building by
-running `rustup default nightly`.
-
 Then just run:
 
 ```
