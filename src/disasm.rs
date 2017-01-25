@@ -1,366 +1,302 @@
-#[macro_use]
-extern crate nom;
+// Code courtesy of spawnedartifact
 
-#[derive(Debug,PartialEq)]
-enum Instruction{
-    Arithmetic {i: ArithmeticInstruction},
-    ControlFlow {i: JumpInstruction},
-};
+pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
+    let x = (first_byte >> 6) & 0b011;
+    let y = (first_byte >> 3) & 0b111;
+    let z = (first_byte >> 0) & 0b111;
+    let p = (first_byte >> 4) & 0b011;
+    let q = (first_byte >> 3) & 0b001;
 
-#[derive(Debug,PartialEq)]
-enum ArithmeticInstruction{
-    Add {},
-    Sub {},
-};
+    let mut instruction_size = 1;
 
-#[derive(Debug,PartialEq)]
-enum JumpInstruction {};
+    // This garbage is here because two closures can't borrow same var.
+    let mut prefix_used = 0;
+    let mut used_a8 = 0;
+    let mut used_d8 = 0;
+    let mut used_r8 = 0;
+    let mut used_a16 = 0;
+    let mut used_d16 = 0;
+
+    // This moved here to create a scope for closures to allow accessing
+    // "used_*" vars later.
+    let mnemonic = {
+        let mut prefix = || prefix_used += 1;
+
+        // Argument accessors. Will brake if used twice in a
+        // row. Because of this, there is almost no point in using
+        // them.
+        let mut a8 = || {
+            used_a8 += 1; //instruction_size += 1;
+            format!("${:02X}", second_byte)
+        };
+
+        let mut d8 = || {
+            used_d8 += 1; //instruction_size += 1;
+            format!("${:02X}", second_byte)
+        };
+
+        // Because jump is relative to post pc increment we need to
+        // know instruction size here.
+        let mut r8 = |insize| {
+            used_r8 += 1; //instruction_size += 1;
+            // jump is relative to post pc increment!
+            format!("Addr_{:04X}",
+                    (((pc + insize) as i32) + ((second_byte as i8) as i32)) as u16)
+        };
+
+        let mut a16 = || {
+            used_a16 += 2; //instruction_size += 2;
+            format!("${:04X}",
+                    (((third_byte as u16) << 8) | (second_byte as u16)))
+        };
+
+        let mut d16 = || {
+            used_d16 += 2; //instruction_size += 2;
+            format!("${:04X}",
+                    (((third_byte as u16) << 8) | (second_byte as u16)))
+        };
+
+
+        // Converting indexes encoded in commands to symbolic arguments
+        fn idx_r(i: u8) -> &'static str {
+            ["B", "C", "D", "E", "H", "L", "(HL)", "A"][i as usize]
+        };
+
+        fn idx_rp(i: u8) -> &'static str {
+            ["BC", "DE", "HL", "SP"][i as usize]
+        };
+
+        fn idx_rp2(i: u8) -> &'static str {
+            ["BC", "DE", "HL", "AF"][i as usize]
+        };
+
+        fn idx_cc(i: u8) -> &'static str {
+            ["NZ", "Z", "NC", "C"][i as usize]
+        };
+
+        fn idx_alu(i: u8) -> &'static str {
+            ["ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP"][i as usize]
+        };
+
+        fn idx_rot(i: u8) -> &'static str {
+            ["RLC", "RRC", "RL", "RR", "SLA", "SRA", "SWAP", "SRL"][i as usize]
+        };
+
+        fn illegal_op(byte: u8) -> String {
+            format!(".DB ${:02X}", byte)
+        }
+
+        // The value of mnemonic =
+        match x {
+            0 => {
+                match z {
+                    0 => {
+                        match y {
+                            0 => format!("NOP"),
+                            1 => format!("LD ({}),SP", a16()),
+                            2 => format!("STOP {}", d8()),
+                            3 => format!("JR {}", r8(2)),
+                            4 => format!("JR NZ,{}", r8(2)),
+                            5 => format!("JR Z,{}", r8(2)),
+                            6 => format!("JR NC,{}", r8(2)),
+                            7 => format!("JR C,{}", r8(2)),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    1 => {
+                        match q {
+                            0 => format!("LD {},{}", idx_rp(p), d16()),
+                            1 => format!("ADD HL,{}", idx_rp(p)),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    2 => {
+                        match q {
+                            0 => {
+                                match p {
+                                    0 => format!("LD (BC),A"),
+                                    1 => format!("LD (DE),A"),
+                                    2 => format!("LD (HL+),A"),
+                                    3 => format!("LD (HL-),A"),
+                                    _ => unreachable!("Impossible opcode"),
+                                }
+                            }
+                            1 => {
+                                match p {
+                                    0 => format!("LD A,(BC)"),
+                                    1 => format!("LD A,(DE)"),
+                                    2 => format!("LD A,(HL+)"),
+                                    3 => format!("LD A,(HL-)"),
+                                    _ => unreachable!("Impossible opcode"),
+                                }
+                            }
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    3 => {
+                        match q {
+                            0 => format!("INC {}", idx_rp(p)),
+                            1 => format!("DEC {}", idx_rp(p)),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    4 => format!("INC {}", idx_r(y)),
+                    5 => format!("DEC {}", idx_r(y)),
+                    6 => format!("LD {},{}", idx_r(y), d8()),
+                    7 => {
+                        match y {
+                            0 => format!("RLCA"),
+                            1 => format!("RRCA"),
+                            2 => format!("RLA"),
+                            3 => format!("RRA"),
+                            4 => format!("DAA"),
+                            5 => format!("CPL"),
+                            6 => format!("SCF"),
+                            7 => format!("CCF"),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    _ => unreachable!("Impossible opcode"),
+                }
+            }
+            1 => {
+                match (z, y) {
+                    (6, 6) => format!("HALT"),
+                    _ => format!("LD {},{}", idx_r(y), idx_r(z)),
+                }
+            }
+            // FIXME cheating here a bit with idx_alu value
+            2 => format!("{} {}", idx_alu(y), idx_r(z)),
+            3 => {
+                match z {
+                    0 => {
+                        match y {
+                            0...3 => format!("RET {}", idx_cc(y)),
+                            // 4 => format!("LDH ({}),A", a8()),
+                            4 => format!("LD ($FF00+{}),A", a8()),
+                            5 => format!("ADD SP,{}", r8(0)), // FIXME
+                            // 6 => format!("LDH A,({})", a8()),
+                            6 => format!("LD A,($FF00+{})", a8()),
+                            7 => format!("LD HL,(sp + {})", r8(0)), // FIXME
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    1 => {
+                        match q {
+                            0 => format!("POP {}", idx_rp2(p)),
+                            1 => {
+                                match p {
+                                    0 => format!("RET"),
+                                    1 => format!("RETI"),
+                                    2 => format!("JP (HL)"),
+                                    3 => format!("LD SP,HL"),
+                                    _ => unreachable!("Impossible opcode"),
+                                }
+                            }
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    2 => {
+                        match y {
+                            0...3 => format!("JP {},{}", idx_cc(y), a16()),
+                            4 => format!("LD ($FF00+C),A"),
+                            5 => format!("LD ({}),A", a16()),
+                            6 => format!("LD A,($FF00+C)"),
+                            7 => format!("LD A,({})", a16()),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    3 => {
+                        match y {
+                            0 => format!("JP {}", a16()),
+                            1 => {
+                                // Prefix
+                                prefix();
+                                let x = (second_byte >> 6) & 0b011;
+                                let y = (second_byte >> 3) & 0b111;
+                                let z = (second_byte >> 0) & 0b111;
+
+                                // WARNING: a8, d8, d16, etc. are broken here
+                                match x {
+                                    0 => format!("{} {}", idx_rot(y), idx_r(z)),
+                                    1 => format!("BIT {},{}", y, idx_r(z)),
+                                    2 => format!("RES {},{}", y, idx_r(z)),
+                                    3 => format!("SET {},{}", y, idx_r(z)),
+                                    _ => unreachable!("Impossible opcode"),
+                                }
+                            }
+                            2...5 => illegal_op(first_byte),
+                            6 => format!("DI"),
+                            7 => format!("EI"),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    4 => {
+                        match y {
+                            0...3 => format!("CALL {},{}", idx_cc(y), a16()),
+                            4...7 => illegal_op(first_byte),
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    5 => {
+                        match q {
+                            0 => format!("PUSH {}", idx_rp2(p)),
+                            1 => {
+                                match p {
+                                    0 => format!("CALL {}", a16()),
+                                    1...3 => illegal_op(first_byte),
+                                    _ => unreachable!("Impossible opcode"),
+                                }
+                            }
+                            _ => unreachable!("Impossible opcode"),
+                        }
+                    }
+                    6 => format!("{} {}", idx_alu(y), d8()),
+                    7 => format!("RST {}", y * 8),
+                    _ => unreachable!("Impossible opcode"),
+                }
+            }
+            _ => unreachable!("Impossible opcode"),
+        }
+    };
+
+    // This garbage is here because two closures can't borrow same var.
+    instruction_size += prefix_used;
+    instruction_size += used_a8;
+    instruction_size += used_r8;
+    instruction_size += used_d8;
+    instruction_size += used_a16;
+    instruction_size += used_d16;
+    (mnemonic, instruction_size)
+}
+
+fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
+    let mut pc = 0;
+
+    while pc < rom_size {
+        let (mnemonic, size) = pp_opcode(rom[pc], rom[pc + 1], rom[pc + 2], pc as u16);
+        println!("\t{}\t\t; ${:04X} 0x{:02X} {}", mnemonic, pc, rom[pc], size);
+        pc += size as usize;
+    }
+}
 
 fn main() {
-    print!("Kappa");
+    // // Print "[prefix] opcode size mnemonic" table
+    // for i in 0..255 {
+    //     let (mnemonic, size) = pp_opcode(i, 0xF2, 0x02, 0x2FFF);
+    //     println!("0x{:02X} {} {:?}", i, size, mnemonic);
+    // }
+    // for i in 0..255 {
+    //     let (mnemonic, size) = pp_opcode(0xCB, i, 0x02, 0x2FFF);
+    //     println!("0xCB 0x{:02X} {} {:?}", i, size, mnemonic);
+    // }
+    use std::fs::File;
+    use std::io::Read;
+    let file_path = "DMG_ROM.bin";
+    let mut rom = File::open(file_path).expect("Could not open rom file");
+    let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
+
+    let rom_size = rom.read(&mut rom_buffer).unwrap();
+
+    disasm_rom(rom_buffer, rom_size);
 }
-
-fn explode_instruction(inst: u8) -> (u8,u8,u8) {
-    let x = (inst >> 6) & 0x3;
-    let y = (inst >> 3) & 0x7;
-    let z = (inst     ) & 0x7;
-
-    (x,y,z)
-}
-
-pub fn prefix_inst(input: &[u8]) -> IResult<&[u8], Vec<Instructions>> {
-    //0xCB = 11 001 011
-    let (x,y,z) = explode_instruction();
-    
-}
-
-pub fn (&mut cpu: cpu::cpu) -> String {
-    let (first_byte, second_byte, third_byte, fourth_byte)
-        = cpu.read_instruction();
-    let x = (first_byte >> 6) & 0x3;
-    let y = (first_byte >> 3) & 0x7;
-    let z = first_byte        & 0x7;
-
-    let uf = "The impossible happened!";
-
-    if first_byte == 0xCB { //prefixed instruction
-        let x = (second_byte >> 6) & 0x3;
-        let y = (second_byte >> 3) & 0x7;
-        let z = second_byte        & 0x7;
-        
-        match x { // xxyy yzzz
-            0 => match y {
-                //(cpu_dispatch(z))
-                0 => "RLC " + cpu_dispatch(z),
-                1 => self.rrc(cpu_dispatch(z)),
-                2 => self.rl(cpu_dispatch(z)),
-                3 => self.rr(cpu_dispatch(z)),
-                4 => self.sla(cpu_dispatch(z)),
-                5 => self.sra(cpu_dispatch(z)),
-                6 => self.swap(cpu_dispatch(z)),
-                7 => self.srl(cpu_dispatch(z)),
-                _ => unreachable!(uf),
-            },
-
-                1 => self.bit(y, cpu_dispatch(z)),
-
-                2 => self.res(y, cpu_dispatch(z)),
-
-                3 => self.set(y, cpu_dispatch(z)),
-
-                _ => unreachable!(uf),
-            }
-
-            inst_time =
-                if CpuRegister::HL == cpu_dispatch(z) {16} else {8};
-
-            self.inc_pc();
-        } else { //unprefixed instruction
-            match x {
-                0 =>
-                    match z {
-                        0 =>
-                            match y {
-                                0        => self.nop(), //0x00
-                                1        => {
-                                    self.ldnnsp(second_byte, third_byte);
-                                    self.inc_pc();
-                                    self.inc_pc();
-                                    inst_time = 20;
-                                }, //0x08
-                                2        => self.stop(), //0x10
-                                3        => {
-                                    self.jrn(second_byte as i8);
-                                    self.inc_pc();
-                                    inst_time = 8;
-                                },  //0x18
-                                v @ 4...7 => {
-                                    inst_time = 8 + if
-                                        self.jrccn(cc_dispatch(v-4),
-                                                   second_byte as i8) {4}
-                                    else {0};
-                                    self.inc_pc();
-                                },  //0x20, 0x28, 0x30, 0x38
-                                _        => unreachable!(uf),
-                            },
-                        
-                        1 =>  //00yy y001
-                        {
-                            inst_time = if y % 2 == 0 {
-                                self.ldnnn16(cpu16_dispatch(y/2),
-                                             second_byte, third_byte);
-                                self.inc_pc();
-                                self.inc_pc();
-                                12
-                            } else {
-                                self.add_hl(cpu16_dispatch(y/2));
-                                8
-                            };
-                        },
-                        
-                        2 => //00yy y010
-                        {
-                            match y {
-                                0 | 2 => self.ldna16(cpu16_dispatch(y/2)),
-                                1 | 3 => self.ldan16(cpu16_dispatch(y/2)),
-                                4 => self.ldihla(),
-                                5 => self.ldiahl(),
-                                6 => self.lddhla(),
-                                7 => self.lddahl(),
-                                _ => unreachable!(uf),
-                            }
-                            inst_time = 8;
-                        },
-
-                        3 => //00yy y011
-                        {
-                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1);
-                            inst_time = 8;
-                        },
-
-                        4 => //00yy y100
-                        {
-                            self.inc(cpu_dispatch(y));
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {4};
-                        },
-                        
-                        5 =>
-                        {
-                            self.dec(cpu_dispatch(y));
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {4};
-                        },
-
-                        6 =>
-                        {
-                            self.ldnnn(cpu_dispatch(y), second_byte);
-                            self.inc_pc();
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {8};
-                        },
-
-                        7 => match y { //00yy y111
-                            0 => self.rlca(),
-                            1 => self.rrca(),
-                            2 => self.rla(),
-                            3 => self.rra(),
-                            4 => self.daa(),
-                            5 => self.cpl(),
-                            6 => self.scf(),
-                            7 => self.ccf(),
-                            _ => unreachable!(uf),
-                        },
-
-                        _ => unreachable!(uf),
-                    }, //end x=0
-
-                1 => match (z,y) {
-                    (6,6) => self.halt(),
-                    (n,m) => {
-                        self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n));
-                        inst_time = match (cpu_dispatch(m), cpu_dispatch(n)) {
-                            (CpuRegister::HL,_) => 8,
-                            (_,CpuRegister::HL) => 8,
-                            _                   => 4,
-                        }
-                    },
-                }, //end x = 1
-
-                2 => { match y //10yy y000
-                       {
-                           0 => self.add(cpu_dispatch(z)),
-                           1 => self.adc(cpu_dispatch(z)),
-                           2 => self.sub(cpu_dispatch(z)),
-                           3 => self.sbc(cpu_dispatch(z)),
-                           4 => self.and(cpu_dispatch(z)),
-                           5 => self.xor(cpu_dispatch(z)),
-                           6 => self.or(cpu_dispatch(z)),
-                           7 => self.cp(cpu_dispatch(z)),
-                           _ => unreachable!(uf),
-                       };
-                       //TODO: double check the line below 
-                       inst_time = if z == 6 {8} else {4};
-                }, //end x = 2
-
-                3 => match z //11yy y000
-                {
-
-                    0 => match y {
-                        v @ 0...3 => inst_time = if
-                            self.retcc(cc_dispatch(v)) {20} else {8},
-                        4 => {
-                            self.ldhna(second_byte);
-                            self.inc_pc();
-                            inst_time = 12;
-                        },
-                        5 => { //0xE8
-                            self.addspn(second_byte as i8);
-                            self.inc_pc();
-                            inst_time = 16;
-                        },
-                        6 => {
-                            self.ldhan(second_byte);
-                            self.inc_pc();
-                            inst_time = 12;
-                        },
-                        7 => {
-                            self.ldhlspn(second_byte);
-                            self.inc_pc();
-                            inst_time = 12;
-                        },
-                        _ => unreachable!(uf),
-                    },
-
-                    1 => if y % 2 == 0 { //11yy y001
-                        let adjusted_value = y / 2;
-                        let val = self.pop_from_stack();
-                        self.set_register16(cpu16_dispatch(adjusted_value), val);
-                        inst_time = 12;
-                    } else {
-                        let adjusted_value = y / 2;
-                        match adjusted_value {
-                            0 => {
-                                self.ret();
-                                inst_time = 16;
-                            },
-                            1 => {
-                                self.reti();
-                                inst_time = 16;
-                            },
-                            2 => self.jphl(),
-                            3 => {
-                                self.ldsphl();
-                                inst_time = 8;
-                            },
-                            _ => unreachable!(uf),
-                        }
-                    },
-
-                    2 => match y {
-                        v @ 0...3 => { // 11yy y010
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                            inst_time = if
-                                self.jpccnn(cc_dispatch(v),
-                                            const_val) {16} else {12};
-                            self.inc_pc();
-                            self.inc_pc();
-                        },
-                        4 => { // 0xE2
-                            self.ldca();
-                            inst_time = 8;
-                        },
-                        5 => { //0xEA
-                            self.ldan16c(second_byte, third_byte);
-                            self.inc_pc();
-                            self.inc_pc();
-                            inst_time = 16;
-                        },
-                        6 => { //0xF2
-                            self.ldac();
-                            inst_time = 8;
-                        },
-                        7 => { //0xFA
-                            self.ldan16c(second_byte, third_byte);
-                            self.inc_pc();
-                            self.inc_pc();
-                            inst_time = 16;
-                        },
-                        _ => unreachable!(uf),
-                    },
-
-                    3 => match y { //11yy y011
-                        0 => {
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                            self.jpnn(const_val);
-                            self.inc_pc();
-                            self.inc_pc();
-
-                            inst_time = 16;
-                        },
-                        6 => self.di(),
-                        7 => self.ei(),
-                        _ => panic!("Illegal opcode"),
-                    },
-
-                    4 => {
-
-                        let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                        inst_time =
-                            if self.callccnn(cc_dispatch(y),
-                                             const_val) {24} else {12};
-                        self.inc_pc();
-                        self.inc_pc();
-                    },
-
-                    5 => {
-                        if y % 2 == 0 {
-                            let value = self.access_register16(cpu16_dispatch(y / 2));
-                            self.push_onto_stack(value);
-                            inst_time = 16;
-                        } else if y == 1 {
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                            self.callnn(const_val);
-                            self.inc_pc();
-                            self.inc_pc();
-                            inst_time = 24;
-                        } else {
-                            panic!("Invalid opcode: {}", first_byte)
-                        }
-                    },
-
-                    6 => {
-                        match y {
-                            0 => self.add(CpuRegister::Num(second_byte as i8)),
-                            1 => self.adc(CpuRegister::Num(second_byte as i8)),
-                            2 => self.sub(CpuRegister::Num(second_byte as i8)),
-                            3 => self.sbc(CpuRegister::Num(second_byte as i8)),
-                            4 => self.and(CpuRegister::Num(second_byte as i8)),
-                            5 => self.xor(CpuRegister::Num(second_byte as i8)),
-                            6 => self.or(CpuRegister::Num(second_byte as i8)),
-                            7 => self.cp(CpuRegister::Num(second_byte as i8)),
-                            _ => unreachable!(uf),
-                        };
-                        inst_time = 8;
-                        self.inc_pc();
-                    },
-
-                    7 => {
-                        self.rst(8*y);
-                        inst_time = 16;
-                    },
-                        
-                    _ => unreachable!(uf),
-                },
-                _ => panic!("The impossible happened!"),
-            }
-        }
-        
-        self.inc_pc();
-
-        inst_time
-    }
-
