@@ -48,6 +48,48 @@ macro_rules! test_op_no_arg {
     }
 }
 
+macro_rules! test_op_no_arg16 {
+    ($func:ident, $method:ident, $output_reg:expr, $input:expr,
+     $expected_output:expr, $flag_find_value:expr,
+     $flag_expected_value:expr) => {
+        
+        #[test]
+        fn $func() {
+            let mut cpu = Cpu::new();
+            let old_hl = cpu.hl();
+
+            cpu.set_register16($output_reg, $input);
+            cpu.$method($output_reg);
+            println!("{:X} + {:X} = {:X}. should be: {:X}, but expected {:X}", $input, old_hl, cpu.access_register16(CpuRegister16::HL), ($input + (old_hl as u32)) as u16, $expected_output);
+            
+            assert_eq!(
+                cpu.access_register16($output_reg), $expected_output);
+            assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
+        }
+    }
+}
+
+macro_rules! test_op16 {
+    ($func:ident, $method:ident, $input_reg:expr, $output_reg:expr, $input:expr,
+     $expected_output:expr, $flag_find_value:expr,
+     $flag_expected_value:expr) => {
+        
+        #[test]
+        fn $func() {
+            let mut cpu = Cpu::new();
+
+            cpu.set_register16($input_reg, $input);
+            cpu.$method($input_reg);
+            
+            assert_eq!(
+                cpu.access_register16($output_reg)
+                    , $expected_output);
+            assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
+        }
+    }
+}
+
+
 
 test_op!(add_const, add, (5, CpuRegister::Num(5)), a, 5 + 5, |flags| flags & zl, 0,5);
 test_op!(add_reg, add, (5, CpuRegister::B), a, 5 + -5, |flags| flags, zl, -5);
@@ -81,34 +123,86 @@ test_op!(xor_test2, xor, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0)
 test_op!(xor_test3, xor, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
 
     
-test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags, zl | nl  | hl | cl, 0xF);
-test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
+test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags,  zl | nl | hl , 0xF);
+test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl , 0);
 // TODO: verify hl and cl flags here make sense:
-test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
-test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl | cl, 0);
+test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl , 0xF0);
+test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl, 0);
+test_op!(cp_test4, cp, (0xF0, CpuRegister::B), a, 0xF0, |flags| flags, nl | cl , 0xF);
 
-//    test_op!(addhl_test, add_hl, (0xFFFF, CpuRegister16::AB), a, 0x10000, |flags| flags, zl | nl  | hl | cl, 1);
-  //  test_op!(addhl_test1, add_hl, (1256, CpuRegister16::CD), a, 1256, |flags| flags, nl | hl | cl, 0);
+test_op16!(addhl_test, add_hl, CpuRegister16::BC, CpuRegister16::HL, 0xFFFF, (0xFFFF + 0x14D) as u16, |flags| flags & 0x70, hl | cl);
+test_op16!(addhl_test1, add_hl, CpuRegister16::DE, CpuRegister16::HL, 0,  (0 + 0x14D), |flags| flags & 0x70, 0);
+test_op16!(addhl_test2, add_hl, CpuRegister16::DE, CpuRegister16::HL, 0xFFFF,  (0xFFFF + 0x14D) as u16, |flags| flags & 0x70, hl | cl);
 
 
+#[test]
+fn addsp_test() {
+    let mut cpu = Cpu::new();
+
+    cpu.add_sp(CpuRegister16::Num(-0xE));
+    assert_eq!(cpu.access_register16(CpuRegister16::SP), 0xFFF0);
+    cpu.add_sp(CpuRegister16::Num(0xF));
+    assert_eq!(cpu.access_register16(CpuRegister16::SP), 0xFFFF);
+    cpu.add_sp(CpuRegister16::Num(-0xFF));
+    assert_eq!(cpu.access_register16(CpuRegister16::SP), 0xFF00);
+}
+
+test_op16!(inc16_0, inc16, CpuRegister16::BC, CpuRegister16::BC, 0, 1, |flags| 0, 0);
+test_op16!(inc16_1, inc16, CpuRegister16::DE, CpuRegister16::DE, 0xFFFF, 0, |flags| 0, 0);
+test_op16!(inc16_2, inc16, CpuRegister16::BC, CpuRegister16::BC, 127, 128, |flags| 0, 0);
+
+test_op16!(dec16_0, dec16, CpuRegister16::BC, CpuRegister16::BC, 1, 0, |flags| 0, 0);
+test_op16!(dec16_1, dec16, CpuRegister16::DE, CpuRegister16::DE, 0, 0xFFFF, |flags| 0, 0);
+test_op16!(dec16_2, dec16, CpuRegister16::BC, CpuRegister16::BC, 128, 127, |flags| 0, 0);
+test_op16!(dec16_3, dec16, CpuRegister16::BC, CpuRegister16::BC, 0xFF00, 0xFEFF, |flags| 0, 0);
+
+//128 = 0x80
+// 0xFF7F
+
+
+
+//TODO: overflow tests.  Figure out what the behavior should be and test for it
     
 test_op_no_arg!(inc_test,  inc, CpuRegister::A, 0xE, 0xF, |flags| flags & 0xE0, 0);
 test_op_no_arg!(inc_test1,  inc, CpuRegister::B, 0x0, 0x1, |flags| flags & 0xE0, 0);
 test_op_no_arg!(inc_test2,  inc, CpuRegister::C, -1, 0, |flags| flags & 0xE0, zl | hl);
- //   test_op_no_arg!(inc_t`oest1, inc, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl | cl, 0);
-   // test_op_no_arg!(inc_test2, inc, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl | cl , 0xF0);
-
     
+test_op_no_arg!(dec_test,  dec, CpuRegister::A, 0x10, 0xF, |flags| flags & 0xE0, nl);
+test_op_no_arg!(dec_test1,  dec, CpuRegister::B, 0, -1, |flags| flags & 0xE0, nl );
+test_op_no_arg!(dec_test2,  dec, CpuRegister::C, 1, 0, |flags| flags & 0xE0, zl | nl);
 
-    //dec
-
-
-
-   /* //TODO: flag tests on BCD
-    test_op!(bcd_test1, daa, (0x15, ), a, 0x15, |_| 0, 0, 0x15);
-    test_op!(bcd_test1, daa, (0x70, ), a, 0x70, |_| 0, 0, 0x70);
-    test_op!(bcd_test1, daa, (0x79, ), a, 0x79, |_| 0, 0, 0x79);
-    test_op!(bcd_test1, daa, (0x3F, ), a, 0x3F, |_| 0, 0, 0x3F);
-    */
+test_op_no_arg!(swap_test,   swap, CpuRegister::A, 0xFA, 0xAF, |flags| flags, 0);
+test_op_no_arg!(swap_test1,  swap, CpuRegister::B, 0x12, 0x21, |flags| flags, 0);
+test_op_no_arg!(swap_test2,  swap, CpuRegister::C, 0, 0, |flags| flags, zl);
 
 
+#[test]
+fn hl_tests() {
+    let mut cpu = Cpu::new();
+
+    cpu.set_register16(CpuRegister16::HL, 0);
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), 0);
+
+    cpu.set_register16(CpuRegister16::HL, 100);
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), 100);
+
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), cpu.hl());
+    
+    cpu.set_register16(CpuRegister16::HL, 0xFF);
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), 0xFF);
+
+    cpu.set_register16(CpuRegister16::HL, 0x100);
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), 0x100);
+
+    cpu.set_register16(CpuRegister16::HL, 0xFFFE);
+    assert_eq!(cpu.access_register16(CpuRegister16::HL), 0xFFFE);
+}
+
+/*
+test_op_no_arg!(bcd_test1, daa, CpuRegister::A, 0x15, 0x15, |flags| flags & (zl | hl), 0);
+test_op_no_arg!(bcd_test2, daa, CpuRegister::A, 0x70, 0x70, |flags| flags & (zl | hl), 0);
+test_op_no_arg!(bcd_test3, daa, CpuRegister::A, 0x79, 0x79, |flags| flags & (zl | hl), 0);
+test_op_no_arg!(bcd_test4, daa, CpuRegister::A, 0x3F, 0x46, |flags| flags & (zl | hl), 0);
+test_op_no_arg!(bcd_test4, daa, CpuRegister::A, 0, 0, |flags| flags & (zl | hl ), zl);
+
+*/

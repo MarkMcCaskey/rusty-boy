@@ -3,6 +3,7 @@
 
 #[macro_use] mod macros;
 mod tests;
+use disasm::*;
 
 use std::str::from_utf8;
 
@@ -26,12 +27,12 @@ pub struct Cpu {
 }
 
 #[derive(Clone,Copy,PartialEq)]
-enum CpuRegister {
+pub enum CpuRegister {
     A, B, C, D, E, H, L, HL, Num(i8),
 }
 
 #[derive(Clone,Copy,PartialEq)]
-enum CpuRegister16 {
+pub enum CpuRegister16 {
     BC, DE, HL, SP, Num(i16),
 }
 
@@ -159,21 +160,12 @@ impl Cpu {
         new_cpu
     }
 
-    fn ldpanic(&self, reg:CpuRegister16) {
-        panic!("(load) opcode not implemented!");
-    }
-
-    /* fn get_vblank(&self) -> [u8; 8] {
-    let mut ret_arr = [0u8; 8];
-
-} */
-
     //FF04 Div
     /*
      * This needs to be called 16384 (~16779 on SGB) times a second
      */
     fn inc_div(&mut self) {
-        let old_val: u16 = self.mem[0xFF04] as u16;
+        let old_val: u16 = (self.mem[0xFF04] as u16) & 0xFF;
         self.mem[0xFF04] = (old_val + 1) as i8;
     }
 
@@ -198,7 +190,7 @@ impl Cpu {
     }
 
     fn inc_timer(&mut self) {
-        let old_val: u16 = self.mem[0xFF05] as u16;
+        let old_val: u16 = (self.mem[0xFF05] as u16) & 0xFF;
         let new_val = self.mem[0xFF06];
 
         self.mem[0xFF05] =
@@ -450,29 +442,30 @@ impl Cpu {
     }
 
     fn hl(&self) -> u16 {
-        (self.h as u16) << 8 | (self.l as u16)
+        (((self.h as u16) << 8) & 0xFF00) | ((self.l as u16) & 0xFF)
     }
 
     fn set_hl(&mut self, hlv:u16) {
-        self.h = ((hlv & 0xFF00) >> 8) as i8;
-        self.l = (hlv & 0xFF)          as i8;
+        let shlv = hlv as i32;
+        self.h = (((shlv & 0xFF00) >> 8) & 0xFF) as i8;
+        self.l = (shlv & 0xFF)          as i8;
     }
 
     fn bc(&self) -> u16 {
-        (self.b as u16) << 8 | (self.c as u16)
+        ((self.b as u16) << 8) | ((self.c as u16) & 0xFF)
     }
 
     fn de(&self) -> u16 {
-        (self.d as u16) << 8 | (self.e as u16)
+        ((self.d as u16) << 8) | ((self.e as u16) & 0xFF)
     }
 
     fn set_bc(&mut self, bcv: u16) {
-        self.b = ((bcv & 0xFF00) >> 8) as i8;
+        self.b = (((bcv & 0xFF00) >> 8) & 0xFF) as i8;
         self.c = (bcv & 0xFF)          as i8;
     }
 
     fn set_de(&mut self, dev: u16) {
-        self.d = ((dev & 0xFF00) >> 8) as i8;
+        self.d = (((dev & 0xFF00) >> 8) & 0xFF) as i8;
         self.e = (dev & 0xFF)          as i8;
     }
 
@@ -754,7 +747,7 @@ impl Cpu {
     fn adc(&mut self, reg: CpuRegister) {
         let old_a = self.a as i16;
         let old_b = self.reg_or_const(reg);
-        let cf: i8 = self.f & hl >> 5;
+        let cf: i8 = (self.f & hl) >> 5;
         self.add(reg);
 
         let new_a: i16 = (cf + self.a) as i16;
@@ -780,7 +773,7 @@ impl Cpu {
         let old_a = self.a as i16;
         let old_b = self.reg_or_const(reg);
         let old_c = (old_a - old_b) as i8;
-        let cf: i8 = self.f & hl >> 5;
+        let cf: i8 = (self.f & hl) >> 5;
         self.sub(reg);
 
         //NOTE: find out whether this should be self.a - cf
@@ -800,7 +793,7 @@ impl Cpu {
     }
 
     fn or(&mut self, reg: CpuRegister) {
-        let new_a: i16 = self.alu_dispatch(reg, |a: i8, b: i8| ((a as u16) | (b as u16)) as i16);
+        let new_a: i16 = self.alu_dispatch(reg, |a: i8, b: i8| (((a as u16) & 0xFF)| ((b as u16) & 0xFF)) as i16);
 
         self.a = new_a as i8;
         self.set_flags(new_a == 0, false, false, false);
@@ -815,9 +808,17 @@ impl Cpu {
 
     fn cp(&mut self, reg: CpuRegister) {
         let old_a = self.a;
+        let regval = self.access_register(reg).expect("invalid register");
+        let a4bit = old_a & 0xF;
+        let reg4bit = self.access_register(reg).expect("invalid register");
+            
         self.sub(reg);
+        let new_a = self.a;
         self.a = old_a;
-        self.f |= nl;
+        self.set_flags(new_a == 0,
+                       true,
+                       !(reg4bit > a4bit),
+                       old_a < regval);
     }
 
     fn inc(&mut self, reg: CpuRegister) {
@@ -835,42 +836,73 @@ impl Cpu {
 
     fn dec(&mut self, reg: CpuRegister) {
         let old_c = (self.f & hl) == hl;
-        let old_4bit = self.a & 0x10; //TODO: rename this/redo this
+        let old_4bit = self.access_register(reg).expect("invalid register") & 0x10; //TODO: rename this/redo this
         //old_4bit is used to detect overflow of 4th bit
+        let new_val: i16 = (self.access_register(reg)
+                            .expect("invalid register") as i16) - 1;
 
-        let new_a: i16 = self.alu_dispatch(reg, |_, b: i8| (b - 1) as i16);
-        self.a = new_a as i8;
+        self.set_register(reg, new_val as i8);
 
-        self.f = if new_a == 0 { zl } else { 0 };
-        //self.f |= old_c;
-        //self.f |= if old_4bit == 0x8 && (self.a & 0x8 == 0) { nl } else { 0 };
-        //TODO: borrowing of 4th bit flag
-        /*        self.set_flags(new_a == 0,
-        false,
-        old_c
-         */
+        self.set_flags(
+            new_val == 0,
+            true,
+            old_4bit == 0x10 && ((new_val & 0x10) == 0x10),
+            old_c);
+
     }
+
+        /*
+         * Explanation for stream:
+         *
+         * xxx1 xxxx xxxx
+         * xxx0 xxxx xxxx
+         *
+         * 0xFF + 0xFF
+         * 0x1FE
+         *
+         * 0xEFF + 0xEFF
+         * 0xFFE
+        
+         * One bit adder:
+         * Circuit with three inputs and two outputs
+         * (diagram does not include carry as input)
+         * n1 + n2 = s c
+         * 0  + 0  = 0 0
+         * 0  + 1  = 1 0
+         * 1  + 0  = 1 0
+         * 1  + 1  = 0 1
+         */
 
     fn add_hl(&mut self, reg: CpuRegister16) {
         let old_z = (self.f & zl) == zl;
-        //TODO: review after sleeping if this actually makes sense for checking middle-ish overflow (carefully consider negative numbmers)
-        let old_11bit = self.a & 0x800;
 
-        let new_hl = self.alu_dispatch16(reg, |a:i32, b:i32| (a as i32) + (b as i32));
+        //TODO: Maybe properly convert if signed
+        let hl_12bit = self.hl() & 0xFFF;
+        let regval_12bit = self.access_register16(reg) & 0xFFF;
+        let overflow12bit = (hl_12bit + regval_12bit) > 0xFFF;
 
-        self.set_hl(new_hl as u16);
+        let hl_16bit = self.hl() as i32;
+        let regval_16bit = self.access_register16(reg) as i32;
+        let overflow16bit = (hl_16bit + regval_16bit) > 0xFFFF;
+
+        self.set_register16(CpuRegister16::HL, (hl_16bit + regval_16bit) as u16);
+
         self.set_flags(old_z,
                        false,
-                       old_11bit == 1 && (new_hl & 0x800 == 0),
-                       new_hl > (u16::max_value() as i32));
+                       overflow12bit,
+                       overflow16bit);
     }
 
     //Consider adding further restrictions to this type; argument must be an immediate value
     fn add_sp(&mut self, reg: CpuRegister16) {
         if let CpuRegister16::Num(i) = reg {
             self.sp = ((self.sp as i16) + i )as u16;
-            //TODO: figure out what happens to the bottom two flags
-            self.f &= 0x3F;
+
+            self.set_flags(
+                false,
+                false,
+                false, //TODO: wat
+                false);//TODO: wat
         }
         else {
             panic!("In add_sp, invalid argument.  It must be an immediate value");
@@ -880,22 +912,31 @@ impl Cpu {
 
     fn inc16(&mut self, reg: CpuRegister16) {
         match reg {
-            CpuRegister16::BC => { let old_v = self.bc()+1; self.set_bc(old_v); },
-            CpuRegister16::DE => { let old_v = self.de()+1; self.set_de(old_v); },
-            CpuRegister16::HL => { let old_v = self.hl()+1; self.set_hl(old_v); },
-            CpuRegister16::SP => self.sp += 1,
+            CpuRegister16::BC => {
+                let old_v = (self.bc() as u32)+1;
+                self.set_bc(old_v as u16);
+            },
+            CpuRegister16::DE => {
+                let old_v = (self.de() as u32)+1;
+                self.set_de(old_v as u16);
+            },
+            CpuRegister16::HL => {
+                let old_v = (self.hl() as u32) +1;
+                self.set_hl(old_v as u16);
+            },
+            CpuRegister16::SP => {
+                let old_v = (self.sp as u32) +1;
+              self.set_register16(CpuRegister16::SP, old_v as u16);
+            },
             _ => panic!("inc16 cannot take numeric values as arguments"),
         } 
     }
 
     fn dec16(&mut self, reg: CpuRegister16) {
-        match reg {
-            CpuRegister16::BC => { let old_v = self.bc()-1; self.set_bc(old_v); },
-            CpuRegister16::DE => { let old_v = self.de()-1; self.set_de(old_v); },
-            CpuRegister16::HL => { let old_v = self.hl()-1; self.set_hl(old_v); },
-            CpuRegister16::SP => self.sp -= 1,
-            _ => panic!("dec16 cannot take numeric values as arguments"),
-        } 
+        let val: i16 = self.access_register16(reg) as i16;
+        self.set_register16(reg,
+                            if (val as u16) == 0 {u16::max_value()}
+                            else {(val as u16) - 1});
     }
 
     fn swap(&mut self, reg: CpuRegister) {
@@ -903,14 +944,14 @@ impl Cpu {
         let val = self.access_register(reg).expect("couldn't access register value");
         let top = val & 0xF0;
         let bot = val & 0x0F;
-        self.set_register(reg, (top >> 4) | (bot << 4));
+        self.set_register(reg, ((top >> 4) & 0xF) | (bot << 4));
         
         self.f = if val == 0 { zl } else { 0 };
     }
 
 
     fn daa(&mut self) {
-        let reduced_a = self.a as u16;
+        let reduced_a = (self.a as u16) & 0xFF;
 
         let lowest_bits = reduced_a & 0xF;
 
@@ -980,7 +1021,7 @@ impl Cpu {
 
     fn rla(&mut self) {
         let old_bit7 = (self.a >> 7) & 1;
-        let old_flags = (self.f & cl) >> 4;
+        let old_flags = ((self.f & cl) >> 4) & 0xF;
         
 
         let new_a = (self.a << 1) | old_flags;
@@ -995,7 +1036,7 @@ impl Cpu {
     fn rrca(&mut self) {
         let old_bit0 = self.a & 1;
 
-        let new_a = (self.a >> 1) | (old_bit0 << 7);
+        let new_a = ((self.a >> 1) & 0x7F) | (old_bit0 << 7);
         self.a = new_a;
 
         self.set_flags(new_a == 0,
@@ -1006,9 +1047,9 @@ impl Cpu {
 
     fn rra(&mut self) {
         let old_bit0 = self.a & 1;
-        let old_flags = (self.f & cl) >> 4;
+        let old_flags = ((self.f & cl) >> 4) & 0xF;
 
-        let new_a = (self.a >> 1) | (old_flags << 7);
+        let new_a = ((self.a >> 1) & 0x7F) | (old_flags << 7);
         self.a = new_a;
 
         self.set_flags(new_a == 0,
@@ -1033,7 +1074,7 @@ impl Cpu {
     fn rl(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit7 = (reg_val >> 7) & 1;
-        let old_flags = (self.f & cl) >> 4;
+        let old_flags = ((self.f & cl) >> 4) & 0xF;
 
         let new_reg = (reg_val << 1) | old_flags;
         self.set_register(reg, new_reg);
@@ -1048,7 +1089,7 @@ impl Cpu {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
 
-        let new_val = (reg_val >> 1) | (old_bit0 << 7);
+        let new_val = ((reg_val >> 1) & 0x7F) | (old_bit0 << 7);
         self.set_register(reg, new_val);
 
         self.set_flags(new_val == 0,
@@ -1060,8 +1101,9 @@ impl Cpu {
     fn rr(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
-        let old_flags = (self.f & cl) >> 4;
+        let old_flags = ((self.f & cl) >> 4) & 0xF;
 
+        //todo: wat
         let new_val = (reg_val >> 1) | old_flags;
         self.set_register(reg, new_val);
 
@@ -1073,7 +1115,7 @@ impl Cpu {
 
     fn sla(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-        let old_bit7 = reg_val >> 7;
+        let old_bit7 = (reg_val >> 7) & 1;
         self.set_register(reg, reg_val << 1);
 
         self.set_flags((reg_val << 1) == 0,
@@ -1109,10 +1151,10 @@ impl Cpu {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_flags = (self.f & cl) >> 4;
         
-        self.set_flags((reg_val >> b) & 1 == 1,
+        self.set_flags(((reg_val >> b) & 1) != 1,
                        false,
                        true,
-                       old_flags & 1 == 1);
+                       (old_flags & 1) == 1);
     }
 
     fn set(&mut self, b: u8, reg: CpuRegister) {
@@ -1153,12 +1195,13 @@ impl Cpu {
         self.pc = ((old_pc as i32) + (n as i32)) as u16;
     }
 
+    //Double check run time length
     fn jrccn(&mut self, cc: Cc, n: i8) -> bool {
         if 1 ==
             match cc {
-                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::NZ => (!(self.f >> 7)) & 1,
                 Cc::Z  => (self.f >> 7) & 1,
-                Cc::NC => !((self.f >> 4) & 1),
+                Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 let old_pc = self.pc;
@@ -1169,12 +1212,13 @@ impl Cpu {
 
     //TODO: Verify if SP should be incremented first
     fn callnn(&mut self, nn: u16) {
-        self.push_onto_stack(nn);
+        let cur_pc = self.pc;
+        self.push_onto_stack(cur_pc + 3);
         self.pc = nn;
     }
 
     fn push_onto_stack(&mut self, nn: u16) {
-        let first_half = (nn >> 8) as i8;
+        let first_half = ((nn >> 8) & 0xFF) as i8;
         let second_half = (nn & 0xFF) as i8;
         let old_sp = self.sp;
 
@@ -1187,9 +1231,9 @@ impl Cpu {
     fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
         if 1 ==
             match cc {
-                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::NZ => (!(self.f >> 7)) & 1,
                 Cc::Z  => (self.f >> 7) & 1,
-                Cc::NC => !((self.f >> 4) & 1),
+                Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 self.callnn(nn);
@@ -1210,7 +1254,7 @@ impl Cpu {
         let val1 = self.mem[old_sp as usize];
         let val2 = self.mem[(old_sp+1) as usize];
 
-        ((val2 as u16) << 8) | (val1 as u16)
+        (((val2 as u16) << 8) & 0xFF00) | ((val1 as u16) & 0xFF)
     }
 
     fn ret(&mut self) {
@@ -1269,8 +1313,10 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        trace!("Running instruction at 0x{:X}", self.pc);
-        trace!("First byte of instruction is: 0x{:X}", first_byte);
+        trace!("0X{:X}: Running instruction: {:?}", self.pc,
+               pp_opcode(first_byte, second_byte, third_byte, self.pc));
+        trace!("CPU Registers are: a:{:X} b:{:X} c:{:X} d:{:X} e:{:X} f:{:X} h:{:X} l:{:X} sp:{:X}",
+               self.a, self.b, self.c, self.d, self.e, self.f, self.h, self.l, self.sp);
 
         let uf = "The impossible happened!";
 
@@ -1538,13 +1584,17 @@ impl Cpu {
                     },
 
                     4 => {
-
-                        let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
-                        inst_time =
-                            if self.callccnn(cc_dispatch(y),
-                                             const_val) {24} else {12};
-                        self.inc_pc();
-                        self.inc_pc();
+                        match y {
+                            0...3 => {
+                                let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                                inst_time =
+                                    if self.callccnn(cc_dispatch(y),
+                                                     const_val) {24} else {12};
+                                self.inc_pc();
+                                self.inc_pc();
+                            },
+                            _ => panic!("Invalid opcode: {:X} at {:X}", first_byte, self.pc),
+                        }
                     },
 
                     5 => {
