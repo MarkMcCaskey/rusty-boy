@@ -48,6 +48,27 @@ macro_rules! test_op_no_arg {
     }
 }
 
+macro_rules! test_op_really_no_arg {
+    ($func:ident, $method:ident, $output_reg:expr, $input:expr,
+     $expected_output:expr, $flag_find_value:expr,
+     $flag_expected_value:expr) => {
+        
+        #[test]
+        fn $func() {
+            let mut cpu = Cpu::new();
+            
+            cpu.set_register($output_reg, $input);
+            cpu.$method();
+            
+            assert_eq!(
+                cpu.access_register($output_reg).expect("invalid register")
+                    , $expected_output);
+            assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
+        }
+    }
+}
+
+
 macro_rules! test_op_no_arg16 {
     ($func:ident, $method:ident, $output_reg:expr, $input:expr,
      $expected_output:expr, $flag_find_value:expr,
@@ -198,11 +219,13 @@ fn hl_tests() {
     assert_eq!(cpu.access_register16(CpuRegister16::HL), 0xFFFE);
 }
 
-/*
-test_op_no_arg!(bcd_test1, daa, CpuRegister::A, 0x15, 0x15, |flags| flags & (zl | hl), 0);
-test_op_no_arg!(bcd_test2, daa, CpuRegister::A, 0x70, 0x70, |flags| flags & (zl | hl), 0);
-test_op_no_arg!(bcd_test3, daa, CpuRegister::A, 0x79, 0x79, |flags| flags & (zl | hl), 0);
-test_op_no_arg!(bcd_test4, daa, CpuRegister::A, 0x3F, 0x46, |flags| flags & (zl | hl), 0);
-test_op_no_arg!(bcd_test4, daa, CpuRegister::A, 0, 0, |flags| flags & (zl | hl ), zl);
+test_op_really_no_arg!(bcd_test1, daa, CpuRegister::A, 0x15, 0x15, |flags| flags & (zl | hl), 0);
+test_op_really_no_arg!(bcd_test2, daa, CpuRegister::A, 0x70, 0x70, |flags| flags & (zl | hl), 0);
+test_op_really_no_arg!(bcd_test3, daa, CpuRegister::A, 0x79, 0x79, |flags| flags & (zl | hl), 0);
+test_op_really_no_arg!(bcd_test4, daa, CpuRegister::A, 0x3F, 0x45, |flags| flags & (zl | hl), 0);
+test_op_really_no_arg!(bcd_test5, daa, CpuRegister::A, 0, 0, |flags| flags & (zl | hl ), zl);
 
-*/
+test_op_really_no_arg!(cpl_test1, cpl, CpuRegister::A, 0x15, 0xEA, |flags| flags & (nl | hl), (nl | hl));
+test_op_really_no_arg!(cpl_test2, cpl, CpuRegister::A, 0x70, 0x8F, |flags| flags & (nl | hl), (nl | hl));
+test_op_really_no_arg!(cpl_test3, cpl, CpuRegister::A, 0xFF, 0x00, |flags| flags & (nl | hl), (nl | hl));
+test_op_really_no_arg!(cpl_test4, cpl, CpuRegister::A, 0x00, 0xFF, |flags| flags & (nl | hl), (nl | hl));

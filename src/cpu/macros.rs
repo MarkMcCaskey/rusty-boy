@@ -95,6 +95,9 @@ macro_rules! button {
         pub fn $press_button(&mut self) {
             let old_val = self.mem[0xFF00];
             self.mem[0xFF00] = old_val | $location;
+            if self.state == CpuState::Stop {
+                self.state = CpuState::Normal;
+            }
         }
         
         pub fn $unpress_button(&mut self) {
@@ -104,5 +107,4 @@ macro_rules! button {
     }
 }
 
-//macro_rules! special_register($name:ident, $location:expr)
 

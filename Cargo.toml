@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 
 [dependencies]
-nom = "^2.0"
+nom = "^2.1"
 clap = "2"
 sdl2 = "0.27"
 log = "0.3.6"

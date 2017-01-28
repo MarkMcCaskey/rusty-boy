@@ -1,14 +1,17 @@
 extern crate clap;
-#[macro_use]extern crate log;
+#[macro_use] extern crate log;
 extern crate log4rs;
 extern crate sdl2;
+#[macro_use] extern crate nom;
 
 mod cpu;
 mod disasm;
+mod debug;
 
 use cpu::*;
 use clap::{Arg, App};
 use sdl2::*;
+use std::io;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -19,6 +22,28 @@ use log4rs::config::{Appender, Config, Logger, Root};
 use std::time::Duration;
 use sdl2::keyboard::Keycode;
 use sdl2::rect::Point;
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
+
+struct SquareWave {
+    phase_inc: f32,
+    phase: f32,
+    volume: f32
+}
+
+impl AudioCallback for SquareWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        // Generate a square wave
+        for x in out.iter_mut() {
+            *x = match self.phase {
+                0.0...0.5 => self.volume,
+                _ => -self.volume
+            };
+            self.phase = (self.phase + self.phase_inc) % 1.0;
+        }
+    }
+}
 
 fn main() {
     /*Set up logging*/
@@ -31,8 +56,8 @@ fn main() {
         .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
         .unwrap();
 
-    let handle = log4rs::init_config(config).unwrap();
 
+    let handle = log4rs::init_config(config).unwrap();
 
     /*Command line arguments*/
     let matches = App::new("rusty-boy")
@@ -40,15 +65,28 @@ fn main() {
         .author("Mark McCaskey and friends")
         .about("Kappa")
         .arg(Arg::with_name("game")
-            .short("g")
-            .long("game")
-            .value_name("FILE")
-            .help("Specifies ROM to load")
-            .takes_value(true))
+             .short("g")
+             .long("game")
+             .value_name("FILE")
+             .help("Specifies ROM to load")
+             .required(true)
+             .index(1)
+             .takes_value(true))
+        .arg(Arg::with_name("debug")
+             .short("d")
+             .multiple(true)
+             .long("debug")
+             .help("Runs in step-by-step debug mode")
+             .takes_value(false))
         .get_matches();
 
     /*Attempt to read ROM first*/    
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
+    let debug_mode = matches.is_present("debug");
+
+    if debug_mode {
+        info!("Running in debug mode");
+    }
 
     /*Set up gameboy*/
     let mut gameboy = Cpu::new();
@@ -111,7 +149,29 @@ fn main() {
         .build()
         .unwrap();
 
+    /* set up audio*/
+    let audio_subsystem = sdl_context.audio().unwrap();
 
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),
+        samples: None
+    };
+
+    let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+        // Show obtained AudioSpec
+        println!("{:?}", spec);
+
+        // initialize the audio callback
+        SquareWave {
+            phase_inc: 440.0 / spec.freq as f32,
+            phase: 0.0,
+            volume: 0.01
+        }
+    }).unwrap();
+
+    let mut run_next_in_debug = true;
+    let mut debug_in_string = String::new();
     /*Set up time*/
     let mut timer = sdl_context.timer().unwrap();
     let mut prev_time = 0;
@@ -139,17 +199,24 @@ fn main() {
                 Event::ControllerButtonDown { button, .. } => {
                     debug!("Button {:?} down", button);
                     match button {
-                        controller::Button::A => gameboy.press_a(),
+                        controller::Button::A => {
+                            gameboy.press_a();
+                            device.resume();
+                        },
                         controller::Button::B => gameboy.press_b(),
                         controller::Button::Back => gameboy.press_select(),
                         controller::Button::Start => gameboy.press_start(),
                         _ => (),
                     }
                 }
+
                 Event::ControllerButtonUp { button, .. } => {
                     debug!("Button {:?} up", button);
                     match button {
-                        controller::Button::A => gameboy.unpress_a(),
+                        controller::Button::A => {
+                            gameboy.unpress_a();
+                            device.pause();
+                        },
                         controller::Button::B => gameboy.unpress_b(),
                         controller::Button::Back => gameboy.unpress_select(),
                         controller::Button::Start => gameboy.unpress_start(),
@@ -164,13 +231,26 @@ fn main() {
                     if keycode == Keycode::Escape {
                         info!("Program exiting!");
                         break 'main;
+                    } else if keycode == Keycode::Space {
+                        run_next_in_debug = true;
                     }
                 }
                 _ => (),
             }
         }
 
-        let current_op_time = gameboy.dispatch_opcode() as u64;
+ /*       if debug_mode {
+            io::stdin().read_line(debug_in_string).Ok();
+
+        }
+        */
+
+        let current_op_time
+            = if debug_mode && run_next_in_debug || (!debug_mode) {
+                run_next_in_debug = false;
+                gameboy.dispatch_opcode() as u64
+            } else { std::thread::sleep(Duration::from_millis(10)); 0 };
+
         cycle_count += current_op_time;
         clock_cycles += current_op_time;
         let timer_khz = gameboy.timer_frequency();
@@ -182,7 +262,7 @@ fn main() {
         let time_in_cpu_cycle_per_cycle = ((time_in_ms_per_cycle as f64)/ (1.0 / (4.19 * 1000.0 * 1000.0))) as u64;
 
         if clock_cycles >= time_in_cpu_cycle_per_cycle {
-            trace!("Incrementing the timer!");
+            //trace!("Incrementing the timer!");
             gameboy.timer_cycle();
             clock_cycles = 0;
         }
@@ -207,7 +287,7 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255,255,255,255);
         let color_lookup = [color1, color2, color3, color4];
 
-        gameboy.timer_cycle();
+        //gameboy.timer_cycle();
         
         renderer.set_scale(12.0,12.0);
         if ticks >= 70224 {
