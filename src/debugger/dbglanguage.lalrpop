@@ -1,0 +1,46 @@
+use std::str::FromStr;
+use super::language::DebuggerAction;
+
+grammar;
+
+pub Input: DebuggerAction = { Run, Reset, Step, SetUnsetValue,
+                              <Expression> => DebuggerAction::Echo {str: format!("{}", <>) },
+};
+
+SetUnsetValue: DebuggerAction = {
+    "watch" Space? <Expression> => DebuggerAction::WatchPoint {addr: <> as u16},
+    "unwatch" Space? <Expression> => DebuggerAction::UnwatchPoint {addr: <> as u16},
+    "set" Space+ "breakpoint" Space? <Expression> => DebuggerAction::SetBreakPoint{addr: <> as u16},
+    "unset" Space+ "breakpoint" Space? <Expression> => DebuggerAction::UnsetBreakPoint{addr: <> as u16},
+        
+};
+
+Run:   DebuggerAction = { "run"   => DebuggerAction::Run, };
+Reset: DebuggerAction = { "reset" => DebuggerAction::Reset, };
+Step:  DebuggerAction = { "step"  => DebuggerAction::Step, };
+    
+Expression: i32 = {
+    <l:Expression> "+" <r:Factor> => l + r,
+    <l:Expression> "-" <r:Factor> => l - r,
+    Factor,
+};
+
+Factor: i32 = {
+    <l:Factor> "*" <r:Term> => l * r,
+    <l:Factor> "/" <r:Term> => l / r,
+    <l:Factor> "%" <r:Term> => l % r,
+    Term,
+};
+Term: i32 = {
+    Number,
+    "(" <Expression> ")",
+};
+//pub Command = {} 
+pub Number = { Hex, Decimal };
+Hex: i32 = <r"0(x|X)[0-9a-fA-F]+"> => i32::from_str_radix(&<>[2..], 16).unwrap();
+Decimal: i32 = <r"-?[0-9]+"> => i32::from_str(<>).unwrap();
+
+Space: () = {
+    " " => (),
+    "\t" => (),
+};

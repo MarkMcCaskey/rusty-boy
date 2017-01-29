@@ -8,7 +8,7 @@ use disasm::*;
 use std::str::from_utf8;
 
 pub const zl: i8 = 0x80;
-pub const nl: i8 = 0x40;
+pub const nlv: i8 = 0x40;
 pub const hl: i8 = 0x20;
 pub const cl: i8 = 0x10;
 
@@ -18,12 +18,20 @@ pub struct Cpu {
     c:   i8,
     d:   i8,
     e:   i8,
-    f:   i8, //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
+    pub f:   i8, //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
     h:   i8,
     l:   i8,
     sp:  u16,
-    pc:  u16,
+    pub pc:  u16,
     pub mem: [i8; 0xFFFF + 1],
+    pub state: CpuState,
+}
+
+#[derive(Clone,Copy,PartialEq)]
+pub enum CpuState {
+    Normal,
+    Halt,
+    Stop,
 }
 
 #[derive(Clone,Copy,PartialEq)]
@@ -43,7 +51,7 @@ enum Cc {
 
 #[derive(Debug, PartialEq)]
 enum CartridgeType  {
-    RomOnly = 0,
+    RomOnlvy = 0,
     RomMBC1 = 1,
     RomMBC1Ram = 2,
     RomMBC1RamBatt = 3,
@@ -118,7 +126,8 @@ impl Cpu {
             l:   0,
             sp:  0xFFFE,
             pc:  0,
-            mem: [0; 0xFFFF + 1]
+            mem: [0; 0xFFFF + 1],
+            state: CpuState::Normal
         };
 
         //boot sequence (maybe do this by running it as a proper rom?)
@@ -179,6 +188,130 @@ impl Cpu {
         }
     }
 
+
+    /* sound */
+    pub fn channel1_sweep_time(&self) -> u8 {
+        ((self.mem[0xFF10] >> 4) & 0x7) as u8
+        }
+        
+        pub fn channel1_sweep_increase(&self) -> bool {
+            ((self.mem[0xFF10] >> 3) & 1) == 1
+        }
+       
+        pub fn channel1_sweep_shift(&self) -> u8 {
+            (self.mem[0xFF10] & 0x7) as u8
+        }
+        
+        pub fn channel1_wave_pattern_duty(&self) -> u8 {
+            ((self.mem[0xFF11] >> 6) & 0x3) as u8
+        }
+        
+        pub fn channel1_sound_length(&self) -> u8 {
+            (self.mem[0xFF11] & 0x3F) as u8
+        }
+        
+        pub fn channel1_envelope_initial_volume(&self) -> u8 {
+            ((self.mem[0xFF12] >> 4) & 0xF) as u8
+        }
+        
+        pub fn channel1_envelope_increasing(&self) -> bool {
+            ((self.mem[0xFF12] >> 3) & 0x1) == 1
+        }
+
+        pub fn channel1_envelope_sweep(&self) -> u8 {
+            (self.mem[0xFF12] & 0x7) as u8
+        }
+
+        pub fn channel1_frequency(&self) -> u16 {
+            let lower = self.mem[0xFF13] as u16;
+            let higher = (self.mem[0xFF14] & 0x7) as u16;
+            
+            (higher << 8) | lower
+        }
+
+        pub fn channel1_counter_consecutive_selection(&self) -> bool {
+            //TODO:
+            false
+        }
+
+        pub fn channel1_restart_sound(&self) -> bool {
+            ((self.mem[0xFF14] >> 7) & 1) == 1
+        }
+
+    
+        pub fn channel2_wave_pattern_duty(&self) -> u8 {
+            ((self.mem[0xFF16] >> 6) & 0x3) as u8
+        }
+        
+        pub fn channel2_sound_length(&self) -> u8 {
+            (self.mem[0xFF16] & 0x3F) as u8
+        }
+        
+        pub fn channel2_envelope_initial_volume(&self) -> u8 {
+            ((self.mem[0xFF17] >> 4) & 0xF) as u8
+        }
+        
+        pub fn channel2_envelope_increasing(&self) -> bool {
+            ((self.mem[0xFF17] >> 3) & 0x1) == 1
+        }
+        
+        pub fn channel2_envelope_sweep(&self) -> u8 {
+            (self.mem[0xFF17] & 0x7) as u8
+        }
+
+        pub fn channel2_frequency(&self) -> u16 {
+            let lower = self.mem[0xFF18] as u16;
+            let higher = (self.mem[0xFF19] & 0x7) as u16;
+            
+            (higher << 8) | lower
+        }
+        
+        pub fn channel2_counter_consecutive_selection(&self) -> bool {
+            //TODO:
+            false
+        }
+
+        pub fn channel2_restart_sound(&self) -> bool {
+            ((self.mem[0xFF19] >> 7) & 1) == 1
+        }
+
+        pub fn channel3_on(&self) -> bool {
+            ((self.mem[0xFF1A] >> 7) & 1) == 1
+        }
+
+        pub fn channel3_sound_length(&self) -> u8 {
+            self.mem[0xFF1B] as u8
+        }
+
+        pub fn channel3_output_level(&self) {
+            unimplemented!();
+        }
+
+        pub fn channel3_frequency(&self) -> u16 {
+            let lower = self.mem[0xFF1C] as u16;
+            let higher = (self.mem[0xFF1D] & 0x7) as u16;
+            
+            (higher << 8) | lower
+        }
+
+        pub fn channel3_counter_consecutive_selection(&self) -> bool {
+            //TODO:
+            false
+        }
+
+    pub fn channel3_restart_sound(&self) -> bool {
+        ((self.mem[0xFF1D] >> 7) & 1) == 1
+    }
+    
+    pub fn channel3_wave_pattern_ram(&self) -> [u8; 16] {
+        let mut ret = [0u8; 16];
+        for i in 0..16 {
+            ret[i] = self.mem[0xFF30 + i] as u8;
+        }
+        
+        ret
+    }
+    
     pub fn timer_cycle(&mut self) {
         if self.is_timer_on() {
             self.inc_timer();
@@ -358,6 +491,8 @@ impl Cpu {
             let val = self.mem[(addr + i) as usize];
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
         }
+        //signal dma is over
+        self.mem[0xFF55] = 1;
     }
 
     pub fn bgp(&self) -> (u8, u8, u8, u8) {
@@ -479,7 +614,7 @@ impl Cpu {
         }
     }
 
-    fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
+    pub fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
         match reg {
             CpuRegister16::BC     => self.bc(),
             CpuRegister16::DE     => self.de(),
@@ -521,7 +656,7 @@ impl Cpu {
         }
     }
 
-    fn access_register(&self, reg: CpuRegister) -> Option<i8> {
+    pub fn access_register(&self, reg: CpuRegister) -> Option<i8> {
         match reg {
             CpuRegister::A  => Some(self.a),
             CpuRegister::B  => Some(self.b),
@@ -960,7 +1095,7 @@ impl Cpu {
         let highest_digit = if highest_bits > 0x90 {(highest_bits + 0x60) & 0xF0} else {highest_bits & 0xF0};
 
         self.a = (highest_digit | lowest_digit) as i8;
-        let old_nflag = (self.f & nl) == nl;
+        let old_nflag = (self.f & nlv) == nlv;
         self.set_flags((highest_digit | lowest_digit) == 0,
                        old_nflag,
                        false,
@@ -970,7 +1105,7 @@ impl Cpu {
     fn cpl(&mut self) {
         let new_val = !self.a;
         let old_flags = self.f & (zl | cl);
-        self.f = old_flags | nl | hl;
+        self.f = old_flags | nlv | hl;
         self.a = new_val;
     }
 
@@ -988,14 +1123,15 @@ impl Cpu {
         ()
     }
 
-    //TODO:
     fn halt(&mut self) {
         debug!("HALT");
+        self.state = CpuState::Halt;
         
     }
 
-    //TODO:
     fn stop(&mut self) {
+        debug!("STOP");
+        self.state = CpuState::Stop;
 
     }
 
@@ -1174,9 +1310,9 @@ impl Cpu {
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
         if 1 ==
             match cc {
-                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::NZ => (!(self.f >> 7)) & 1,
                 Cc::Z  => (self.f >> 7) & 1,
-                Cc::NC => !((self.f >> 4) & 1),
+                Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 self.pc = nn;
@@ -1210,11 +1346,11 @@ impl Cpu {
             } else { false }
     }
 
-    //TODO: Verify if SP should be incremented first
+    //TODO: Verify if SP should be decremented first
     fn callnn(&mut self, nn: u16) {
         let cur_pc = self.pc;
         self.push_onto_stack(cur_pc + 3);
-        self.pc = nn;
+        self.pc = nn; //nn or nn -3?
     }
 
     fn push_onto_stack(&mut self, nn: u16) {
@@ -1222,7 +1358,7 @@ impl Cpu {
         let second_half = (nn & 0xFF) as i8;
         let old_sp = self.sp;
 
-        self.set_mem((old_sp-1) as usize, first_half);
+        self.set_mem((old_sp-3) as usize, first_half);
         self.set_mem((old_sp-2) as usize, second_half);
 
         self.sp -= 2;
@@ -1265,9 +1401,9 @@ impl Cpu {
     fn retcc(&mut self, cc: Cc) -> bool {
         if 1 ==
             match cc {
-                Cc::NZ => !((self.f >> 7) & 1),
+                Cc::NZ => (!(self.f >> 7)) & 1,
                 Cc::Z  => (self.f >> 7) & 1,
-                Cc::NC => !((self.f >> 4) & 1),
+                Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 self.ret();
@@ -1301,7 +1437,7 @@ impl Cpu {
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
     
-    ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
+    ASSUMPTION: Gameboy onlvy uses the CB prefix codes of the Z80
     
     Returned value is number of cycles that the instruction took
      */
@@ -1313,8 +1449,23 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        trace!("0X{:X}: Running instruction: {:?}", self.pc,
-               pp_opcode(first_byte, second_byte, third_byte, self.pc));
+        if self.state == CpuState::Halt {
+            //TODO: Needs extra handling with interupts
+            return 4; //unsure of this
+        } else if self.state == CpuState::Stop {
+            return 4; //unsure of this
+        } //otherwise it's in normal state:
+
+        let (inst_name, inst_len) =
+            pp_opcode(first_byte, second_byte, third_byte, self.pc);
+        match inst_len {
+            1 => trace!("0X{:X}: Running instruction: {}", self.pc, inst_name),
+            2 => trace!("0X{:X}: Running instruction: {} 0x{:X}",
+                        self.pc, inst_name, second_byte),
+            3 => trace!("0X{:X}: Running instruction: {} 0x{:X} 0x{:X}"
+                        , self.pc, inst_name, second_byte, third_byte),
+            n => error!("Instruction with impossible length: {:?}", n),
+        }
         trace!("CPU Registers are: a:{:X} b:{:X} c:{:X} d:{:X} e:{:X} f:{:X} h:{:X} l:{:X} sp:{:X}",
                self.a, self.b, self.c, self.d, self.e, self.f, self.h, self.l, self.sp);
 
