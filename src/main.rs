@@ -3,15 +3,17 @@ extern crate clap;
 extern crate log4rs;
 extern crate sdl2;
 #[macro_use] extern crate nom;
+extern crate ncurses;
 
 mod cpu;
 mod disasm;
-mod debug;
+mod debugger;
 
 use cpu::*;
+use debugger::*;
+
 use clap::{Arg, App};
 use sdl2::*;
-use std::io;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -86,6 +88,8 @@ fn main() {
 
     if debug_mode {
         info!("Running in debug mode");
+        run_debugger(rom_file);
+        return ();
     }
 
     /*Set up gameboy*/
@@ -103,7 +107,7 @@ fn main() {
 
 
     let mut controller = None;
-    let mut prev_time = 0;
+    //let mut prev_time = 0;
 
     for id in 0..available {
         if controller_subsystem.is_game_controller(id) {
@@ -171,9 +175,9 @@ fn main() {
     }).unwrap();
 
     let mut run_next_in_debug = true;
-    let mut debug_in_string = String::new();
+   // let mut debug_in_string = String::new();
     /*Set up time*/
-    let mut timer = sdl_context.timer().unwrap();
+    //let timer = sdl_context.timer().unwrap();
     let mut prev_time = 0;
 
     let mut cycle_count = 0;

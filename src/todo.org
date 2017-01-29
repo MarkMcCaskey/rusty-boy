@@ -32,7 +32,15 @@
 
 * TODO Tools
 ** TODO Assembler
-** TODO Disassembler
-*** TODO Internal representation
-**** TODO Recognize control flow?
-*** TODO Generate text
+** DONE Disassembler
+*** DONE Generate text
+** TODO Debugger
+*** DONE Graphics
+**** DONE Watch instructions execute, monitor registers
+**** DONE Colorize output for easier reading
+*** TODO Persistence
+**** TODO Time travel (unexecute instructions)
+*** DONE Arithmetic
+**** DONE Numbers
+*** TODO Bindable names
+*** TODO Breakpoints

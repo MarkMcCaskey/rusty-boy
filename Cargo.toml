@@ -3,9 +3,19 @@ name = "gameboy"
 version = "0.1.0"
 authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 
+build = "build.rs"
+
+[dependencies.lalrpop-util]
+version = "0.12.4"
+
+[build-dependencies.lalrpop]
+version = "0.12.4"
+
 [dependencies]
 nom = "^2.1"
 clap = "2"
 sdl2 = "0.27"
 log = "0.3.6"
 log4rs = "0.5.2"
+ncurses = "5.85.0"
+lalrpop = "0.12.4"

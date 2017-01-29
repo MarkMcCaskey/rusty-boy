@@ -8,7 +8,7 @@ use disasm::*;
 use std::str::from_utf8;
 
 pub const zl: i8 = 0x80;
-pub const nl: i8 = 0x40;
+pub const nlv: i8 = 0x40;
 pub const hl: i8 = 0x20;
 pub const cl: i8 = 0x10;
 
@@ -18,13 +18,13 @@ pub struct Cpu {
     c:   i8,
     d:   i8,
     e:   i8,
-    f:   i8, //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
+    pub f:   i8, //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
     h:   i8,
     l:   i8,
     sp:  u16,
-    pc:  u16,
+    pub pc:  u16,
     pub mem: [i8; 0xFFFF + 1],
-    state: CpuState,
+    pub state: CpuState,
 }
 
 #[derive(Clone,Copy,PartialEq)]
@@ -51,7 +51,7 @@ enum Cc {
 
 #[derive(Debug, PartialEq)]
 enum CartridgeType  {
-    RomOnly = 0,
+    RomOnlvy = 0,
     RomMBC1 = 1,
     RomMBC1Ram = 2,
     RomMBC1RamBatt = 3,
@@ -614,7 +614,7 @@ impl Cpu {
         }
     }
 
-    fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
+    pub fn access_register16(&mut self, reg: CpuRegister16) -> u16 {
         match reg {
             CpuRegister16::BC     => self.bc(),
             CpuRegister16::DE     => self.de(),
@@ -656,7 +656,7 @@ impl Cpu {
         }
     }
 
-    fn access_register(&self, reg: CpuRegister) -> Option<i8> {
+    pub fn access_register(&self, reg: CpuRegister) -> Option<i8> {
         match reg {
             CpuRegister::A  => Some(self.a),
             CpuRegister::B  => Some(self.b),
@@ -1095,7 +1095,7 @@ impl Cpu {
         let highest_digit = if highest_bits > 0x90 {(highest_bits + 0x60) & 0xF0} else {highest_bits & 0xF0};
 
         self.a = (highest_digit | lowest_digit) as i8;
-        let old_nflag = (self.f & nl) == nl;
+        let old_nflag = (self.f & nlv) == nlv;
         self.set_flags((highest_digit | lowest_digit) == 0,
                        old_nflag,
                        false,
@@ -1105,7 +1105,7 @@ impl Cpu {
     fn cpl(&mut self) {
         let new_val = !self.a;
         let old_flags = self.f & (zl | cl);
-        self.f = old_flags | nl | hl;
+        self.f = old_flags | nlv | hl;
         self.a = new_val;
     }
 
@@ -1437,7 +1437,7 @@ impl Cpu {
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
     
-    ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
+    ASSUMPTION: Gameboy onlvy uses the CB prefix codes of the Z80
     
     Returned value is number of cycles that the instruction took
      */

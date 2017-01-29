@@ -1,5 +1,7 @@
 // Code courtesy of spawnedartifact
 
+extern crate clap;
+
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
@@ -280,6 +282,54 @@ fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
     }
 }
 
+pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16)> {
+    let mut pc = 0;
+    let mut ret: Vec<(String, u16)> = vec![];
+
+    while pc < rom_size {
+        let (mnemonic, size) = pp_opcode(rom[pc], rom[pc + 1], rom[pc + 2], pc as u16);
+        ret.push((format!("0x{:04X}\t{}", pc, mnemonic), pc as u16));
+        pc += size as usize;
+    }
+
+    ret
+}
+
+pub fn binsearch_inst(vec: &Vec<(String, u16)>,
+                      desired_pc: u16,
+                      begin: usize,
+                      end: usize)
+                      -> Option<usize> {
+    if end < begin {
+        return None;
+    } else if end - begin <= 10 {
+        for x in begin..(end + 1) {
+            let (_, b) = vec[x];
+            if b == desired_pc {
+                return Some(x);
+            }
+        }
+        return None;
+    }
+
+    let search = if (end + begin) % 2 == 0 {
+        (end + begin) / 2
+    } else {
+        ((end + begin) / 2) + 1
+    };
+
+    let (_, b) = vec[search];
+
+    return if b == desired_pc {
+        Some(search)
+    } else if b > desired_pc {
+        binsearch_inst(vec, desired_pc, begin, (search + 1) as usize)
+    } else {
+        // if b > desired_pc {
+        binsearch_inst(vec, desired_pc, (search - 1) as usize, end)
+    };
+}
+
 fn main() {
     // // Print "[prefix] opcode size mnemonic" table
     // for i in 0..255 {
@@ -292,7 +342,23 @@ fn main() {
     // }
     use std::fs::File;
     use std::io::Read;
-    let file_path = "DMG_ROM.bin";
+    use std::env;
+    use clap::{Arg, App};
+
+    let matches = App::new("disasm")
+        .version("0.1")
+        .author("spawnedartifact")
+        .about("GB z80 disassembler")
+        .arg(Arg::with_name("game")
+            .short("g")
+            .long("game")
+            .value_name("FILE")
+            .help("Specifies ROM to load")
+            .takes_value(true))
+        .get_matches();
+
+
+    let file_path = matches.value_of("game").expect("Could not open rom");
     let mut rom = File::open(file_path).expect("Could not open rom file");
     let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 

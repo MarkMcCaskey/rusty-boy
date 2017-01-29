@@ -122,12 +122,12 @@ test_op!(adc_test, adc, (10, CpuRegister::E), a, 10 + 1, |flags| flags, 0, 1);
 
         
 
-test_op!(sub_const, sub, (5, CpuRegister::Num(5)), a, 5 - 5, |flags| flags, zl | nl | hl | cl, 0);
-test_op!(sub_reg, sub, (10, CpuRegister::B), a, 20, |flags| flags, nl | hl | cl, -10);
-test_op!(sub_reg2, sub, (10, CpuRegister::C), a, 0, |flags| flags, zl | nl | hl | cl, 10);
-test_op!(sub_reg_borrow, sub, (0, CpuRegister::D), a, -10, |flags| flags, nl, 10);
-//TODO: write half carry only test:
-//    test_op!(sub_reg_borrow_half, sub, (130, CpuRegister::D), a, 40, |flags| flags, nl | hl, 32);
+test_op!(sub_const, sub, (5, CpuRegister::Num(5)), a, 5 - 5, |flags| flags, zl | nlv | hl | cl, 0);
+test_op!(sub_reg, sub, (10, CpuRegister::B), a, 20, |flags| flags, nlv | hl | cl, -10);
+test_op!(sub_reg2, sub, (10, CpuRegister::C), a, 0, |flags| flags, zl | nlv | hl | cl, 10);
+test_op!(sub_reg_borrow, sub, (0, CpuRegister::D), a, -10, |flags| flags, nlv, 10);
+//TODO: write half carry onlvy test:
+//    test_op!(sub_reg_borrow_half, sub, (130, CpuRegister::D), a, 40, |flags| flags, nlv | hl, 32);
 
 test_op!(and_test, and, (0xF, CpuRegister::B), a, 0xF, |flags| flags, hl, 0xF);
 test_op!(and_test1, and, (0xF, CpuRegister::C), a, 0x1, |flags| flags, hl, 0x1);
@@ -144,12 +144,12 @@ test_op!(xor_test2, xor, (0xF, CpuRegister::B), a, 0xFF, |flags| flags, 0, 0xF0)
 test_op!(xor_test3, xor, (0, CpuRegister::D), a, 0, |flags| flags, zl, 0);
 
     
-test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags,  zl | nl | hl , 0xF);
-test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nl | hl , 0);
+test_op!(cp_test, cp, (0xF, CpuRegister::C), a, 0xF, |flags| flags,  zl | nlv | hl , 0xF);
+test_op!(cp_test1, cp, (0xF, CpuRegister::D), a, 0xF, |flags| flags, nlv | hl , 0);
 // TODO: verify hl and cl flags here make sense:
-test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nl | hl , 0xF0);
-test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nl | hl, 0);
-test_op!(cp_test4, cp, (0xF0, CpuRegister::B), a, 0xF0, |flags| flags, nl | cl , 0xF);
+test_op!(cp_test2, cp, (0xF, CpuRegister::B), a, 0xF, |flags| flags, nlv | hl , 0xF0);
+test_op!(cp_test3, cp, (0, CpuRegister::D), a, 0, |flags| flags, zl | nlv | hl, 0);
+test_op!(cp_test4, cp, (0xF0, CpuRegister::B), a, 0xF0, |flags| flags, nlv | cl , 0xF);
 
 test_op16!(addhl_test, add_hl, CpuRegister16::BC, CpuRegister16::HL, 0xFFFF, (0xFFFF + 0x14D) as u16, |flags| flags & 0x70, hl | cl);
 test_op16!(addhl_test1, add_hl, CpuRegister16::DE, CpuRegister16::HL, 0,  (0 + 0x14D), |flags| flags & 0x70, 0);
@@ -188,9 +188,9 @@ test_op_no_arg!(inc_test,  inc, CpuRegister::A, 0xE, 0xF, |flags| flags & 0xE0, 
 test_op_no_arg!(inc_test1,  inc, CpuRegister::B, 0x0, 0x1, |flags| flags & 0xE0, 0);
 test_op_no_arg!(inc_test2,  inc, CpuRegister::C, -1, 0, |flags| flags & 0xE0, zl | hl);
     
-test_op_no_arg!(dec_test,  dec, CpuRegister::A, 0x10, 0xF, |flags| flags & 0xE0, nl);
-test_op_no_arg!(dec_test1,  dec, CpuRegister::B, 0, -1, |flags| flags & 0xE0, nl );
-test_op_no_arg!(dec_test2,  dec, CpuRegister::C, 1, 0, |flags| flags & 0xE0, zl | nl);
+test_op_no_arg!(dec_test,  dec, CpuRegister::A, 0x10, 0xF, |flags| flags & 0xE0, nlv);
+test_op_no_arg!(dec_test1,  dec, CpuRegister::B, 0, -1, |flags| flags & 0xE0, nlv );
+test_op_no_arg!(dec_test2,  dec, CpuRegister::C, 1, 0, |flags| flags & 0xE0, zl | nlv);
 
 test_op_no_arg!(swap_test,   swap, CpuRegister::A, 0xFA, 0xAF, |flags| flags, 0);
 test_op_no_arg!(swap_test1,  swap, CpuRegister::B, 0x12, 0x21, |flags| flags, 0);
@@ -225,7 +225,7 @@ test_op_really_no_arg!(bcd_test3, daa, CpuRegister::A, 0x79, 0x79, |flags| flags
 test_op_really_no_arg!(bcd_test4, daa, CpuRegister::A, 0x3F, 0x45, |flags| flags & (zl | hl), 0);
 test_op_really_no_arg!(bcd_test5, daa, CpuRegister::A, 0, 0, |flags| flags & (zl | hl ), zl);
 
-test_op_really_no_arg!(cpl_test1, cpl, CpuRegister::A, 0x15, 0xEA, |flags| flags & (nl | hl), (nl | hl));
-test_op_really_no_arg!(cpl_test2, cpl, CpuRegister::A, 0x70, 0x8F, |flags| flags & (nl | hl), (nl | hl));
-test_op_really_no_arg!(cpl_test3, cpl, CpuRegister::A, 0xFF, 0x00, |flags| flags & (nl | hl), (nl | hl));
-test_op_really_no_arg!(cpl_test4, cpl, CpuRegister::A, 0x00, 0xFF, |flags| flags & (nl | hl), (nl | hl));
+test_op_really_no_arg!(cpl_test1, cpl, CpuRegister::A, 0x15, 0xEA, |flags| flags & (nlv | hl), (nlv | hl));
+test_op_really_no_arg!(cpl_test2, cpl, CpuRegister::A, 0x70, 0x8F, |flags| flags & (nlv | hl), (nlv | hl));
+test_op_really_no_arg!(cpl_test3, cpl, CpuRegister::A, 0xFF, 0x00, |flags| flags & (nlv | hl), (nlv | hl));
+test_op_really_no_arg!(cpl_test4, cpl, CpuRegister::A, 0x00, 0xFF, |flags| flags & (nlv | hl), (nlv | hl));
