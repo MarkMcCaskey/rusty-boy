@@ -1,27 +1,41 @@
 use std::str::FromStr;
 use super::language::DebuggerAction;
+use super::language::ShowableThing;
 
 grammar;
 
-pub Input: DebuggerAction = { Run, Reset, Step, SetUnsetValue,
-                              <Expression> => DebuggerAction::Echo {str: format!("{}", <>) },
+pub Input: DebuggerAction = { Run, Reset, Step, SetUnsetValue, Showable,
+                              <Expression> => DebuggerAction::Echo {str: format!("0x{:X}", <>) },
 };
 
 SetUnsetValue: DebuggerAction = {
-    "watch" Space? <Expression> => DebuggerAction::WatchPoint {addr: <> as u16},
-    "unwatch" Space? <Expression> => DebuggerAction::UnwatchPoint {addr: <> as u16},
-    "set" Space+ "breakpoint" Space? <Expression> => DebuggerAction::SetBreakPoint{addr: <> as u16},
-    "unset" Space+ "breakpoint" Space? <Expression> => DebuggerAction::UnsetBreakPoint{addr: <> as u16},
+    "watch" <Expression> => DebuggerAction::WatchPoint {addr: <> as u16},
+    "unwatch" <Expression> => DebuggerAction::UnwatchPoint {addr: <> as u16},
+    <Break> => DebuggerAction::SetBreakPoint{addr: <> as u16},
+    "unset" "breakpoint" <Expression> => DebuggerAction::UnsetBreakPoint{addr: <> as u16},
         
 };
 
+Break: i32 = { "break" <Expression>, "set" "breakpoint" <Expression>, "b" <Expression>};
+
 Run:   DebuggerAction = { "run"   => DebuggerAction::Run, };
 Reset: DebuggerAction = { "reset" => DebuggerAction::Reset, };
-Step:  DebuggerAction = { "step"  => DebuggerAction::Step, };
+Step:  DebuggerAction = { "step"  => DebuggerAction::Step,
+                           "s"    => DebuggerAction::Step, };
+
+Showable: DebuggerAction = {
+    "show" <ShowableThing> => DebuggerAction::Show{show: <>}
+};
+
+ShowableThing: ShowableThing = {
+    <e:Expression> => ShowableThing::Address{addr: e as u16},
+    "breakpoints"  =>  ShowableThing::Breakpoints,
+};
     
 Expression: i32 = {
     <l:Expression> "+" <r:Factor> => l + r,
     <l:Expression> "-" <r:Factor> => l - r,
+    <l:Expression> "|" <r:Factor> => l | r,
     Factor,
 };
 
@@ -29,6 +43,7 @@ Factor: i32 = {
     <l:Factor> "*" <r:Term> => l * r,
     <l:Factor> "/" <r:Term> => l / r,
     <l:Factor> "%" <r:Term> => l % r,
+    <l:Factor> "&" <r:Term> => l & r,
     Term,
 };
 Term: i32 = {
@@ -39,8 +54,3 @@ Term: i32 = {
 pub Number = { Hex, Decimal };
 Hex: i32 = <r"0(x|X)[0-9a-fA-F]+"> => i32::from_str_radix(&<>[2..], 16).unwrap();
 Decimal: i32 = <r"-?[0-9]+"> => i32::from_str(<>).unwrap();
-
-Space: () = {
-    " " => (),
-    "\t" => (),
-};

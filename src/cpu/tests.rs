@@ -190,7 +190,7 @@ test_op_no_arg!(inc_test2,  inc, CpuRegister::C, -1, 0, |flags| flags & 0xE0, zl
     
 test_op_no_arg!(dec_test,  dec, CpuRegister::A, 0x10, 0xF, |flags| flags & 0xE0, nlv);
 test_op_no_arg!(dec_test1,  dec, CpuRegister::B, 0, -1, |flags| flags & 0xE0, nlv );
-test_op_no_arg!(dec_test2,  dec, CpuRegister::C, 1, 0, |flags| flags & 0xE0, zl | nlv);
+test_op_no_arg!(dec_test2,  dec, CpuRegister::C, 1, 0, |flags| flags & 0xE0, zl | hl | nlv);
 
 test_op_no_arg!(swap_test,   swap, CpuRegister::A, 0xFA, 0xAF, |flags| flags, 0);
 test_op_no_arg!(swap_test1,  swap, CpuRegister::B, 0x12, 0x21, |flags| flags, 0);

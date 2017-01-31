@@ -41,10 +41,23 @@ use std::time::Duration;
 //#}
 //
 
+// NOTE: non-blocking read as timeout(delay) or wtimeout(window,delay)
 pub fn run_debugger(file_name: &str) -> ! {
     let mut dbg = Debugger::new(file_name);
+    dbg.refresh_screen();
     loop {
+        dbg.handle_input();
         dbg.refresh_screen();
-        std::thread::sleep(Duration::from_millis(16));
+
+        // run until breakpoint or end
+        if dbg.should_run() {
+            // Keep executing until breakpoint or other "PAUSE" condition
+            while dbg.should_run() {
+                dbg.run();
+                dbg.refresh_screen();
+            }
+        } else {
+            std::thread::sleep(Duration::from_millis(16));
+        }
     }
 }
