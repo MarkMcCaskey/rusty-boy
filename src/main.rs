@@ -55,11 +55,10 @@ fn main() {
 
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
+        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
         .unwrap();
 
 
-    let handle = log4rs::init_config(config).unwrap();
 
     /*Command line arguments*/
     let matches = App::new("rusty-boy")
@@ -90,6 +89,8 @@ fn main() {
         info!("Running in debug mode");
         run_debugger(rom_file);
         return ();
+    } else {
+        let handle = log4rs::init_config(config).unwrap();
     }
 
     /*Set up gameboy*/
@@ -294,6 +295,11 @@ fn main() {
         //gameboy.timer_cycle();
         
         renderer.set_scale(12.0,12.0);
+        //1ms before drawing in terms of CPU time we must throw a vblank interrupt 
+        //TODO: figure out what 70224 is and make it a constant (and/or variable based on whether it's GB, SGB, etc.)
+        if ticks + time_in_ms_per_cycle >= 70224 {
+            gameboy.set_vblank_interrupt_bit();
+        }
         if ticks >= 70224 {
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));

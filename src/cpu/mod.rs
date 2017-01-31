@@ -11,6 +11,11 @@ pub const zl: i8 = 0x80;
 pub const nlv: i8 = 0x40;
 pub const hl: i8 = 0x20;
 pub const cl: i8 = 0x10;
+pub const vblank_interrupt_address:          u16 = 0x40;
+pub const lcdc_interrupt_address:            u16 = 0x48;
+pub const timer_overflow_interrupt_address:  u16 = 0x50;
+pub const serial_transfer_interrupt_address: u16 = 0x58;
+pub const p1013_interrupt_address:           u16 = 0x60;
 
 pub struct Cpu {
     a:   i8,
@@ -129,44 +134,59 @@ impl Cpu {
             mem: [0; 0xFFFF + 1],
             state: CpuState::Normal
         };
-
-        //boot sequence (maybe do this by running it as a proper rom?)
-        new_cpu.set_bc(0x0013);
-        new_cpu.set_de(0x00D8);
-        new_cpu.set_hl(0x014D);
-        new_cpu.mem[0xFF05] = 0x00;
-        new_cpu.mem[0xFF06] = 0x00;
-        new_cpu.mem[0xFF07] = 0x00;
-        new_cpu.mem[0xFF10] = 0x80;
-        new_cpu.mem[0xFF11] = 0xBF;
-        new_cpu.mem[0xFF12] = 0xF3;
-        new_cpu.mem[0xFF14] = 0xBF;
-        new_cpu.mem[0xFF16] = 0x3F;
-        new_cpu.mem[0xFF17] = 0x00;
-        new_cpu.mem[0xFF19] = 0xBF;
-        new_cpu.mem[0xFF1A] = 0x7F;
-        new_cpu.mem[0xFF1B] = 0xFF;
-        new_cpu.mem[0xFF1C] = 0x9F;
-        new_cpu.mem[0xFF1E] = 0xBF;
-        new_cpu.mem[0xFF20] = 0xFF;
-        new_cpu.mem[0xFF21] = 0x00;
-        new_cpu.mem[0xFF22] = 0x00;
-        new_cpu.mem[0xFF23] = 0xBF;
-        new_cpu.mem[0xFF24] = 0x77;
-        new_cpu.mem[0xFF25] = 0xF3;
-        new_cpu.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
-        new_cpu.mem[0xFF40] = 0x91;
-        new_cpu.mem[0xFF42] = 0x00;
-        new_cpu.mem[0xFF43] = 0x00;
-        new_cpu.mem[0xFF45] = 0x00;
-        new_cpu.mem[0xFF47] = 0xFC;
-        new_cpu.mem[0xFF48] = 0xFF;
-        new_cpu.mem[0xFF49] = 0xFF;
-        new_cpu.mem[0xFF4A] = 0x00;
-        new_cpu.mem[0xFF4B] = 0x00;
-        new_cpu.mem[0xFFFF] = 0x00;
+        new_cpu.reset();
 
         new_cpu
+    }
+
+    pub fn reset(&mut self) {
+        self.state = CpuState::Normal;
+        self.a  = 0x01; //for GB/SGB (GBP & GBC need different values)
+        self.b  = 0;
+        self.c  = 0;
+        self.d  = 0;
+        self.e  = 0;
+        self.f  = 0xB0;
+        self.h  = 0;
+        self.l  = 0;
+        self.sp = 0xFFFE;
+        self.pc = 0;
+
+        //boot sequence (maybe do this by running it as a proper rom?)
+        self.set_bc(0x0013);
+        self.set_de(0x00D8);
+        self.set_hl(0x014D);
+        self.mem[0xFF05] = 0x00;
+        self.mem[0xFF06] = 0x00;
+        self.mem[0xFF07] = 0x00;
+        self.mem[0xFF10] = 0x80;
+        self.mem[0xFF11] = 0xBF;
+        self.mem[0xFF12] = 0xF3;
+        self.mem[0xFF14] = 0xBF;
+        self.mem[0xFF16] = 0x3F;
+        self.mem[0xFF17] = 0x00;
+        self.mem[0xFF19] = 0xBF;
+        self.mem[0xFF1A] = 0x7F;
+        self.mem[0xFF1B] = 0xFF;
+        self.mem[0xFF1C] = 0x9F;
+        self.mem[0xFF1E] = 0xBF;
+        self.mem[0xFF20] = 0xFF;
+        self.mem[0xFF21] = 0x00;
+        self.mem[0xFF22] = 0x00;
+        self.mem[0xFF23] = 0xBF;
+        self.mem[0xFF24] = 0x77;
+        self.mem[0xFF25] = 0xF3;
+        self.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
+        self.mem[0xFF40] = 0x91;
+        self.mem[0xFF42] = 0x00;
+        self.mem[0xFF43] = 0x00;
+        self.mem[0xFF45] = 0x00;
+        self.mem[0xFF47] = 0xFC;
+        self.mem[0xFF48] = 0xFF;
+        self.mem[0xFF49] = 0xFF;
+        self.mem[0xFF4A] = 0x00;
+        self.mem[0xFF4B] = 0x00;
+        self.mem[0xFFFF] = 0x00;
     }
 
     //FF04 Div
@@ -392,6 +412,28 @@ impl Cpu {
     get_interrupt_enabled!(get_input_interrupt_enabled, 0x10);
     get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
 
+    set_stat!(set_coincidence_interrupt, 0x40);
+    unset_stat!(unset_coincidence_interrupt, 0x40);
+    get_stat!(get_coincidence_interrupt, 0x40);
+
+    set_stat!(set_oam_interrupt, 0x20);
+    unset_stat!(unset_oam_interrupt, 0x20);
+    get_stat!(get_oam_interrupt, 0x20);
+
+    set_stat!(set_vblank_interrupt_stat, 0x10);
+    unset_stat!(unset_vblank_interrupt_stat, 0x10);
+    get_stat!(get_vblank_interrupt_stat, 0x10);
+
+    set_stat!(set_hblank_interrupt, 0x08);
+    unset_stat!(unset_hblank_interrupt, 0x08);
+    get_stat!(get_hblank_interrupt, 0x08);
+
+    set_stat!(set_coincidence_flag, 0x04);
+    unset_stat!(unset_coincidence_flag, 0x04);
+    get_stat!(get_coincidence_flag, 0x04);
+
+
+    
     pub fn lcdc_on(&self) -> bool {
         (self.mem[0xFF40] >> 7) & 1 == 1
     }
@@ -422,16 +464,16 @@ impl Cpu {
         let mut tiles = [[0u8; 64]; (32*32)];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {0x8000} else {0x9000};
         let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {0x9C00} else {0x9800};
-//        debug!("Getting {}th tile at offset {}", offset, tile_map_base_addr);
+        //        debug!("Getting {}th tile at offset {}", offset, tile_map_base_addr);
 
         if tile_map_base_addr == 0x9C00 {
             for j in 0..(32 * 32) {
                 let tile_pointer = self.mem[(tile_map_base_addr + j) as usize];
                 for i in 0..16 {
                     for k in 0..4 {
-                    //multiply offset by tile size
+                        //multiply offset by tile size
                         tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as i16) + ((tile_pointer as i16) * 0x40)) as usize] as u8)
-                                          >> (k*2)) & 0x3;
+                                             >> (k*2)) & 0x3;
                     }
                 }
             }
@@ -440,9 +482,9 @@ impl Cpu {
                 let tile_pointer = self.mem[(tile_map_base_addr + j) as usize] as u8;
                 for i in 0..16 {
                     for k in 0..4 {
-                    //multiply offset by tile size
+                        //multiply offset by tile size
                         tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as u16) + ((tile_pointer as u16) * 0x40)) as usize] as u8)
-                                         >> (k * 2)) & 0x3;
+                                             >> (k * 2)) & 0x3;
                     }
                 }
             }
@@ -479,7 +521,8 @@ impl Cpu {
         let lyc = self.lyc();
 
         if ly == lyc {
-            //TODO: set STAT coincident flag...
+            //TODO: review if correct: set STAT coincident flag...
+            self.set_coincidence_flag();
         }
     }
 
@@ -912,7 +955,7 @@ impl Cpu {
         self.sub(reg);
 
         //NOTE: find out whether this should be self.a - cf
-        let new_a: i16 = (self.a - cf) as i16;
+        let new_a: i16 = (self.a as i16) - (cf as i16); //overflow?
         self.a = new_a as i8;
         self.set_flags((new_a as i8) == 0,
                        true,
@@ -943,9 +986,17 @@ impl Cpu {
 
     fn cp(&mut self, reg: CpuRegister) {
         let old_a = self.a;
-        let regval = self.access_register(reg).expect("invalid register");
+        let regval =
+            if let CpuRegister::Num(n) = reg { 
+                n
+            } else {
+                if let Some(n) = self.access_register(reg) {
+                    n
+                } else {unreachable!()}
+            };
+
         let a4bit = old_a & 0xF;
-        let reg4bit = self.access_register(reg).expect("invalid register");
+        let reg4bit = regval & 0xF;
             
         self.sub(reg);
         let new_a = self.a;
@@ -970,18 +1021,22 @@ impl Cpu {
     }
 
     fn dec(&mut self, reg: CpuRegister) {
-        let old_c = (self.f & hl) == hl;
-        let old_4bit = self.access_register(reg).expect("invalid register") & 0x10; //TODO: rename this/redo this
-        //old_4bit is used to detect overflow of 4th bit
-        let new_val: i16 = (self.access_register(reg)
-                            .expect("invalid register") as i16) - 1;
+        let old_c = (self.f & cl) == cl;
+        let old_4bit = self.access_register(reg).expect("invalid register") & 0x10; 
 
-        self.set_register(reg, new_val as i8);
+        //old_4bit is used to detect overflow of 4th bit
+        let reg_val: i16 = ((self.access_register(reg)
+                            .expect("invalid register") as i16) & 0xFF);
+
+        let new_val:i8 = (reg_val - 1) as i8;
+        
+
+        self.set_register(reg, new_val);
 
         self.set_flags(
             new_val == 0,
             true,
-            old_4bit == 0x10 && ((new_val & 0x10) == 0x10),
+            (reg_val & 0xF) != 0,
             old_c);
 
     }
@@ -1196,9 +1251,10 @@ impl Cpu {
 
     fn rlc(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
+        let old_carry = (self.f & cl) >> 4;
         let old_bit7 = (reg_val >> 7) & 1;
 
-        let new_reg = (reg_val << 1) | old_bit7;
+        let new_reg = ((reg_val << 1) & 0xFE) | old_carry;
         self.set_register(reg, new_reg);
 
         self.set_flags(new_reg == 0,
@@ -1304,7 +1360,7 @@ impl Cpu {
     }
 
     fn jpnn(&mut self, nn: u16) {
-        self.pc = nn; //NOTE: Verify this byte order
+        self.pc = nn - 3; //NOTE: Verify this byte order
     }
 
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
@@ -1315,7 +1371,7 @@ impl Cpu {
                 Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
-                self.pc = nn;
+                self.jpnn(nn);
                 true
             } else { false }
     }
@@ -1323,11 +1379,11 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let addr = self.hl();
-        self.pc = addr;
+        self.pc = addr - 1;
     }
 
     fn jrn(&mut self, n: i8) {
-        let old_pc = self.pc;
+        let old_pc = self.pc - 2;
         self.pc = ((old_pc as i32) + (n as i32)) as u16;
     }
 
@@ -1350,7 +1406,7 @@ impl Cpu {
     fn callnn(&mut self, nn: u16) {
         let cur_pc = self.pc;
         self.push_onto_stack(cur_pc + 3);
-        self.pc = nn; //nn or nn -3?
+        self.pc = nn - 3; //nn -3 to account for pc inc in dispatch_opcode
     }
 
     fn push_onto_stack(&mut self, nn: u16) {
@@ -1360,7 +1416,6 @@ impl Cpu {
 
         self.set_mem((old_sp-3) as usize, first_half);
         self.set_mem((old_sp-2) as usize, second_half);
-
         self.sp -= 2;
     }
 
@@ -1386,16 +1441,17 @@ impl Cpu {
     }
 
     fn pop_from_stack(&mut self) -> u16 {
-        let old_sp = self.sp;
-        let val1 = self.mem[old_sp as usize];
-        let val2 = self.mem[(old_sp+1) as usize];
+        let sp_idx = self.sp;
+        let val1 = self.mem[sp_idx as usize];
+        let val2 = self.mem[(sp_idx-1) as usize];
+        self.sp += 2;
 
         (((val2 as u16) << 8) & 0xFF00) | ((val1 as u16) & 0xFF)
     }
 
     fn ret(&mut self) {
         let new_addr = self.pop_from_stack();
-        self.pc = new_addr;
+        self.pc = new_addr - 1;
     }
 
     fn retcc(&mut self, cc: Cc) -> bool {
@@ -1414,7 +1470,7 @@ impl Cpu {
     fn reti(&mut self) {
         let new_addr = self.pop_from_stack();
 
-        self.pc = new_addr;
+        self.pc = new_addr - 1;
         self.ei();
     }
 
@@ -1431,8 +1487,63 @@ impl Cpu {
     fn inc_pc(&mut self) {
         self.pc += 1;
     }
+
+    fn handle_interrupts(&mut self) {
+        if !self.get_interrupts_enabled() {
+            return ();
+        }
+        
+        //Then handle interrupts
+        if self.get_vblank_interrupt_enabled() && self.get_vblank_interrupt() {
+            //handle vblank interrupt
+            let old_pc = self.pc;
+
+            self.disable_interrupts();
+            self.unset_vblank_interrupt_bit();
+            self.push_onto_stack(old_pc);
+
+            self.pc = vblank_interrupt_address;
+        } else
+            if self.get_lcdc_interrupt_enabled() && self.get_lcdc_interrupt() {
+            //handle lcdc interrupt
+                let old_pc = self.pc;
+                
+                self.disable_interrupts();
+                self.unset_lcdc_interrupt_bit();
+                self.push_onto_stack(old_pc);
+
+                self.pc = lcdc_interrupt_address;
+            }
+        else if self.get_timer_interrupt_enabled() && self.get_timer_interrupt() {
+            
+            //handle timer interrupt
+            let old_pc = self.pc;
+            
+            self.disable_interrupts();
+            self.unset_timer_interrupt_bit();
+            self.push_onto_stack(old_pc);
+
+            self.pc = timer_overflow_interrupt_address;
+        }
+        else if self.get_serial_io_interrupt_enabled() && self.get_serial_io_interrupt() {
+            let old_pc = self.pc;
+
+            self.disable_interrupts();
+            self.unset_serial_io_interrupt_bit();
+            self.push_onto_stack(old_pc);
+
+            self.pc = serial_transfer_interrupt_address;
+        }
+        else if self.get_input_interrupt_enabled() && self.get_input_interrupt(){
+            unimplemented!();
+        }
+ 
+    }
+    
     /*
     Handles running opcodes
+    including handling of interrupts
+
     Opcodes are prefixed or unprefixed 
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
@@ -1449,13 +1560,21 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
+       
+        self.handle_interrupts();
+
+
+        //First check if CPU is in a running state
         if self.state == CpuState::Halt {
             //TODO: Needs extra handling with interupts
-            return 4; //unsure of this
+            return inst_time; //unsure of this
         } else if self.state == CpuState::Stop {
-            return 4; //unsure of this
+            return inst_time; //unsure of this
         } //otherwise it's in normal state:
 
+
+
+        //Then execute instruction
         let (inst_name, inst_len) =
             pp_opcode(first_byte, second_byte, third_byte, self.pc);
         match inst_len {

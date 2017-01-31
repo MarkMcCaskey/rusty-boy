@@ -1,8 +1,11 @@
+customize zone (m-x find-variable zone-programs) Kappa
+
 * TODO CPU
 ** DONE Dispatch
 *** DONE Prefixed
 *** DONE Unprefixed
 ** TODO Opcodes
+   (Note review serial IO)
 *** TODO Interrupts
 **** TODO Throw
 **** TODO Handle
@@ -43,4 +46,6 @@
 *** DONE Arithmetic
 **** DONE Numbers
 *** TODO Bindable names
-*** TODO Breakpoints
+*** DONE Breakpoint
+*** DONE Watchpoints
+*** TODO Print registers Kappa

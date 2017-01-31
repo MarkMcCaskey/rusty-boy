@@ -3,7 +3,8 @@ macro_rules! setter_unsetter_and_getter {
      $memory_location:expr) => {
         macro_rules! $name_setter {
             ($name:ident, $location:expr) => {
-                fn $name(&mut self) {
+                //TODO: maybe add an option for setting them public?
+                pub fn $name(&mut self) {
                     let orig_val = self.mem[$memory_location];
 
                     self.mem[$memory_location] = orig_val | $location;
@@ -52,6 +53,7 @@ macro_rules! make_getter {
 setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
 setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
 setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
+setter_unsetter_and_getter!(set_stat, unset_stat, get_stat, 0xFF41);
 
 
 //macro for dispatching on opcodes where the LSB of the "y" set of
