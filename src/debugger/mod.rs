@@ -51,11 +51,13 @@ pub fn run_debugger(file_name: &str) -> ! {
 
         // run until breakpoint or end
         if dbg.should_run() {
+            dbg.make_input_non_blocking();
             // Keep executing until breakpoint or other "PAUSE" condition
-            while dbg.should_run() {
+            while dbg.should_run() && dbg.no_input() {
                 dbg.run();
                 dbg.refresh_screen();
             }
+            dbg.pause();
         } else {
             std::thread::sleep(Duration::from_millis(16));
         }
