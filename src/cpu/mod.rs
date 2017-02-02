@@ -150,7 +150,7 @@ impl Cpu {
         self.h  = 0;
         self.l  = 0;
         self.sp = 0xFFFE;
-        self.pc = 0;
+        self.pc = 0x100;
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
@@ -206,6 +206,23 @@ impl Cpu {
             3 => 16,
             _ => unreachable!("The impossible happened!"),
         }
+    }
+
+    //gets the next pixel value to be drawn to the screen and updates
+    //the special registers correctly
+    pub fn get_next_pixel(&mut self, xval: u8) -> u8 {
+        let yval = self.ly(); 
+        let tile_map_base_addr =
+            if self.lcdc_bg_tile_map() {0x8000} else {0x9000};
+        let tile_data_base_addr = if
+            self.lcdc_bg_win_tile_data() {0x9C00} else {0x9800};
+
+        if tile_map_base_addr == 0x9C00 {//determine additive or subtractive
+        }
+
+        self.inc_ly();
+        0
+        
     }
 
 
@@ -510,6 +527,9 @@ impl Cpu {
         let v = (self.ly() + 1) % 154;
         self.mem[0xFF44] = v as i8;
         //maybe set flags for being in vblank or whatever here?
+        if v > 143 {
+            self.set_vblank_interrupt_bit();
+        }
     }
 
     pub fn lyc(&self) -> u8 {
@@ -603,7 +623,10 @@ impl Cpu {
                 name_data.push(self.mem[0x134 + i] as u8);
             }
         }
-        String::from_utf8(name_data).unwrap()
+        match String::from_utf8(name_data) {
+            Ok(s) => s,
+            _     => "Illegally named game".to_string(),
+        }
     }
 
     pub fn get_cartridge_type(&self) -> u8 {
@@ -1010,13 +1033,13 @@ impl Cpu {
     fn inc(&mut self, reg: CpuRegister) {
         let old_c = (self.f & hl) == hl;
         let old_3bit = self.access_register(reg).expect("invalid register") & 0x8;
-        //old_3bit is used to detect overflow of 3rd bit
 
-        let new_val: i16 = self.alu_dispatch(reg, |_, b: i8| (b + 1) as i16);
+        let old_val: u16 = (self.access_register(reg).expect("invalid register") as u8) as u16;
+        let new_val = old_val + 1;
         self.set_register(reg, new_val as i8);
         self.set_flags(new_val == 0,
                        false,
-                       old_3bit == 0x8 && (new_val & 0x8 == 0),
+                       (old_3bit == 0x8) && ((new_val & 0x8) != 0x8),
                        old_c);
     }
 
@@ -1383,8 +1406,8 @@ impl Cpu {
     }
 
     fn jrn(&mut self, n: i8) {
-        let old_pc = self.pc - 2;
-        self.pc = ((old_pc as i32) + (n as i32)) as u16;
+        let old_pc = self.pc; 
+        self.pc = (((old_pc as i32) + (n as i32)) as i16) as u16;
     }
 
     //Double check run time length

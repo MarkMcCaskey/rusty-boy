@@ -55,7 +55,7 @@ fn main() {
 
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
+        .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
         .unwrap();
 
 

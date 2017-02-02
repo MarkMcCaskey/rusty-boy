@@ -91,6 +91,7 @@ impl Debugger {
     pub fn handle_input(&mut self) {
 
         let mut ch = getch();
+        timeout(-1); //make input blocking
         match ch {
             KEY_LEFT => {
                 self.cpu.dispatch_opcode();
@@ -428,7 +429,7 @@ impl Debugger {
             DebuggerAction::Show { show: show } => {
                 match show {
                     ShowableThing::Address { addr: addr } => {
-                        format!("(0x{:X}) = {}", addr, self.cpu.mem[addr as usize])
+                        format!("(0x{:X}) = 0x{:X}", addr, self.cpu.mem[addr as usize])
                     }
                     ShowableThing::Breakpoints => format!("Breakpoints: {:?}", self.breakpoints),
                 }
@@ -479,6 +480,20 @@ impl Debugger {
             self.cpu.dispatch_opcode();
         }
 
+    }
+
+    pub fn make_input_non_blocking(&mut self) {
+        timeout(0);
+    }
+
+    pub fn no_input(&mut self) -> bool {
+        let ch = getch();
+
+        ch == ERR
+    }
+
+    pub fn pause(&mut self) {
+        self.debugger_state = DebuggerState::Paused;
     }
 }
 
