@@ -1,5 +1,5 @@
 #[cfg(test)]
-use cpu::*;
+use super::constants::*;
 
 macro_rules! test_op {
     ($func:ident, $method:ident, $input:expr, $output_reg:ident,

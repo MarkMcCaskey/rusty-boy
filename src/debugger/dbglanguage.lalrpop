@@ -4,7 +4,7 @@ use super::language::ShowableThing;
 
 grammar;
 
-pub Input: DebuggerAction = { Run, Reset, Step, SetUnsetValue, Showable,
+pub Input: DebuggerAction = { Run, Reset, Step, SetUnsetValue, Showable, RunUntil,
                               <Expression> => DebuggerAction::Echo {str: format!("0x{:X}", <>) },
 };
 
@@ -18,10 +18,12 @@ SetUnsetValue: DebuggerAction = {
 
 Break: i32 = { "break" <Expression>, "set" "breakpoint" <Expression>, "b" <Expression>};
 
+RunUntil:   DebuggerAction = { "run" "until" <Expression> => DebuggerAction::RunToAddress{addr: <> as u16}, };
 Run:   DebuggerAction = { "run"   => DebuggerAction::Run, };
 Reset: DebuggerAction = { "reset" => DebuggerAction::Reset, };
 Step:  DebuggerAction = { "step"  => DebuggerAction::Step,
                            "s"    => DebuggerAction::Step, };
+
 
 Showable: DebuggerAction = {
     "show" <ShowableThing> => DebuggerAction::Show{show: <>}
@@ -51,6 +53,6 @@ Term: i32 = {
     "(" <Expression> ")",
 };
 //pub Command = {} 
-pub Number = { Hex, Decimal };
+Number = { Hex, Decimal };
 Hex: i32 = <r"0(x|X)[0-9a-fA-F]+"> => i32::from_str_radix(&<>[2..], 16).unwrap();
 Decimal: i32 = <r"-?[0-9]+"> => i32::from_str(<>).unwrap();
