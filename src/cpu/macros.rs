@@ -71,14 +71,14 @@ macro_rules! even_odd_dispatch {
             $cpu.$func0($f0dispfunc(adjusted_number));
             
             // TODO: Verify this executes it n-1 times
-            for i in 1..($f0pcincs) {
+            for _ in 1..($f0pcincs) {
                 $cpu.inc_pc();
             }
         } else {
             let adjusted_number:u8 = $num / 2;
             $cpu.$func1($f1dispfunc(adjusted_number));
             
-            for i in 1..($f1pcincs) {
+            for _ in 1..($f1pcincs) {
                 $cpu.inc_pc();
             }
         }

@@ -49,3 +49,8 @@ customize zone (m-x find-variable zone-programs) Kappa
 *** DONE Breakpoint
 *** DONE Watchpoints
 *** TODO Print registers Kappa
+
+* TODO Improve code quality
+** DONE Fix all warnings
+** TODO Type annotate literals
+** TODO abstract logic in main

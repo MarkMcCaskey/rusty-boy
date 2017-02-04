@@ -1,21 +1,11 @@
-#![allow(overflowing_literals)]
 #![allow(dead_code)]
 
 #[macro_use] mod macros;
 mod tests;
+pub mod constants;
+
 use disasm::*;
-
-use std::str::from_utf8;
-
-pub const zl: i8 = 0x80;
-pub const nlv: i8 = 0x40;
-pub const hl: i8 = 0x20;
-pub const cl: i8 = 0x10;
-pub const vblank_interrupt_address:          u16 = 0x40;
-pub const lcdc_interrupt_address:            u16 = 0x48;
-pub const timer_overflow_interrupt_address:  u16 = 0x50;
-pub const serial_transfer_interrupt_address: u16 = 0x58;
-pub const p1013_interrupt_address:           u16 = 0x60;
+use self::constants::*;
 
 pub struct Cpu {
     a:   i8,
@@ -23,7 +13,8 @@ pub struct Cpu {
     c:   i8,
     d:   i8,
     e:   i8,
-    pub f:   i8, //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
+    //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
+    pub f: i8,
     h:   i8,
     l:   i8,
     sp:  u16,
@@ -31,91 +22,6 @@ pub struct Cpu {
     pub mem: [i8; 0xFFFF + 1],
     pub state: CpuState,
 }
-
-#[derive(Clone,Copy,PartialEq)]
-pub enum CpuState {
-    Normal,
-    Halt,
-    Stop,
-}
-
-#[derive(Clone,Copy,PartialEq)]
-pub enum CpuRegister {
-    A, B, C, D, E, H, L, HL, Num(i8),
-}
-
-#[derive(Clone,Copy,PartialEq)]
-pub enum CpuRegister16 {
-    BC, DE, HL, SP, Num(i16),
-}
-
-#[derive(Clone,Copy)]
-enum Cc {
-    NZ, Z, NC, C,
-}
-
-#[derive(Debug, PartialEq)]
-enum CartridgeType  {
-    RomOnlvy = 0,
-    RomMBC1 = 1,
-    RomMBC1Ram = 2,
-    RomMBC1RamBatt = 3,
-    RomMBC2 = 5,
-    RomMBC2Batt = 6,
-    RomRam = 8,
-    RomRamBatt = 9,
-    RomMMM01 = 0xB,
-    RomMMM01SRam = 0xC,
-    RomMMM01SRamBatt = 0xD,
-    RomMBC3TimerRamBatt = 0x10,
-    RomMBC3 = 0x11,
-    RomMBC3Ram = 0x12,
-    RomMBC3RamBatt = 0x13,
-    RomMBC5 = 0x19,
-    RomMBC5Ram = 0x1A,
-    RomMBC5RamBatt = 0x1B,
-    RomMBC5RumbleSRam = 0x1D,
-    RomMBC5RumbleSRamBatt = 0x1E,
-    PocketCamera = 0x1F,
-    BandaiTAMA5 = 0xFD,
-    HudsonHuC3 = 0xFE,
-    HudsonHuC1 = 0xFF,
-}
-
-fn cc_dispatch(num: u8) -> Cc {
-    match num {
-        0 => Cc::NZ,
-        1 => Cc::Z,
-        2 => Cc::NC,
-        3 => Cc::C,
-        _ => panic!("Invalid number for Cc dispatch"),
-    }
-}
-
-fn cpu_dispatch(num: u8) -> CpuRegister {
-    match num {
-        0 => CpuRegister::B,
-        1 => CpuRegister::C,
-        2 => CpuRegister::D,
-        3 => CpuRegister::E,
-        4 => CpuRegister::H,
-        5 => CpuRegister::L,
-        6 => CpuRegister::HL,
-        7 => CpuRegister::A,
-        _ => panic!("Invalid 8bit register in cpu_dispatch!"),
-    }
-}
-
-fn cpu16_dispatch(num: u8) -> CpuRegister16 {
-    match num {
-        0 => CpuRegister16::BC,
-        1 => CpuRegister16::DE,
-        2 => CpuRegister16::HL,
-        3 => CpuRegister16::SP,
-        _ => panic!("Invalid number for 16bit register dispatch"),
-    }
-}
-
 
 impl Cpu {
     pub fn new() -> Cpu {
@@ -150,7 +56,7 @@ impl Cpu {
         self.h  = 0;
         self.l  = 0;
         self.sp = 0xFFFE;
-        self.pc = 0x100;
+        self.pc = 0;
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
@@ -208,21 +114,50 @@ impl Cpu {
         }
     }
 
+    pub fn get_bg_tiles(&self) -> Vec<u8> {
+        let mut ret = vec![];
+        for &i in self.mem[0x8800..0x9800].iter() {
+            ret.push(((i as u8) >> 6) & 0x3u8);
+            ret.push(((i as u8) >> 4) & 0x3u8);
+            ret.push(((i as u8) >> 2) & 0x3u8);
+            ret.push( (i as u8)       & 0x3u8);
+        }
+
+        ret
+    }
+
+    fn get_current_tile_location() {}
+
+    /*
+    Iterate through tile map, use values there to find tiles in tile data
+     */
     //gets the next pixel value to be drawn to the screen and updates
     //the special registers correctly
     pub fn get_next_pixel(&mut self, xval: u8) -> u8 {
         let yval = self.ly(); 
         let tile_map_base_addr =
-            if self.lcdc_bg_tile_map() {0x8000} else {0x9000};
+            if self.lcdc_bg_tile_map() {0x9C00} else {0x9800};
+
         let tile_data_base_addr = if
-            self.lcdc_bg_win_tile_data() {0x9C00} else {0x9800};
+            self.lcdc_bg_win_tile_data() {
+                //subtractive; 0 at 0x8800
+            } else {
+                //additive; 0 at 0x8000
+                //self.get_
+            }; 
 
         if tile_map_base_addr == 0x9C00 {//determine additive or subtractive
         }
 
         self.inc_ly();
         0
-        
+    }
+
+    fn get_subtractive_pixel(&mut self) {
+        unimplemented!();
+    }
+    fn get_additive_pixel(&mut self) {
+        unimplemented!();
     }
 
 
@@ -705,7 +640,7 @@ impl Cpu {
     It is read at 8192Hz, one bit at a time if external clock is used.
     See documentation and read carefully before implementing this.
      */
-    fn set_mem(&mut self, address: usize, value: i8) {
+    pub fn set_mem(&mut self, address: usize, value: i8) {
         match address {
             ad @ 0xE000 ... 0xFE00 | ad @ 0xC000 ... 0xDE00
                 => {
@@ -842,11 +777,11 @@ impl Cpu {
 
     fn ldhna(&mut self, n: u8) {
         let val = self.a;
-        self.set_mem((0xFF00 + n) as usize, val);
+        self.set_mem((0xFF00u16 + (n as u16)) as usize, val);
     }
 
     fn ldhan(&mut self, n: u8) {
-        let val = self.mem[(0xFF00 + n) as usize];
+        let val = self.mem[(0xFF00u16 + (n as u16)) as usize];
         self.set_register(CpuRegister::A, val);
     }
 
@@ -946,16 +881,20 @@ impl Cpu {
     }
 
     fn adc(&mut self, reg: CpuRegister) {
-        let old_a = self.a as i16;
-        let old_b = self.reg_or_const(reg);
-        let cf: i8 = (self.f & hl) >> 5;
-        self.add(reg);
+        let reg_val = self.reg_or_const(reg);
+        let cf: i8 = (self.f & HL) >> 5;
 
-        let new_a: i16 = (cf + self.a) as i16;
+        let new_a: i16 = (cf as i16) + (self.a as i16);
+        //TODO: verify negatives don't cause problems
+        let carry3_a = ((self.a as u16) & 0xFu16) + ((reg_val as u16) & 0xFu16) + (cf as u16);
+        let carry7_a = ((self.a as u16) & 0xFF) + ((reg_val as u16) & 0xFF) + (cf as u16);
 
+        self.a = new_a as i8;
 
-        self.f |= if (old_a + old_b) > (i8::max_value() as i16) { hl } else { 0 };
-        self.f |= if ((old_a % 16) + (old_b % 16)) > 15 { cl } else { 0 };
+        self.set_flags(new_a == 0,
+                       false,
+                       carry3_a > 0xF,
+                       carry7_a > 0xFF);
     }
 
     fn sub(&mut self, reg: CpuRegister) {
@@ -974,7 +913,7 @@ impl Cpu {
         let old_a = self.a as i16;
         let old_b = self.reg_or_const(reg);
         let old_c = (old_a - old_b) as i8;
-        let cf: i8 = (self.f & hl) >> 5;
+        let cf: i8 = (self.f & HL) >> 5;
         self.sub(reg);
 
         //NOTE: find out whether this should be self.a - cf
@@ -1031,7 +970,7 @@ impl Cpu {
     }
 
     fn inc(&mut self, reg: CpuRegister) {
-        let old_c = (self.f & hl) == hl;
+        let old_c = (self.f & HL) == HL;
         let old_3bit = self.access_register(reg).expect("invalid register") & 0x8;
 
         let old_val: u16 = (self.access_register(reg).expect("invalid register") as u8) as u16;
@@ -1043,23 +982,20 @@ impl Cpu {
                        old_c);
     }
 
+    //
     fn dec(&mut self, reg: CpuRegister) {
-        let old_c = (self.f & cl) == cl;
-        let old_4bit = self.access_register(reg).expect("invalid register") & 0x10; 
+        let old_c = (self.f & CL) == CL;
 
-        //old_4bit is used to detect overflow of 4th bit
-        let reg_val: i16 = ((self.access_register(reg)
-                            .expect("invalid register") as i16) & 0xFF);
+        let reg_val: i16 = (self.access_register(reg)
+                            .expect("invalid register") as i16) & 0xFF;
 
         let new_val:i8 = (reg_val - 1) as i8;
-        
-
         self.set_register(reg, new_val);
 
         self.set_flags(
             new_val == 0,
             true,
-            (reg_val & 0xF) != 0,
+            (reg_val & 0xF) != 0, //TODO: review 
             old_c);
 
     }
@@ -1087,7 +1023,7 @@ impl Cpu {
          */
 
     fn add_hl(&mut self, reg: CpuRegister16) {
-        let old_z = (self.f & zl) == zl;
+        let old_z = (self.f & ZL) == ZL;
 
         //TODO: Maybe properly convert if signed
         let hl_12bit = self.hl() & 0xFFF;
@@ -1159,7 +1095,7 @@ impl Cpu {
         let bot = val & 0x0F;
         self.set_register(reg, ((top >> 4) & 0xF) | (bot << 4));
         
-        self.f = if val == 0 { zl } else { 0 };
+        self.f = if val == 0 { ZL } else { 0 };
     }
 
 
@@ -1173,7 +1109,7 @@ impl Cpu {
         let highest_digit = if highest_bits > 0x90 {(highest_bits + 0x60) & 0xF0} else {highest_bits & 0xF0};
 
         self.a = (highest_digit | lowest_digit) as i8;
-        let old_nflag = (self.f & nlv) == nlv;
+        let old_nflag = (self.f & NLV) == NLV;
         self.set_flags((highest_digit | lowest_digit) == 0,
                        old_nflag,
                        false,
@@ -1182,19 +1118,19 @@ impl Cpu {
 
     fn cpl(&mut self) {
         let new_val = !self.a;
-        let old_flags = self.f & (zl | cl);
-        self.f = old_flags | nlv | hl;
+        let old_flags = self.f & (ZL | CL);
+        self.f = old_flags | NLV | HL;
         self.a = new_val;
     }
 
     fn ccf(&mut self) {
-        let old_flags = self.f & (zl | cl);
-        self.f = old_flags ^ cl;
+        let old_flags = self.f & (ZL | CL);
+        self.f = old_flags ^ CL;
     }
 
     fn scf(&mut self) {
-        let old_flags = self.f & zl;
-        self.f = old_flags | cl;
+        let old_flags = self.f & ZL;
+        self.f = old_flags | CL;
     }
 
     fn nop(&self) {
@@ -1235,7 +1171,7 @@ impl Cpu {
 
     fn rla(&mut self) {
         let old_bit7 = (self.a >> 7) & 1;
-        let old_flags = ((self.f & cl) >> 4) & 0xF;
+        let old_flags = ((self.f & CL) >> 4) & 0xF;
         
 
         let new_a = (self.a << 1) | old_flags;
@@ -1261,7 +1197,7 @@ impl Cpu {
 
     fn rra(&mut self) {
         let old_bit0 = self.a & 1;
-        let old_flags = ((self.f & cl) >> 4) & 0xF;
+        let old_flags = ((self.f & CL) >> 4) & 0xF;
 
         let new_a = ((self.a >> 1) & 0x7F) | (old_flags << 7);
         self.a = new_a;
@@ -1274,7 +1210,7 @@ impl Cpu {
 
     fn rlc(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-        let old_carry = (self.f & cl) >> 4;
+        let old_carry = (self.f & CL) >> 4;
         let old_bit7 = (reg_val >> 7) & 1;
 
         let new_reg = ((reg_val << 1) & 0xFE) | old_carry;
@@ -1289,7 +1225,7 @@ impl Cpu {
     fn rl(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit7 = (reg_val >> 7) & 1;
-        let old_flags = ((self.f & cl) >> 4) & 0xF;
+        let old_flags = ((self.f & CL) >> 4) & 0xF;
 
         let new_reg = (reg_val << 1) | old_flags;
         self.set_register(reg, new_reg);
@@ -1316,7 +1252,7 @@ impl Cpu {
     fn rr(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
-        let old_flags = ((self.f & cl) >> 4) & 0xF;
+        let old_flags = ((self.f & CL) >> 4) & 0xF;
 
         //todo: wat
         let new_val = (reg_val >> 1) | old_flags;
@@ -1364,7 +1300,7 @@ impl Cpu {
 
     fn bit(&mut self, b: u8, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-        let old_flags = (self.f & cl) >> 4;
+        let old_flags = (self.f & CL) >> 4;
         
         self.set_flags(((reg_val >> b) & 1) != 1,
                        false,
@@ -1525,7 +1461,7 @@ impl Cpu {
             self.unset_vblank_interrupt_bit();
             self.push_onto_stack(old_pc);
 
-            self.pc = vblank_interrupt_address;
+            self.pc = VBLANK_INTERRUPT_ADDRESS;
         } else
             if self.get_lcdc_interrupt_enabled() && self.get_lcdc_interrupt() {
             //handle lcdc interrupt
@@ -1535,7 +1471,7 @@ impl Cpu {
                 self.unset_lcdc_interrupt_bit();
                 self.push_onto_stack(old_pc);
 
-                self.pc = lcdc_interrupt_address;
+                self.pc = LCDC_INTERRUPT_ADDRESS;
             }
         else if self.get_timer_interrupt_enabled() && self.get_timer_interrupt() {
             
@@ -1546,7 +1482,7 @@ impl Cpu {
             self.unset_timer_interrupt_bit();
             self.push_onto_stack(old_pc);
 
-            self.pc = timer_overflow_interrupt_address;
+            self.pc = TIMER_OVERFLOW_INTERRUPT_ADDRESS;
         }
         else if self.get_serial_io_interrupt_enabled() && self.get_serial_io_interrupt() {
             let old_pc = self.pc;
@@ -1555,7 +1491,7 @@ impl Cpu {
             self.unset_serial_io_interrupt_bit();
             self.push_onto_stack(old_pc);
 
-            self.pc = serial_transfer_interrupt_address;
+            self.pc = SERIAL_TRANSFER_INTERRUPT_ADDRESS;
         }
         else if self.get_input_interrupt_enabled() && self.get_input_interrupt(){
             unimplemented!();
@@ -1571,13 +1507,13 @@ impl Cpu {
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
     
-    ASSUMPTION: Gameboy onlvy uses the CB prefix codes of the Z80
+    ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
     
     Returned value is number of cycles that the instruction took
      */
     pub fn dispatch_opcode(&mut self) -> u8 {
         let mut inst_time = 4;
-        let (first_byte, second_byte, third_byte, fourth_byte)
+        let (first_byte, second_byte, third_byte, _) //TODO: verify no 32bit instructions
             = self.read_instruction();
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;

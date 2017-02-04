@@ -2,7 +2,6 @@ extern crate clap;
 #[macro_use] extern crate log;
 extern crate log4rs;
 extern crate sdl2;
-#[macro_use] extern crate nom;
 extern crate ncurses;
 
 mod cpu;
@@ -17,9 +16,9 @@ use sdl2::*;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
-use log4rs::append::file::FileAppender;
+//use log4rs::append::file::FileAppender;
 use log4rs::encode::pattern::PatternEncoder;
-use log4rs::config::{Appender, Config, Logger, Root};
+use log4rs::config::{Appender, Config, Root};
 
 use std::time::Duration;
 use sdl2::keyboard::Keycode;
@@ -47,6 +46,7 @@ impl AudioCallback for SquareWave {
     }
 }
 
+#[allow(unused_variables)]
 fn main() {
     /*Set up logging*/
     let stdout = ConsoleAppender::builder()
@@ -55,7 +55,7 @@ fn main() {
 
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Trace))
+        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
         .unwrap();
 
 
@@ -84,11 +84,11 @@ fn main() {
     /*Attempt to read ROM first*/    
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
     let debug_mode = matches.is_present("debug");
-
+    
+   
     if debug_mode {
         info!("Running in debug mode");
         run_debugger(rom_file);
-        return ();
     } else {
         let handle = log4rs::init_config(config).unwrap();
     }
@@ -292,61 +292,57 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255,255,255,255);
         let color_lookup = [color1, color2, color3, color4];
 
-        //gameboy.timer_cycle();
-        
-        renderer.set_scale(12.0,12.0);
+        match renderer.set_scale(2.0,2.0) {
+            Ok(_)  => (),
+            Err(_) => error!("Could not set render scale"),
+        }
         //1ms before drawing in terms of CPU time we must throw a vblank interrupt 
         //TODO: figure out what 70224 is and make it a constant (and/or variable based on whether it's GB, SGB, etc.)
         if ticks + time_in_ms_per_cycle >= 70224 {
             gameboy.set_vblank_interrupt_bit();
         }
-        if ticks >= 70224 {
+        if ticks >= 10 {//70224 {
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
 
-            let background = gameboy.get_background_tiles();
-
-            
-            
             /*j
-            let mut i = 0;
-            let mut j = 0;
-            //[[;64];(32*32)]
-            for &tile in background.iter() {
-                for &pixel in tile.iter() {
-                    renderer.set_draw_color(color_lookup[pixel as usize]);
-                    let point = Point::new((i % 32),(j % 32));
-                    renderer.draw_point(point);
-                    j = j + 1;
-                }
-                i = i + 1;
-            }*/
+            for j in 0..256 {
+                gameboy.set_mem((0x8000 + j) as usize, j as i8);
+                gameboy.set_mem((0x8000 + (j * 2)) as usize, j as i8);
+                gameboy.set_mem((0x8000 + (j * 3)) as usize, j as i8);
+                gameboy.set_mem((0x9000 + j) as usize, j as i8);
+                gameboy.set_mem((0x9000 + (j * 2)) as usize, j as i8);
+                gameboy.set_mem((0x9000 + (j * 3)) as usize, j as i8);
 
-            /*
-             * macro location = Grid of 32x32 tiles, 
-             * micro location = tiles are each 64 pixels (8x8)
-             *
-             * macro location % 32 is your macro x location 
-             * macro location \ 32 (the quotient) is your macro y location
-             * micro location % 8 is your micro x location 
-             * micro location \ 8 (the quotient) is your micro y location
+                gameboy.set_mem((0xA000 + j) as usize, j as i8);
+                gameboy.set_mem((0xA000 + (j * 2)) as usize, j as i8);
+                gameboy.set_mem((0xA000 + (j * 3)) as usize, j as i8);
 
-             * real x = macro + micro x
-             * real y = macro + micro y
-             */
+            }
+            */
+
+            
+            let mut x = 0;
+            let mut y = 0;
+
+            for &p in gameboy.mem.iter() {
+                use sdl2::pixels::*;
+                let (r,g,b) = hsv_to_rgb(p as u8);
+
+                renderer.set_draw_color(Color::RGB(r,g,b));
+                //debug!("pixel at {}, {} is {}", x, y, p);
+
+                let point = Point::new(x, y);
 
 
-            for num_tiles in 0..(32*32) { 
-                for num_pixels in 0..64 {
-                    renderer.set_draw_color(color_lookup[background[num_tiles as usize][num_pixels as usize] as usize]);
-                    let macro_x = num_tiles % 32;
-                    let macro_y = num_tiles / 32;
-                    let micro_x = num_pixels % 8;
-                    let micro_y = num_pixels / 8;
+                renderer.draw_point(point);
 
-                    let point = Point::new(macro_x + micro_x, macro_y + micro_y);
-                    renderer.draw_point(point);
+                //inc coord
+                x = (x + 1) % 300;
+                if x == 0 {
+                    y = (y + 1) % 256;
+//                    gameboy.inc_ly();
                 }
             }
             /*
@@ -361,4 +357,21 @@ fn main() {
         }
 
     }
+}
+
+fn hue(h: u8) -> (f64,f64,f64) {
+    let nh = (h as f64) / 256.0;
+    let r = ((nh as f64) * 6.0 - 3.0).abs() - 1.0;
+    let g = 2.0 - (((nh as f64) * 6.0) - 2.0).abs();
+    let b = 2.0 - (((nh as f64) * 6.0) - 4.0).abs();
+
+    (r,g,b)
+}
+
+fn hsv_to_rgb(h:u8) -> (u8,u8,u8){
+    let (r,g,b) = hue(h);
+
+    let adj = |x| (x * 256.0) as u8;
+
+    (adj(r),adj(g),adj(b))
 }
