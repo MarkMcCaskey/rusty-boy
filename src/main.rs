@@ -118,6 +118,7 @@ fn main() {
 
     /*Set up gameboy*/
     let mut gameboy = Cpu::new();
+    gameboy.event_log_enabled = true;
 
     /*Set up SDL; input*/
     let sdl_context = sdl2::init().unwrap();
@@ -391,9 +392,10 @@ fn main() {
             }
             use sdl2::pixels::*;
 
-            let pc = gameboy.pc;
-            renderer.set_draw_color(Color::RGB(255, 255, 255));
-            renderer.draw_point(addr_to_point(pc));
+            // // draw current PC
+            // let pc = gameboy.pc;
+            // renderer.set_draw_color(Color::RGB(255, 255, 255));
+            // renderer.draw_point(addr_to_point(pc));
 
             fn clamp_color(v: i16) -> u8 {
                 if v < 0 {
