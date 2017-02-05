@@ -11,8 +11,11 @@ mod debugger;
 use cpu::*;
 use debugger::*;
 
+use std::num::Wrapping;
+
 use clap::{Arg, App};
 use sdl2::*;
+use sdl2::surface::Surface;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -44,6 +47,26 @@ impl AudioCallback for SquareWave {
             self.phase = (self.phase + self.phase_inc) % 1.0;
         }
     }
+}
+
+const SCREEN_WIDTH: u32 = 1600;
+const SCREEN_HEIGHT: u32 = 900;
+
+const MEM_DISP_WIDTH: i32 = 384;
+const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
+const X_SCALE: f32 = 4.0;
+const Y_SCALE: f32 = X_SCALE;
+
+fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
+    let x_scaled = ((x as f32) / X_SCALE) as i32;
+    let y_scaled = ((y as f32) / Y_SCALE) as i32;
+    // FIXME this check is not correct
+    if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
+        Some((x_scaled + y_scaled*MEM_DISP_WIDTH) as u16)
+    } else {
+        None
+    }
+
 }
 
 #[allow(unused_variables)]
@@ -107,9 +130,9 @@ fn main() {
     };
 
 
-    let mut controller = None;
     //let mut prev_time = 0;
 
+    let mut controller = None;
     for id in 0..available {
         if controller_subsystem.is_game_controller(id) {
             debug!("Attempting to open controller {}", id);
@@ -129,14 +152,10 @@ fn main() {
     }
 
 
-    let controller = match controller {
-        Some(c) => c,
-        None => panic!("Could not open any controller!"),
+    match controller {
+        Some(c) => trace!("Controller mapping: {}", c.mapping()),
+        None => trace!("Could not open any controller!"),
     };
-
-    trace!("Controller mapping: {}", controller.mapping());
-
-
     
     trace!("loading ROM");
     gameboy.load_rom(rom_file);
@@ -144,11 +163,11 @@ fn main() {
     /*Set up graphics and window*/
     trace!("Opening window");
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window(gameboy.get_game_name().as_str(), 640, 480)
+    let window = video_subsystem.window(gameboy.get_game_name().as_str(), SCREEN_WIDTH, SCREEN_HEIGHT)
         .position_centered()
         .build()
         .unwrap();
-
+    
     let mut renderer = window.renderer()
         .accelerated()
         .build()
@@ -183,6 +202,8 @@ fn main() {
 
     let mut cycle_count = 0;
     let mut clock_cycles = 0;
+
+    let mut frame_num = Wrapping(0);
 
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
@@ -240,6 +261,20 @@ fn main() {
                         run_next_in_debug = true;
                     }
                 }
+                Event::MouseButtonDown {x, y, ..} => {
+                    match screen_coord_to_mem_addr(x, y) {
+                        Some(pc) => {
+                            let pc = pc as usize;
+                            let mem = gameboy.mem;
+                            let (mnem, size) = disasm::pp_opcode(mem[pc] as u8,
+                                                                 mem[pc+1] as u8,
+                                                                 mem[pc+1] as u8,
+                                                                 pc as u16);
+                            println!("${:04X} {:?}", pc, mnem);
+                        }
+                        _ => (),
+                    }
+                }
                 _ => (),
             }
         }
@@ -292,7 +327,7 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255,255,255,255);
         let color_lookup = [color1, color2, color3, color4];
 
-        match renderer.set_scale(2.0,2.0) {
+        match renderer.set_scale(X_SCALE, Y_SCALE) {
             Ok(_)  => (),
             Err(_) => error!("Could not set render scale"),
         }
@@ -301,7 +336,7 @@ fn main() {
         if ticks + time_in_ms_per_cycle >= 70224 {
             gameboy.set_vblank_interrupt_bit();
         }
-        if ticks >= 10 {//70224 {
+        if ticks >= 500 {//70224 {
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
@@ -328,9 +363,10 @@ fn main() {
 
             for &p in gameboy.mem.iter() {
                 use sdl2::pixels::*;
-                let (r,g,b) = hsv_to_rgb(p as u8);
 
-                renderer.set_draw_color(Color::RGB(r,g,b));
+                // renderer.set_draw_color(Color::RGB(r,g,b));
+                // renderer.set_draw_color(Color::RGB(p as u8, p as u8, p as u8));
+                renderer.set_draw_color(Color::RGB(0 as u8, 0 as u8, p as u8));
                 //debug!("pixel at {}, {} is {}", x, y, p);
 
                 let point = Point::new(x, y);
@@ -339,12 +375,97 @@ fn main() {
                 renderer.draw_point(point);
 
                 //inc coord
-                x = (x + 1) % 300;
+                x = (x + 1) % MEM_DISP_WIDTH;
                 if x == 0 {
-                    y = (y + 1) % 256;
-//                    gameboy.inc_ly();
+                    y = (y + 1); // % 256; // does this matter?
+                    // gameboy.inc_ly();
                 }
             }
+            
+
+            
+            fn addr_to_point(addr: u16) -> Point {
+                let x = (addr as i32) % MEM_DISP_WIDTH;
+                let y = (addr as i32) / MEM_DISP_WIDTH;
+                Point::new(x as i32, y as i32)
+            }
+            use sdl2::pixels::*;
+
+            let pc = gameboy.pc;
+            renderer.set_draw_color(Color::RGB(255, 255, 255));
+            renderer.draw_point(addr_to_point(pc));
+
+            fn clamp_color(v: i16) -> u8 {
+                if v < 0 {
+                    0
+                } else if v > 255 {
+                    255
+                } else {
+                    v as u8
+                }
+            }
+            
+            fn mix_color(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> (u8, u8, u8) {
+                (clamp_color(r1 as i16 + r2 as i16),
+                 clamp_color(g1 as i16 + g2 as i16),
+                 clamp_color(b1 as i16 + b2 as i16))
+            }
+
+            fn scale_col(scale: u8, color: u8) -> u8 {
+                clamp_color((color as f32 * (scale as f32 / 255f32)) as i16)
+            }
+
+            // How long stuff stays on screen
+            // TODO: Should depend on num of cpu cycles and frame delay
+            const FADE_DELAY: u64 = 25531;
+
+            // Event visualization
+            // TODO: can be used to do partial "smart" redraw, and speed thing up
+            for entry in gameboy.events_deq.iter_mut() {
+                let timestamp = entry.timestamp;
+                let ref event = entry.event;
+                {
+                    let time_diff = gameboy.cycles - timestamp;
+                    if time_diff < FADE_DELAY {
+                        let time_norm = 1.0 - (time_diff as f32)/(FADE_DELAY as f32);
+                        let colval = (time_norm * 255.0) as u8;
+                        match *event {
+                            CpuEvent::Read { from: addr } => {
+                                let val = gameboy.mem[addr as usize] as u8;
+                                let (r, g, b) = mix_color(0, colval, 0,
+                                                          scale_col(colval, val/2), 0, val);
+                                renderer.set_draw_color(Color::RGB(r, g, b));
+                                renderer.draw_point(addr_to_point(addr));
+                            }
+                            CpuEvent::Write { to: addr } => {
+                                let val = gameboy.mem[addr as usize] as u8;
+                                let (r, g, b) = mix_color(colval, 0, 0,
+                                                          0, scale_col(colval, val/2), val);
+                                renderer.set_draw_color(Color::RGB(r, g, b));
+                                renderer.draw_point(addr_to_point(addr));
+                            }
+                            CpuEvent::Execute(addr) => {
+                                let val = gameboy.mem[addr as usize] as u8;
+                                let (r, g, b) = mix_color(colval, colval, scale_col(colval, val),
+                                                          0, 0, 0);
+                                renderer.set_draw_color(Color::RGB(r, g, b));
+                                renderer.draw_point(addr_to_point(addr));
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+            }
+
+            while !gameboy.events_deq.is_empty() {
+                let timestamp = gameboy.events_deq.front().unwrap().timestamp;
+                if (gameboy.cycles - timestamp) >= FADE_DELAY {
+                    gameboy.events_deq.pop_front();
+                } else {
+                    break;
+                }
+            }
+
             /*
              *   00111100 1110001 00001000
              *   01111110 1110001 00010100
@@ -352,13 +473,29 @@ fn main() {
              */
 
 
+            let record_screen = false;
+            if record_screen {
+                let pump = &sdl_context.event_pump().unwrap();
+                let format = renderer.window().unwrap().window_pixel_format();
+                let mut pixels = renderer.read_pixels(None, format).unwrap();
+                let slices = pixels.as_mut_slice();
+                let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, SCREEN_WIDTH, SCREEN_HEIGHT, format.byte_size_of_pixels(SCREEN_WIDTH as usize) as u32, format.into_masks().unwrap()).unwrap();
+                surface.save_bmp(format!("screen{:010}.bmp", frame_num.0));
+                frame_num += Wrapping(1);
+
+            }
+            
+
             renderer.present();
-            std::thread::sleep(Duration::from_millis(100));
+            
+            const FRAME_SLEEP: u64 = 1000/120;
+            std::thread::sleep(Duration::from_millis(FRAME_SLEEP));
         }
 
     }
 }
 
+// FIXME Results do not look like HSV, really :)
 fn hue(h: u8) -> (f64,f64,f64) {
     let nh = (h as f64) / 256.0;
     let r = ((nh as f64) * 6.0 - 3.0).abs() - 1.0;
@@ -375,3 +512,4 @@ fn hsv_to_rgb(h:u8) -> (u8,u8,u8){
 
     (adj(r),adj(g),adj(b))
 }
+
