@@ -4,8 +4,40 @@
 mod tests;
 pub mod constants;
 
+use std::collections::VecDeque;
+use std::num::Wrapping;
+
 use disasm::*;
 use self::constants::*;
+
+pub type MemAddr = u16;
+
+// Types for storing and visualizing various things happening
+pub enum EventPlace {
+    Addr(MemAddr),
+    Register(CpuRegister),
+    Register16(CpuRegister16),
+}
+
+pub enum CpuEvent {
+    Read { from: MemAddr },
+    Write { to: MemAddr },
+    Execute(MemAddr),
+    // TODO: add vis for registers on the side and draw lines ld'ing stuff
+    Move { from: EventPlace, to: EventPlace },
+    // TODO: draw lines for jumps
+    Jump { from: MemAddr, to: MemAddr },
+}
+
+type CycleCount = u64;
+
+pub struct EventLogEntry {
+    pub timestamp: CycleCount,
+    pub event: CpuEvent,
+}
+
+// Additional 2 bytes to skip bounds check when fetching instr. operands
+const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 2;
 
 pub struct Cpu {
     a:   i8,
@@ -19,8 +51,11 @@ pub struct Cpu {
     l:   i8,
     sp:  u16,
     pub pc:  u16,
-    pub mem: [i8; 0xFFFF + 1],
+    pub mem: [i8; MEM_ARRAY_SIZE],
     pub state: CpuState,
+    pub event_log_enabled: bool,
+    pub events_deq: VecDeque<EventLogEntry>,
+    pub cycles: CycleCount,
 }
 
 impl Cpu {
@@ -37,8 +72,11 @@ impl Cpu {
             l:   0,
             sp:  0xFFFE,
             pc:  0,
-            mem: [0; 0xFFFF + 1],
-            state: CpuState::Normal
+            mem: [0; MEM_ARRAY_SIZE],
+            state: CpuState::Normal,
+            event_log_enabled: true,
+            events_deq: VecDeque::new(),
+            cycles: 0,
         };
         new_cpu.reset();
 
@@ -56,7 +94,8 @@ impl Cpu {
         self.h  = 0;
         self.l  = 0;
         self.sp = 0xFFFE;
-        self.pc = 0;
+        self.pc = 0x100;
+        self.cycles = 0;
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
@@ -633,7 +672,16 @@ impl Cpu {
 
         self.f = zn | nn | hn | cn;
     }
-
+    
+    pub fn get_mem(&mut self, address: usize) -> i8 {
+        // TODO replace this with macro that checks flag and pushes?
+        if self.event_log_enabled {
+            self.events_deq.push_back(
+                EventLogEntry { timestamp: self.cycles,
+                                event:CpuEvent::Read { from: address as MemAddr }});
+        };
+        self.mem[address]
+    }
 
     /*
     NOTE: serial I/O is done by accessing memory addresses.
@@ -641,6 +689,11 @@ impl Cpu {
     See documentation and read carefully before implementing this.
      */
     pub fn set_mem(&mut self, address: usize, value: i8) {
+        if self.event_log_enabled {
+            self.events_deq.push_back(
+                EventLogEntry { timestamp: self.cycles,
+                                event: CpuEvent::Write { to: address as MemAddr}});
+        }
         match address {
             ad @ 0xE000 ... 0xFE00 | ad @ 0xC000 ... 0xDE00
                 => {
@@ -705,13 +758,13 @@ impl Cpu {
 
     fn ldan16(&mut self, n: CpuRegister16) {
         let addr = self.access_register16(n);
-        let val = self.mem[addr as usize];
+        let val = self.get_mem(addr as usize);
 
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldan16c(&mut self, b1: u8, b2: u8) {
-        let val = self.mem[(((b2 as u16) << 8) | (b1 as u16)) as usize];
+        let val = self.get_mem((((b2 as u16) << 8) | (b1 as u16)) as usize);
         self.set_register(CpuRegister::A, val);
     }
 
@@ -733,19 +786,19 @@ impl Cpu {
     }
 
     fn ldac(&mut self) {
-        let val = self.mem[0xFF00] + self.c;
+        let val = self.get_mem(0xFF00) + self.c;
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldca(&mut self) {
-        let addr = 0xFF00 + self.c;
+        let addr = 0xFF00u16 + ((self.c as u8) as u16);
         let val = self.a;
         self.set_mem(addr as usize, val);
     }
 
     fn lddahl(&mut self) {
         let addr = self.hl();
-        let val = self.mem[addr as usize];
+        let val = self.get_mem(addr as usize);
 
         self.set_register(CpuRegister::A, val);
         self.dec16(CpuRegister16::HL);
@@ -761,7 +814,7 @@ impl Cpu {
 
     fn ldiahl(&mut self) {
         let addr = self.hl();
-        let val = self.mem[addr as usize];
+        let val = self.get_mem(addr as usize);
 
         self.set_register(CpuRegister::A, val);
         self.inc16(CpuRegister16::HL);
@@ -781,7 +834,7 @@ impl Cpu {
     }
 
     fn ldhan(&mut self, n: u8) {
-        let val = self.mem[(0xFF00u16 + (n as u16)) as usize];
+        let val = self.get_mem((0xFF00u16 + (n as u16)) as usize);
         self.set_register(CpuRegister::A, val);
     }
 
@@ -1319,7 +1372,7 @@ impl Cpu {
     }
 
     fn jpnn(&mut self, nn: u16) {
-        self.pc = nn - 3; //NOTE: Verify this byte order
+        self.pc = (Wrapping(nn) - Wrapping(3)).0; //NOTE: Verify this byte order
     }
 
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
@@ -1338,7 +1391,7 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let addr = self.hl();
-        self.pc = addr - 1;
+        self.pc = (Wrapping(addr) - Wrapping(1)).0;
     }
 
     fn jrn(&mut self, n: i8) {
@@ -1401,8 +1454,8 @@ impl Cpu {
 
     fn pop_from_stack(&mut self) -> u16 {
         let sp_idx = self.sp;
-        let val1 = self.mem[sp_idx as usize];
-        let val2 = self.mem[(sp_idx-1) as usize];
+        let val1 = self.get_mem(sp_idx as usize);
+        let val2 = self.get_mem((sp_idx-1) as usize);
         self.sp += 2;
 
         (((val2 as u16) << 8) & 0xFF00) | ((val1 as u16) & 0xFF)
@@ -1434,17 +1487,17 @@ impl Cpu {
     }
 
     fn read_instruction(&self) -> (u8, u8, u8, u8) {
-        if self.pc > (0xFFFF - 3) {
-            panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
-        }
+        // if self.pc > (0xFFFF - 3) {
+        //     panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
+        // }
         (self.mem[self.pc as usize] as u8,
-         self.mem[(self.pc + 1) as usize] as u8,
-         self.mem[(self.pc + 2) as usize] as u8,
-         self.mem[(self.pc + 3) as usize] as u8)
+         self.mem[(self.pc as usize) + 1] as u8,
+         self.mem[(self.pc as usize) + 2] as u8,
+         self.mem[(self.pc as usize) + 3] as u8)
     }
 
     fn inc_pc(&mut self) {
-        self.pc += 1;
+        self.pc = (Wrapping(self.pc) + Wrapping(1)).0;
     }
 
     fn handle_interrupts(&mut self) {
@@ -1519,6 +1572,8 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
+        self.events_deq.push_back(EventLogEntry { timestamp: self.cycles,
+                                                  event: CpuEvent::Execute(self.pc as MemAddr) });
        
         self.handle_interrupts();
 
@@ -1871,13 +1926,17 @@ impl Cpu {
         
         self.inc_pc();
 
+        self.cycles = (Wrapping(self.cycles) + Wrapping(inst_time as u64)).0;
+        
         inst_time
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
         use std::fs::File;
         use std::io::Read;
-        
+
+        let prev_event_log_enabled = self.event_log_enabled;
+        self.event_log_enabled = false;
 
         let mut rom = File::open(file_path).expect("Could not open rom file");
         let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
@@ -1889,6 +1948,7 @@ impl Cpu {
             self.set_mem(i, rom_buffer[i] as i8);
         }
 
+        self.event_log_enabled = prev_event_log_enabled;
     }
 }
 
