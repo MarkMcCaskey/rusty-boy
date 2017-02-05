@@ -1,22 +1,34 @@
 use ncurses::*;
-use std::collections::HashMap;
-use super::language;
+//use std::collections::HashMap;
 use super::language::*;
 use super::dbglanguage;
 use std;
-use super::super::cpu::*;
+use cpu::*;
+use cpu::constants::*;
 use super::super::disasm::*;
-use std::thread::sleep;
-use std::time::Duration;
 use std::collections::BTreeSet;
 
-
-static ASM_WINDOW_HEIGHT: i32 = 3;
-static ASM_WINDOW_WIDTH: i32 = 10;
 const WIN_Y_DIV: i32 = 5;
 const WIN_Y_ADJ: i32 = 2;
 const WIN_X_DIV: i32 = 4;
 const WIN_X_ADJ: i32 = 3;
+#[allow(dead_code)]
+const X_WIDTH: i32 = 11;
+const WATCHPOINT_Y_OFFSET: i32 = 9;
+const STACK_X_POS_OFFSET: i32 = 26;
+const REG8BIT_LIST: [CpuRegister; 8] = [CpuRegister::A,
+                                        CpuRegister::B,
+                                        CpuRegister::C,
+                                        CpuRegister::D,
+                                        CpuRegister::E,
+                                        CpuRegister::H,
+                                        CpuRegister::HL,
+                                        CpuRegister::L];
+const REG8BIT_NAME: [&'static str; 8] = ["A", "B", "C", "D", "E", "H", "(HL)", "L"];
+const REG16BIT_LIST: [CpuRegister16; 4] =
+    [CpuRegister16::BC, CpuRegister16::DE, CpuRegister16::HL, CpuRegister16::SP];
+const REG16BIT_NAME: [&'static str; 4] = ["BC", "DE", "HL", "SP"];
+
 
 #[derive(PartialEq)]
 enum DebuggerState {
@@ -37,6 +49,7 @@ pub struct Debugger {
     watchpoints: BTreeSet<u16>,
     breakpoints: BTreeSet<u16>,
     history_location: usize, // used for scrolling back in history
+    run_to_point: Option<u16>,
 }
 
 impl Debugger {
@@ -81,6 +94,7 @@ impl Debugger {
             breakpoints: BTreeSet::new(),
             watchpoints: BTreeSet::new(),
             history_location: 0,
+            run_to_point: None,
         };
 
         refresh();
@@ -89,8 +103,8 @@ impl Debugger {
     }
 
     pub fn handle_input(&mut self) {
-
-        let mut ch = getch();
+        timeout(-1); //make input blocking
+        let ch = getch();
         match ch {
             KEY_LEFT => {
                 self.cpu.dispatch_opcode();
@@ -111,6 +125,8 @@ impl Debugger {
             }
 
             KEY_UP => {
+                // go back in history
+
                 let next_hist = self.history_location;
                 let mstr = self.get_nth_hist_item(next_hist);
 
@@ -121,6 +137,8 @@ impl Debugger {
             }
 
             KEY_DOWN => {
+                // go forward in history
+
                 let next_hist = if self.history_location == 0 {
                     0
                 } else {
@@ -189,7 +207,9 @@ impl Debugger {
         let mut y = 0;
         getmaxyx(self.in_win, &mut y, &mut x);
 
-        let num_lines = y - 3; //number of lines to draw backlog/previous input and output
+        // number of lines to draw backlog/previous input and output
+        // - 2 for top and bottom window, - 1 for input line
+        let num_lines = y - 3;
 
         let relevant_hist: Vec<(usize, &String)> = self.output_buffer[0..]
             .iter()
@@ -203,6 +223,7 @@ impl Debugger {
             wprintw(self.in_win, hist.as_ref());
         }
 
+        // input line
         wmove(self.in_win, y - 2, 1);
         wprintw(self.in_win, self.input_buffer.as_ref());
     }
@@ -272,18 +293,16 @@ impl Debugger {
     fn draw_watchpoints(&mut self) {
         let mut x = 0;
         let mut y = 0;
-        static x_width: i32 = 11;
         getmaxyx(self.reg_win, &mut y, &mut x);
         let watchpoints: Vec<u16> = self.watchpoints.iter().cloned().collect();
 
-        static y_offset: i32 = 9;
 
-        for i in y_offset..(y_offset + (self.watchpoints.len() as i32)) {
+        for i in WATCHPOINT_Y_OFFSET..(WATCHPOINT_Y_OFFSET + (self.watchpoints.len() as i32)) {
             wmove(self.reg_win, i, 1);
             wprintw(self.reg_win,
                     format!("({:X}): {:X}",
-                            watchpoints[(i - y_offset) as usize],
-                            self.cpu.mem[(watchpoints[(i - y_offset) as usize]) as usize])
+                            watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
+                            self.cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize])
                         .as_ref());
         }
 
@@ -311,8 +330,6 @@ impl Debugger {
     }
 
     fn draw_stack_data(&mut self) {
-        static stack_x_pos_offset: i32 = 26;
-
         let mut x = 0;
         let mut y = 0;
         getmaxyx(self.reg_win, &mut y, &mut x);
@@ -332,13 +349,13 @@ impl Debugger {
             number_of_stack_frames as i32
         };
         // Stack starts at 0xFFFE
-        let mut cur_stack_ptr = 0xFFFE - effective_stack_frames;
+        let cur_stack_ptr = 0xFFFE - effective_stack_frames;
 
         for (i, addr) in (cur_stack_ptr..0xFFFF)
             .filter(|&n| n % 2 == 0)
             .enumerate() {
             // i+1 because enumerate starts at 0
-            wmove(self.reg_win, (i as i32) + 1, stack_x_pos_offset);
+            wmove(self.reg_win, (i as i32) + 1, STACK_X_POS_OFFSET);
             wprintw(self.reg_win,
                     format!("({:X}): {:02X}{:02X}",
                             addr,
@@ -349,18 +366,9 @@ impl Debugger {
     }
 
     fn draw_registers(&mut self) {
-        static reg8bit_list: [CpuRegister; 8] = [CpuRegister::A,
-                                                 CpuRegister::B,
-                                                 CpuRegister::C,
-                                                 CpuRegister::D,
-                                                 CpuRegister::E,
-                                                 CpuRegister::H,
-                                                 CpuRegister::HL,
-                                                 CpuRegister::L];
-        static reg8bit_name: [&'static str; 8] = ["A", "B", "C", "D", "E", "H", "(HL)", "L"];
-
+        
         for i in 0..8 {
-            self.draw_register(i + 1, reg8bit_name[i as usize], reg8bit_list[i as usize]);
+            self.draw_register(i + 1, REG8BIT_NAME[i as usize], REG8BIT_LIST[i as usize]);
         }
         wmove(self.reg_win, 8, 1);
         wprintw(self.reg_win,
@@ -370,11 +378,8 @@ impl Debugger {
 
     // draw 16bit registers in the second column (right shifted by 11 characters) of the reg_win
     fn draw_registers16(&mut self) {
-        static reg16bit_list: [CpuRegister16; 4] =
-            [CpuRegister16::BC, CpuRegister16::DE, CpuRegister16::HL, CpuRegister16::SP];
-        static reg16bit_name: [&'static str; 4] = ["BC", "DE", "HL", "SP"];
         for i in 0..4 {
-            self.draw_register16(i + 1, reg16bit_name[i as usize], reg16bit_list[i as usize]);
+            self.draw_register16(i + 1, REG16BIT_NAME[i as usize], REG16BIT_LIST[i as usize]);
         }
 
         // 4
@@ -398,37 +403,37 @@ impl Debugger {
                 self.cpu.dispatch_opcode();
                 "Stepping...".to_string()
             }
-            DebuggerAction::WatchPoint { addr: addr } => {
+            DebuggerAction::WatchPoint { addr } => {
                 self.watchpoints.insert(addr);
                 format!("Watchpoint set at 0x{:X}", addr)
             }
-            DebuggerAction::UnwatchPoint { addr: addr } => {
+            DebuggerAction::UnwatchPoint { addr } => {
                 self.watchpoints.remove(&addr);
                 format!("Removing watchpoint at 0x{:X}", addr)
             }
-            DebuggerAction::SetBreakPoint { addr: addr } => {
+            DebuggerAction::SetBreakPoint { addr } => {
                 let ar_max = self.dissassembled_rom.len() - 1;
                 let bp = binsearch_inst(&self.dissassembled_rom, addr, 0, ar_max as usize);
 
                 if let Some(inst) = bp {
                     self.breakpoints.insert(addr);
-                    format!("Setting breakpoint at 0x{:X}", addr)
+                    format!("Setting breakpoint at 0x{:X} ({})", addr, inst)
                 } else {
                     format!("Cannot break at invalid address 0x{:X}", addr)
                 }
             }
-            DebuggerAction::UnsetBreakPoint { addr: addr } => {
+            DebuggerAction::UnsetBreakPoint { addr } => {
                 self.breakpoints.remove(&addr);
                 format!("Removing breakpoint at 0x{:X}", addr)
             }
-            DebuggerAction::RunToAddress { addr: addr } => {
-                // will need special case
-                "hello".to_string()
+            DebuggerAction::RunToAddress { addr } => {
+                self.run_to_point = Some(addr);
+                format!("Going to 0x{:X}", addr)
             }
-            DebuggerAction::Show { show: show } => {
+            DebuggerAction::Show { show } => {
                 match show {
-                    ShowableThing::Address { addr: addr } => {
-                        format!("(0x{:X}) = {}", addr, self.cpu.mem[addr as usize])
+                    ShowableThing::Address { addr } => {
+                        format!("(0x{:X}) = 0x{:X}", addr, self.cpu.mem[addr as usize])
                     }
                     ShowableThing::Breakpoints => format!("Breakpoints: {:?}", self.breakpoints),
                 }
@@ -447,7 +452,7 @@ impl Debugger {
         let offset = val * 2;
         let new_idx = match self.output_buffer.len() {
             0 | 1 => panic!("Minimum value of output buffer must be 2"),
-            n => {
+            _ => {
                 if offset > (self.output_buffer.len() - 1) {
                     None
                 } else {
@@ -475,10 +480,27 @@ impl Debugger {
             if self.breakpoints.contains(&self.cpu.pc) {
                 self.debugger_state = DebuggerState::Paused;
                 break;
+            } else if self.run_to_point == Some(self.cpu.pc) {
+                self.debugger_state = DebuggerState::Paused;
+                self.run_to_point = None;
             }
             self.cpu.dispatch_opcode();
         }
 
+    }
+
+    pub fn make_input_non_blocking(&mut self) {
+        timeout(0);
+    }
+
+    pub fn no_input(&mut self) -> bool {
+        let ch = getch();
+
+        ch == ERR
+    }
+
+    pub fn pause(&mut self) {
+        self.debugger_state = DebuggerState::Paused;
     }
 }
 

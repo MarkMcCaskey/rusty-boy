@@ -12,7 +12,6 @@ version = "0.12.4"
 version = "0.12.4"
 
 [dependencies]
-nom = "^2.1"
 clap = "2"
 sdl2 = "0.27"
 log = "0.3.6"

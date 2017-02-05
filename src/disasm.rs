@@ -272,6 +272,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
     (mnemonic, instruction_size)
 }
 
+#[allow(dead_code)]
 fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
     let mut pc = 0;
 
@@ -330,6 +331,7 @@ pub fn binsearch_inst(vec: &Vec<(String, u16)>,
     };
 }
 
+#[allow(dead_code)]
 fn main() {
     // // Print "[prefix] opcode size mnemonic" table
     // for i in 0..255 {
@@ -342,7 +344,6 @@ fn main() {
     // }
     use std::fs::File;
     use std::io::Read;
-    use std::env;
     use clap::{Arg, App};
 
     let matches = App::new("disasm")
