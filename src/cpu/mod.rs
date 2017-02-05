@@ -74,7 +74,7 @@ impl Cpu {
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
             state: CpuState::Normal,
-            event_log_enabled: true,
+            event_log_enabled: false,
             events_deq: VecDeque::new(),
             cycles: 0,
         };
@@ -132,6 +132,14 @@ impl Cpu {
         self.mem[0xFF4A] = 0x00;
         self.mem[0xFF4B] = 0x00;
         self.mem[0xFFFF] = 0x00;
+    }
+
+    fn log_event(&mut self, event: CpuEvent) {
+        if self.event_log_enabled {
+            self.events_deq.push_back(
+                EventLogEntry { timestamp: self.cycles,
+                                event: event });
+        };
     }
 
     //FF04 Div
@@ -674,12 +682,7 @@ impl Cpu {
     }
     
     pub fn get_mem(&mut self, address: usize) -> i8 {
-        // TODO replace this with macro that checks flag and pushes?
-        if self.event_log_enabled {
-            self.events_deq.push_back(
-                EventLogEntry { timestamp: self.cycles,
-                                event:CpuEvent::Read { from: address as MemAddr }});
-        };
+        self.log_event(CpuEvent::Read { from: address as MemAddr });
         self.mem[address]
     }
 
@@ -689,11 +692,8 @@ impl Cpu {
     See documentation and read carefully before implementing this.
      */
     pub fn set_mem(&mut self, address: usize, value: i8) {
-        if self.event_log_enabled {
-            self.events_deq.push_back(
-                EventLogEntry { timestamp: self.cycles,
-                                event: CpuEvent::Write { to: address as MemAddr}});
-        }
+        self.log_event(CpuEvent::Write { to: address as MemAddr});
+
         match address {
             ad @ 0xE000 ... 0xFE00 | ad @ 0xC000 ... 0xDE00
                 => {
@@ -1572,9 +1572,12 @@ impl Cpu {
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        self.events_deq.push_back(EventLogEntry { timestamp: self.cycles,
-                                                  event: CpuEvent::Execute(self.pc as MemAddr) });
-       
+
+        {
+            let cur_pc = self.pc;
+            self.log_event(CpuEvent::Execute(cur_pc as MemAddr));
+        }
+
         self.handle_interrupts();
 
 
@@ -1585,7 +1588,6 @@ impl Cpu {
         } else if self.state == CpuState::Stop {
             return inst_time; //unsure of this
         } //otherwise it's in normal state:
-
 
 
         //Then execute instruction
