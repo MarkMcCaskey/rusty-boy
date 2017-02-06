@@ -39,6 +39,11 @@ pub struct EventLogEntry {
 // Additional 2 bytes to skip bounds check when fetching instr. operands
 const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 2;
 
+#[inline]
+pub fn i8_to_u16(low_byte: i8, high_byte: i8) -> u16{
+    (((high_byte as u8) as u16) << 8) | ((low_byte as u8) as u16)
+}
+
 pub struct Cpu {
     a:   i8,
     b:   i8,
@@ -242,10 +247,9 @@ impl Cpu {
         }
 
         pub fn channel1_frequency(&self) -> u16 {
-            let lower = self.mem[0xFF13] as u16;
-            let higher = (self.mem[0xFF14] & 0x7) as u16;
-            
-            (higher << 8) | lower
+            let lower = self.mem[0xFF13];
+            let higher = (self.mem[0xFF14] & 0x7);
+            i8_to_u16(lower, higher)
         }
 
         pub fn channel1_counter_consecutive_selection(&self) -> bool {
@@ -279,10 +283,10 @@ impl Cpu {
         }
 
         pub fn channel2_frequency(&self) -> u16 {
-            let lower = self.mem[0xFF18] as u16;
-            let higher = (self.mem[0xFF19] & 0x7) as u16;
+            let lower = self.mem[0xFF18];
+            let higher = (self.mem[0xFF19] & 0x7);
             
-            (higher << 8) | lower
+            i8_to_u16(lower, higher)
         }
         
         pub fn channel2_counter_consecutive_selection(&self) -> bool {
@@ -307,10 +311,10 @@ impl Cpu {
         }
 
         pub fn channel3_frequency(&self) -> u16 {
-            let lower = self.mem[0xFF1C] as u16;
-            let higher = (self.mem[0xFF1D] & 0x7) as u16;
+            let lower = self.mem[0xFF1C];
+            let higher = (self.mem[0xFF1D] & 0x7);
             
-            (higher << 8) | lower
+            i8_to_u16(lower, higher)
         }
 
         pub fn channel3_counter_consecutive_selection(&self) -> bool {
@@ -529,7 +533,7 @@ impl Cpu {
     }
 
     fn dma(&mut self) {
-        let addr = (self.mem[0xFF46] as u16) << 8;
+        let addr = ((self.mem[0xFF46] as u8) as u16) << 8;
         
         //TODO: ensure this doesn't include end value
         for i in 0..0xA0 { //number of values to be copied
@@ -625,7 +629,7 @@ impl Cpu {
     }
 
     fn hl(&self) -> u16 {
-        (((self.h as u16) << 8) & 0xFF00) | ((self.l as u16) & 0xFF)
+        i8_to_u16(self.l, self.h)
     }
 
     fn set_hl(&mut self, hlv:u16) {
@@ -635,11 +639,13 @@ impl Cpu {
     }
 
     fn bc(&self) -> u16 {
-        ((self.b as u16) << 8) | ((self.c as u16) & 0xFF)
+        //((self.b as u16) << 8) | ((self.c as u16) & 0xFF)
+        i8_to_u16(self.c, self.b)
     }
 
     fn de(&self) -> u16 {
-        ((self.d as u16) << 8) | ((self.e as u16) & 0xFF)
+        //((self.d as u16) << 8) | ((self.e as u16) & 0xFF)
+        i8_to_u16(self.e, self.d)
     }
 
     fn set_bc(&mut self, bcv: u16) {
@@ -856,7 +862,6 @@ impl Cpu {
 
     fn ldnnsp(&mut self, b1: u8, b2: u8) {
         let old_sp = self.sp;
-
         self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, old_sp as i8);
     }
 
@@ -1469,7 +1474,8 @@ impl Cpu {
         let val2 = self.get_mem((sp_idx-1) as usize);
         self.sp += 2;
 
-        (((val2 as u16) << 8) & 0xFF00) | ((val1 as u16) & 0xFF)
+        //(((val2 as u16) << 8) & 0xFF00) | ((val1 as u16) & 0xFF)
+        i8_to_u16(val1, val2)
     }
 
     fn ret(&mut self) {
