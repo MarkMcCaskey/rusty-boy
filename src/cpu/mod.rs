@@ -1372,7 +1372,10 @@ impl Cpu {
     }
 
     fn jpnn(&mut self, nn: u16) {
-        self.pc = (Wrapping(nn) - Wrapping(3)).0; //NOTE: Verify this byte order
+        let old_pc = self.pc;
+        let new_pc = (Wrapping(nn) - Wrapping(3)).0;
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = new_pc; //NOTE: Verify this byte order
     }
 
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
@@ -1390,13 +1393,17 @@ impl Cpu {
 
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
-        let addr = self.hl();
-        self.pc = (Wrapping(addr) - Wrapping(1)).0;
+        let old_pc = self.pc;
+        let new_pc = self.hl();
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
 
     fn jrn(&mut self, n: i8) {
-        let old_pc = self.pc; 
-        self.pc = (((old_pc as i32) + (n as i32)) as i16) as u16;
+        let old_pc = self.pc;
+        let new_pc = (((old_pc as i32) + (n as i32)) as i16) as u16;
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = new_pc;
     }
 
     //Double check run time length
@@ -1409,16 +1416,20 @@ impl Cpu {
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 let old_pc = self.pc;
-                self.pc = ((old_pc as i32) + (n as i32)) as u16;
+                let new_pc = ((old_pc as i32) + (n as i32)) as u16;
+                self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+                self.pc = new_pc;
                 true
             } else { false }
     }
 
     //TODO: Verify if SP should be decremented first
     fn callnn(&mut self, nn: u16) {
-        let cur_pc = self.pc;
-        self.push_onto_stack(cur_pc + 3);
-        self.pc = nn - 3; //nn -3 to account for pc inc in dispatch_opcode
+        let old_pc = self.pc;
+        self.push_onto_stack(old_pc + 3);
+        let new_pc = nn;
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = new_pc - 3; //nn -3 to account for pc inc in dispatch_opcode
     }
 
     fn push_onto_stack(&mut self, nn: u16) {
@@ -1462,8 +1473,10 @@ impl Cpu {
     }
 
     fn ret(&mut self) {
-        let new_addr = self.pop_from_stack();
-        self.pc = new_addr - 1;
+        let old_pc = self.pc;
+        let new_pc = self.pop_from_stack();
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = new_pc - 1;
     }
 
     fn retcc(&mut self, cc: Cc) -> bool {
@@ -1480,9 +1493,10 @@ impl Cpu {
     }
 
     fn reti(&mut self) {
-        let new_addr = self.pop_from_stack();
-
-        self.pc = new_addr - 1;
+        let old_pc = self.pc;
+        let new_pc = self.pop_from_stack();
+        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        self.pc = new_pc - 1;
         self.ei();
     }
 
