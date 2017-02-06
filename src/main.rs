@@ -77,12 +77,6 @@ fn main() {
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
         .build();
 
-    let config = Config::builder()
-        .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
-        .unwrap();
-
-
 
     /*Command line arguments*/
     let matches = App::new("rusty-boy")
@@ -103,8 +97,26 @@ fn main() {
              .long("debug")
              .help("Runs in step-by-step debug mode")
              .takes_value(false))
+        .arg(Arg::with_name("trace")
+             .short("t")
+             .multiple(true)
+             .long("trace")
+             .help("Runs with verbose trace")
+             .takes_value(false))
         .get_matches();
 
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)))
+        .build(Root::builder().appender("stdout").build(
+            if matches.is_present("trace") {
+                LogLevelFilter::Trace
+            } else {
+                LogLevelFilter::Debug
+            }))
+        .unwrap();
+
+    
     /*Attempt to read ROM first*/    
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
     let debug_mode = matches.is_present("debug");
