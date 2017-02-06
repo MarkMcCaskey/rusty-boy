@@ -49,13 +49,14 @@ impl AudioCallback for SquareWave {
     }
 }
 
-const SCREEN_WIDTH: u32 = 1600;
+const SCREEN_WIDTH: u32 = 1400;
 const SCREEN_HEIGHT: u32 = 900;
 
-const MEM_DISP_WIDTH: i32 = 384;
-const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
 const X_SCALE: f32 = 4.0;
 const Y_SCALE: f32 = X_SCALE;
+
+const MEM_DISP_WIDTH: i32 = SCREEN_WIDTH as i32 / (X_SCALE as i32);
+const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
 
 fn save_screenshot(renderer: &sdl2::render::Renderer,
                    filename: String) {
@@ -85,6 +86,9 @@ fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
 
 #[allow(unused_variables)]
 fn main() {
+    assert!(SCREEN_WIDTH as f32 >= MEM_DISP_WIDTH as f32 * X_SCALE,
+            "Mem vis does not fit in screen");
+
     /*Set up logging*/
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
@@ -295,11 +299,16 @@ fn main() {
                         Some(pc) => {
                             let pc = pc as usize;
                             let mem = gameboy.mem;
+                            let b1 = mem[pc+1];
+                            let b2 = mem[pc+2];
                             let (mnem, size) = disasm::pp_opcode(mem[pc] as u8,
-                                                                 mem[pc+1] as u8,
-                                                                 mem[pc+1] as u8,
+                                                                 b1 as u8,
+                                                                 b2 as u8,
                                                                  pc as u16);
-                            println!("${:04X} {:?}", pc, mnem);
+                            let nn = ((b2 as u16) << 8) | (b1 as u16);
+                            let nn2 = i8_to_u16(b1, b2);
+                            println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X} 0x{:04X}",
+                                     pc, mnem, mem[pc], b1, b2, nn, nn2);
                         }
                         _ => (),
                     }
@@ -337,7 +346,7 @@ fn main() {
             clock_cycles = 0;
         }
 
-        let fake_display_hsync = true;
+        let fake_display_hsync = false;
         if fake_display_hsync {
             const cycles_per_hsync: u64 = 114; // FIXME this is probably wrong
             // update LY respective to cycles spent execing instruction
