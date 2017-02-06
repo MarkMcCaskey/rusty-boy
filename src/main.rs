@@ -228,7 +228,9 @@ fn main() {
 
     let mut cycle_count = 0;
     let mut clock_cycles = 0;
+    let mut prev_hsync_cycles: u64 = 0;
 
+    // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
 
     'main: loop {
@@ -320,6 +322,19 @@ fn main() {
             //trace!("Incrementing the timer!");
             gameboy.timer_cycle();
             clock_cycles = 0;
+        }
+
+        let fake_display_hsync = true;
+        if fake_display_hsync {
+            const cycles_per_hsync: u64 = 114; // FIXME this is probably wrong
+            // update LY respective to cycles spent execing instruction
+            while true {
+                if cycle_count < prev_hsync_cycles {
+                    break;
+                }
+                gameboy.inc_ly();
+                prev_hsync_cycles += cycles_per_hsync;
+            }
         }
 
         /*
@@ -423,7 +438,7 @@ fn main() {
 
             // Event visualization
             // TODO: can be used to do partial "smart" redraw, and speed thing up
-            for entry in gameboy.events_deq.iter_mut() {
+            for entry in gameboy.events_deq.iter() {
                 let timestamp = entry.timestamp;
                 let ref event = entry.event;
                 {
@@ -452,6 +467,17 @@ fn main() {
                                                           0, 0, 0);
                                 renderer.set_draw_color(Color::RGB(r, g, b));
                                 renderer.draw_point(addr_to_point(addr));
+                            }
+                            CpuEvent::Jump { from: src, to: dst } => {
+                                renderer.set_draw_color(Color::RGB(colval, colval, 0));
+                                let src_point = addr_to_point(src);
+                                let dst_point = addr_to_point(dst);
+                                // Horizontal lines are drawn with scaling but diagonal
+                                // lines ignore it for some reason, which allows us to
+                                // draw lines thinner than memory cells.
+                                if src_point.y() != dst_point.y() {
+                                    renderer.draw_line(src_point, dst_point);
+                                }
                             }
                             _ => (),
                         }
