@@ -58,6 +58,20 @@ const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
 const X_SCALE: f32 = 4.0;
 const Y_SCALE: f32 = X_SCALE;
 
+fn save_screenshot(renderer: &sdl2::render::Renderer,
+                   filename: String) {
+    let window = renderer.window().unwrap();
+    let (w,h) = window.size();
+    let format = window.window_pixel_format();
+    let mut pixels = renderer.read_pixels(None, format).unwrap();
+    let slices = pixels.as_mut_slice();
+    let pitch = format.byte_size_of_pixels(w as usize) as u32;
+    let masks = format.into_masks().unwrap();
+    let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, w, h, pitch, masks).unwrap();
+    surface.save_bmp(filename);
+}
+
+
 fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
     let x_scaled = ((x as f32) / X_SCALE) as i32;
     let y_scaled = ((y as f32) / Y_SCALE) as i32;
@@ -67,8 +81,8 @@ fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
     } else {
         None
     }
-
 }
+
 
 #[allow(unused_variables)]
 fn main() {
@@ -460,20 +474,13 @@ fn main() {
              *   11111111 1110001 00101010
              */
 
-
+            // TODO add a way to enable/disable this while running
             let record_screen = false;
             if record_screen {
-                let pump = &sdl_context.event_pump().unwrap();
-                let format = renderer.window().unwrap().window_pixel_format();
-                let mut pixels = renderer.read_pixels(None, format).unwrap();
-                let slices = pixels.as_mut_slice();
-                let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, SCREEN_WIDTH, SCREEN_HEIGHT, format.byte_size_of_pixels(SCREEN_WIDTH as usize) as u32, format.into_masks().unwrap()).unwrap();
-                surface.save_bmp(format!("screen{:010}.bmp", frame_num.0));
+                save_screenshot(&renderer, format!("screen{:010}.bmp", frame_num.0));
                 frame_num += Wrapping(1);
-
             }
             
-
             renderer.present();
             
             const FRAME_SLEEP: u64 = 1000/120;
