@@ -1,7 +1,10 @@
-pub const ZL: i8 = 0x80;
-pub const NLV: i8 = 0x40;
-pub const HL: i8 = 0x20;
-pub const CL: i8 = 0x10;
+#[allow(non_camel_case_types)]
+pub type byte = u8;
+
+pub const ZL: byte = 0x80;
+pub const NLV: byte = 0x40;
+pub const HL: byte = 0x20;
+pub const CL: byte = 0x10;
 pub const VBLANK_INTERRUPT_ADDRESS: u16 = 0x40;
 pub const LCDC_INTERRUPT_ADDRESS: u16 = 0x48;
 pub const TIMER_OVERFLOW_INTERRUPT_ADDRESS: u16 = 0x50;
@@ -33,7 +36,7 @@ pub enum CpuRegister {
     H,
     L,
     HL,
-    Num(i8),
+    Num(byte),
 }
 
 #[derive(Clone,Copy,PartialEq,Debug)]
