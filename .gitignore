@@ -8,3 +8,4 @@ Cargo.lock
 
 # ignore generated code
 src/debug/dbglanguage.rs
+src/assembler/asm.rs

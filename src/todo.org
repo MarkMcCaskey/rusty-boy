@@ -1,14 +1,17 @@
 customize zone (m-x find-variable zone-programs) Kappa
 
-* TODO CPU
+* TODO CPU[50%]
 ** DONE Dispatch
 *** DONE Prefixed
 *** DONE Unprefixed
-** TODO Opcodes
+*** KNOWNCAUSE DMA 
+    Currently it's 'instanteous', should take 140ns or whatever the
+    doc says it should
+** TODO Interrupts
+*** TODO Throw
+*** TODO Handle
+** DONE Opcodes[100%]
    (Note review serial IO)
-*** TODO Interrupts
-**** TODO Throw
-**** TODO Handle
 *** DONE Loads
 *** DONE Refactor opcodes
 **** DONE Flag setting
@@ -20,37 +23,71 @@ customize zone (m-x find-variable zone-programs) Kappa
 ** TODO Tests!
 *** TODO opcodes
 ** DONE Split CPU into multiple files
-** TODO Special Registers!!
+** TODO Special Registers!![66%]
 *** TODO Sound
 *** DONE Video
 *** DONE Timer
-* TODO Graphics
-** TODO Gameboy screen itself
-** TODO Memory visualization
-*** TODO Interactive debugging tools?!
-
-    
-* DONE Etc
-** DONE Controller input
-
-* TODO Tools
+* TODO Graphics[0%]
+** TODO Gameboy screen itself[16%]
+*** DONE Window
+*** TODO Interrupts on pixel draw
+*** TODO Vblank and cpu interrupt
+*** TODO Background
+*** TODO Window
+*** TODO Sprites
+** TODO Memory visualization[33%]
+*** DONE Draw memory in real time
+*** TODO Query memory[25%]
+**** DONE Print opcode
+**** TODO Adjustable window
+**** TODO Zooming
+**** TODO In line information
+* TODO Input[0%]
+** TODO Controller input[0%]
+*** TODO SNES
+**** DONE Buttons
+**** TODO Dpad
+*** TODO General handling
+*** TODO Remapping
+** TODO Keyboard
+*** TODO General handling
+*** TODO Remapping
+* TODO Tools[0%]
 ** TODO Assembler
-** DONE Disassembler
+*** TODO Instruction translation
+*** TODO Pseudo-instructions?
+*** TODO Automate or use default values to make it easier
+*** TODO Address resolution
+*** TODO Name substitution
+** TODO Disassembler[66%]
 *** DONE Generate text
-** TODO Debugger
+*** DONE Resolve relative jumps
+*** TODO Needs to trace through program
+
+    Debugger cannot statically decompile file because of variable
+    byte-length and the fact that ROMs store all data together, even
+    non-instructions with no distinction
+    
+** TODO Debugger[55%]
 *** DONE Graphics
 **** DONE Watch instructions execute, monitor registers
 **** DONE Colorize output for easier reading
-*** TODO Persistence
-**** TODO Time travel (unexecute instructions)
+*** CANCELED Persistence
+**** CANCELED Time travel (unexecute instructions)
 *** DONE Arithmetic
 **** DONE Numbers
 *** TODO Bindable names
 *** DONE Breakpoint
 *** DONE Watchpoints
-*** TODO Print registers Kappa
-
-* TODO Improve code quality
+*** TODO Print registers
+*** TODO Query
+**** TODO Patterns
+     Certain structures such as functions or loops can be treated
+     differently and at a higher level
+**** TODO Values
+     Search memory (possibly through time if persistence is done) to
+     report information about the manner in which the ROM is executing
+* TODO Improve code quality[33%]
 ** DONE Fix all warnings
 ** TODO Type annotate literals
 ** TODO abstract logic in main
