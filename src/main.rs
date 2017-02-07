@@ -49,7 +49,6 @@ impl AudioCallback for SquareWave {
         }
     }
 }
-
 const SCREEN_WIDTH: u32 = 1400;
 const SCREEN_HEIGHT: u32 = 900;
 
@@ -83,7 +82,6 @@ fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
         None
     }
 }
-
 
 #[allow(unused_variables)]
 fn main() {
@@ -235,6 +233,8 @@ fn main() {
     let mut prev_hsync_cycles: u64 = 0;
 
     // Number of frames saved as screenshots
+    let mut frame_num = Wrapping(0);
+
     let mut frame_num = Wrapping(0);
 
     'main: loop {
@@ -443,6 +443,7 @@ fn main() {
 
             // How long stuff stays on screen
             // TODO: Should depend on num of cpu cycles and frame delay
+
             const FADE_DELAY: u64 = CPU_CYCLES_PER_VBLANK * 15;
 
             // Event visualization
@@ -515,7 +516,7 @@ fn main() {
                 save_screenshot(&renderer, format!("screen{:010}.bmp", frame_num.0));
                 frame_num += Wrapping(1);
             }
-            
+
             renderer.present();
             
             const FRAME_SLEEP: u64 = 1000/120;
