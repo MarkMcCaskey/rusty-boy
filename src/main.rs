@@ -49,14 +49,28 @@ impl AudioCallback for SquareWave {
         }
     }
 }
-
-const SCREEN_WIDTH: u32 = 1600;
+const SCREEN_WIDTH: u32 = 1400;
 const SCREEN_HEIGHT: u32 = 900;
 
-const MEM_DISP_WIDTH: i32 = 384;
-const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
 const X_SCALE: f32 = 4.0;
 const Y_SCALE: f32 = X_SCALE;
+
+const MEM_DISP_WIDTH: i32 = SCREEN_WIDTH as i32 / (X_SCALE as i32);
+const MEM_DISP_HEIGHT: i32 = 0xFFFF/MEM_DISP_WIDTH; // TODO check this?
+
+fn save_screenshot(renderer: &sdl2::render::Renderer,
+                   filename: String) {
+    let window = renderer.window().unwrap();
+    let (w,h) = window.size();
+    let format = window.window_pixel_format();
+    let mut pixels = renderer.read_pixels(None, format).unwrap();
+    let slices = pixels.as_mut_slice();
+    let pitch = format.byte_size_of_pixels(w as usize) as u32;
+    let masks = format.into_masks().unwrap();
+    let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, w, h, pitch, masks).unwrap();
+    surface.save_bmp(filename);
+}
+
 
 fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
     let x_scaled = ((x as f32) / X_SCALE) as i32;
@@ -67,21 +81,17 @@ fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
     } else {
         None
     }
-
 }
 
 #[allow(unused_variables)]
 fn main() {
+    assert!(SCREEN_WIDTH as f32 >= MEM_DISP_WIDTH as f32 * X_SCALE,
+            "Mem vis does not fit in screen");
+
     /*Set up logging*/
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
         .build();
-
-    let config = Config::builder()
-        .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .build(Root::builder().appender("stdout").build(LogLevelFilter::Debug))
-        .unwrap();
-
 
 
     /*Command line arguments*/
@@ -103,8 +113,26 @@ fn main() {
              .long("debug")
              .help("Runs in step-by-step debug mode")
              .takes_value(false))
+        .arg(Arg::with_name("trace")
+             .short("t")
+             .multiple(true)
+             .long("trace")
+             .help("Runs with verbose trace")
+             .takes_value(false))
         .get_matches();
 
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)))
+        .build(Root::builder().appender("stdout").build(
+            if matches.is_present("trace") {
+                LogLevelFilter::Trace
+            } else {
+                LogLevelFilter::Debug
+            }))
+        .unwrap();
+
+    
     /*Attempt to read ROM first*/    
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
     let debug_mode = matches.is_present("debug");
@@ -202,6 +230,10 @@ fn main() {
 
     let mut cycle_count = 0;
     let mut clock_cycles = 0;
+    let mut prev_hsync_cycles: u64 = 0;
+
+    // Number of frames saved as screenshots
+    let mut frame_num = Wrapping(0);
 
     let mut frame_num = Wrapping(0);
 
@@ -264,11 +296,16 @@ fn main() {
                         Some(pc) => {
                             let pc = pc as usize;
                             let mem = gameboy.mem;
+                            let b1 = mem[pc+1];
+                            let b2 = mem[pc+2];
                             let (mnem, size) = disasm::pp_opcode(mem[pc] as u8,
-                                                                 mem[pc+1] as u8,
-                                                                 mem[pc+2] as u8,
+                                                                 b1 as u8,
+                                                                 b2 as u8,
                                                                  pc as u16);
-                            println!("${:04X} {:?}", pc, mnem);
+                            let nn = ((b2 as u16) << 8) | (b1 as u16);
+                            let nn2 = i8_to_u16(b1, b2);
+                            println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X} 0x{:04X}",
+                                     pc, mnem, mem[pc], b1, b2, nn, nn2);
                         }
                         _ => (),
                     }
@@ -296,6 +333,19 @@ fn main() {
             clock_cycles = 0;
         }
 
+        let fake_display_hsync = false;
+        if fake_display_hsync {
+            const cycles_per_hsync: u64 = 114; // FIXME this is probably wrong
+            // update LY respective to cycles spent execing instruction
+            while true {
+                if cycle_count < prev_hsync_cycles {
+                    break;
+                }
+                gameboy.inc_ly();
+                prev_hsync_cycles += cycles_per_hsync;
+            }
+        }
+
         /*
          * Gameboy screen is 256x256
          * only 160x144 are displayed at a time
@@ -321,8 +371,13 @@ fn main() {
             Err(_) => error!("Could not set render scale"),
         }
         //1ms before drawing in terms of CPU time we must throw a vblank interrupt 
-        //TODO: figure out what 70224 is and make it a constant (and/or variable based on whether it's GB, SGB, etc.)
-        if ticks >= 70224 {
+        // TODO make this variable based on whether it's GB, SGB, etc.
+        const CPU_CYCLES_PER_SECOND: u64 = 4194304;
+        const VERT_SYNC_RATE: f32 = 59.73;
+        const CPU_CYCLES_PER_VBLANK: u64 = ((CPU_CYCLES_PER_SECOND as f32) /
+                                            VERT_SYNC_RATE) as u64;
+
+        if ticks >= CPU_CYCLES_PER_VBLANK {
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
@@ -388,11 +443,12 @@ fn main() {
 
             // How long stuff stays on screen
             // TODO: Should depend on num of cpu cycles and frame delay
-            const FADE_DELAY: u64 = 25531;
+
+            const FADE_DELAY: u64 = CPU_CYCLES_PER_VBLANK * 15;
 
             // Event visualization
             // TODO: can be used to do partial "smart" redraw, and speed thing up
-            for entry in gameboy.events_deq.iter_mut() {
+            for entry in gameboy.events_deq.iter() {
                 let timestamp = entry.timestamp;
                 let ref event = entry.event;
                 {
@@ -422,6 +478,17 @@ fn main() {
                                 renderer.set_draw_color(Color::RGB(r, g, b));
                                 renderer.draw_point(addr_to_point(addr));
                             }
+                            CpuEvent::Jump { from: src, to: dst } => {
+                                renderer.set_draw_color(Color::RGB(colval, colval, 0));
+                                let src_point = addr_to_point(src);
+                                let dst_point = addr_to_point(dst);
+                                // Horizontal lines are drawn with scaling but diagonal
+                                // lines ignore it for some reason, which allows us to
+                                // draw lines thinner than memory cells.
+                                if src_point.y() != dst_point.y() {
+                                    renderer.draw_line(src_point, dst_point);
+                                }
+                            }
                             _ => (),
                         }
                     }
@@ -443,19 +510,12 @@ fn main() {
              *   11111111 1110001 00101010
              */
 
-
+            // TODO add a way to enable/disable this while running
             let record_screen = false;
             if record_screen {
-                let pump = &sdl_context.event_pump().unwrap();
-                let format = renderer.window().unwrap().window_pixel_format();
-                let mut pixels = renderer.read_pixels(None, format).unwrap();
-                let slices = pixels.as_mut_slice();
-                let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, SCREEN_WIDTH, SCREEN_HEIGHT, format.byte_size_of_pixels(SCREEN_WIDTH as usize) as u32, format.into_masks().unwrap()).unwrap();
-                surface.save_bmp(format!("screen{:010}.bmp", frame_num.0));
+                save_screenshot(&renderer, format!("screen{:010}.bmp", frame_num.0));
                 frame_num += Wrapping(1);
-
             }
-            
 
             renderer.present();
             
