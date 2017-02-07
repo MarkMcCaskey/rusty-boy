@@ -7,6 +7,7 @@ extern crate ncurses;
 mod cpu;
 mod disasm;
 mod debugger;
+mod assembler;
 
 use cpu::*;
 use debugger::*;
@@ -49,6 +50,7 @@ impl AudioCallback for SquareWave {
     }
 }
 
+
 const SCREEN_WIDTH: u32 = 1400;
 const SCREEN_HEIGHT: u32 = 900;
 
@@ -71,7 +73,6 @@ fn save_screenshot(renderer: &sdl2::render::Renderer,
     surface.save_bmp(filename);
 }
 
-
 fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
     let x_scaled = ((x as f32) / X_SCALE) as i32;
     let y_scaled = ((y as f32) / Y_SCALE) as i32;
@@ -82,7 +83,6 @@ fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<cpu::MemAddr> {
         None
     }
 }
-
 
 #[allow(unused_variables)]
 fn main() {
@@ -182,7 +182,6 @@ fn main() {
         }
     }
 
-
     match controller {
         Some(c) => trace!("Controller mapping: {}", c.mapping()),
         None => trace!("Could not open any controller!"),
@@ -225,9 +224,8 @@ fn main() {
         }
     }).unwrap();
 
-    let mut run_next_in_debug = true;
-   // let mut debug_in_string = String::new();
     /*Set up time*/
+
     //let timer = sdl_context.timer().unwrap();
     let mut prev_time = 0;
 
@@ -236,6 +234,8 @@ fn main() {
     let mut prev_hsync_cycles: u64 = 0;
 
     // Number of frames saved as screenshots
+    let mut frame_num = Wrapping(0);
+
     let mut frame_num = Wrapping(0);
 
     'main: loop {
@@ -290,8 +290,20 @@ fn main() {
                     if keycode == Keycode::Escape {
                         info!("Program exiting!");
                         break 'main;
-                    } else if keycode == Keycode::Space {
-                        run_next_in_debug = true;
+                    }
+                }
+                Event::MouseButtonDown {x, y, ..} => {
+                    match screen_coord_to_mem_addr(x, y) {
+                        Some(pc) => {
+                            let pc = pc as usize;
+                            let mem = gameboy.mem;
+                            let (mnem, size) = disasm::pp_opcode(mem[pc] as u8,
+                                                                 mem[pc+1] as u8,
+                                                                 mem[pc+2] as u8,
+                                                                 pc as u16);
+                            println!("${:04X} {:?}", pc, mnem);
+                        }
+                        _ => (),
                     }
                 }
                 Event::MouseButtonDown {x, y, ..} => {
@@ -317,18 +329,8 @@ fn main() {
             }
         }
 
- /*       if debug_mode {
-            io::stdin().read_line(debug_in_string).Ok();
-
-        }
-         */
-
         // // Dispatch // //
-        let current_op_time
-            = if debug_mode && run_next_in_debug || (!debug_mode) {
-                run_next_in_debug = false;
-                gameboy.dispatch_opcode() as u64
-            } else { std::thread::sleep(Duration::from_millis(10)); 0 };
+        let current_op_time = gameboy.dispatch_opcode() as u64;
 
         cycle_count += current_op_time;
         clock_cycles += current_op_time;
@@ -341,6 +343,7 @@ fn main() {
         let time_in_cpu_cycle_per_cycle = ((time_in_ms_per_cycle as f64)/ (1.0 / (4.19 * 1000.0 * 1000.0))) as u64;
 
         if clock_cycles >= time_in_cpu_cycle_per_cycle {
+ //           std::thread::sleep_ms(16);
             //trace!("Incrementing the timer!");
             gameboy.timer_cycle();
             clock_cycles = 0;
@@ -389,26 +392,38 @@ fn main() {
             gameboy.set_vblank_interrupt_bit();
         }
         if ticks >= 500 {//70224 {
+
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
 
-            /*j
-            for j in 0..256 {
-                gameboy.set_mem((0x8000 + j) as usize, j as i8);
-                gameboy.set_mem((0x8000 + (j * 2)) as usize, j as i8);
-                gameboy.set_mem((0x8000 + (j * 3)) as usize, j as i8);
-                gameboy.set_mem((0x9000 + j) as usize, j as i8);
-                gameboy.set_mem((0x9000 + (j * 2)) as usize, j as i8);
-                gameboy.set_mem((0x9000 + (j * 3)) as usize, j as i8);
 
-                gameboy.set_mem((0xA000 + j) as usize, j as i8);
-                gameboy.set_mem((0xA000 + (j * 2)) as usize, j as i8);
-                gameboy.set_mem((0xA000 + (j * 3)) as usize, j as i8);
+//@@@DELETE FROM
+            let mut x = 0;
+            let mut y = 0;
 
+            for &p in gameboy.mem.iter() {
+
+                use sdl2::pixels::*;
+
+                // renderer.set_draw_color(Color::RGB(r,g,b));
+                // renderer.set_draw_color(Color::RGB(p as u8, p as u8, p as u8));
+                renderer.set_draw_color(Color::RGB(0 as u8, 0 as u8, p as u8));
+                //debug!("pixel at {}, {} is {}", x, y, p);
+
+                let point = Point::new(x, y);
+              //@@@DELETE TO
+
+
+                renderer.draw_point(point);
+
+                //inc coord
+                x = (x + 1) % MEM_DISP_WIDTH;
+                if x == 0 {
+                    y = (y + 1); // % 256; // does this matter?
+                    // gameboy.inc_ly();
+                }
             }
-            */
-
             
             let mut x = 0;
             let mut y = 0;
@@ -474,6 +489,7 @@ fn main() {
 
             // Event visualization
             // TODO: can be used to do partial "smart" redraw, and speed thing up
+
             for entry in gameboy.events_deq.iter() {
                 let timestamp = entry.timestamp;
                 let ref event = entry.event;

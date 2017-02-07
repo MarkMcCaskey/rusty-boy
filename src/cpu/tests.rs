@@ -230,3 +230,69 @@ test_op_really_no_arg!(cpl_test1, cpl, CpuRegister::A, 0x15, 0xEA, |flags| flags
 test_op_really_no_arg!(cpl_test2, cpl, CpuRegister::A, 0x70, 0x8F, |flags| flags & (NLV | HL), (NLV | HL));
 test_op_really_no_arg!(cpl_test3, cpl, CpuRegister::A, 0xFF, 0x00, |flags| flags & (NLV | HL), (NLV | HL));
 test_op_really_no_arg!(cpl_test4, cpl, CpuRegister::A, 0x00, 0xFF, |flags| flags & (NLV | HL), (NLV | HL));
+
+test_op_really_no_arg!(cpl_test1, cpl, CpuRegister::A, 0x15, 0xEA, |flags| flags & (NLV | HL), (NLV | HL));
+test_op_really_no_arg!(cpl_test2, cpl, CpuRegister::A, 0x70, 0x8F, |flags| flags & (NLV | HL), (NLV | HL));
+test_op_really_no_arg!(cpl_test3, cpl, CpuRegister::A, 0xFF, 0x00, |flags| flags & (NLV | HL), (NLV | HL));
+test_op_really_no_arg!(cpl_test4, cpl, CpuRegister::A, 0x00, 0xFF, |flags| flags & (NLV | HL), (NLV | HL));
+
+
+#[test]
+fn ccf_tests() {
+    let mut cpu = Cpu::new();
+    cpu.ccf();
+
+    assert_eq!(cpu.f, 0x80);
+    cpu.ccf();
+    assert_eq!(cpu.f, 0x90);
+    cpu.ccf();
+    cpu.ccf();
+    assert_eq!(cpu.f, 0x90);
+
+    cpu.scf();
+    assert_eq!(cpu.f, 0x90);
+    cpu.ccf();
+    assert_eq!(cpu.f, 0x80);
+    cpu.scf();
+    assert_eq!(cpu.f, 0x90);
+}
+
+#[test]
+fn test_halt() {
+    let mut cpu = Cpu::new();
+
+    assert_eq!(cpu.state, CpuState::Normal);
+    cpu.halt();
+    assert_eq!(cpu.state, CpuState::Halt);
+
+    cpu.set_interrupts_enabled();
+    cpu.set_vblank_interrupt_enabled();
+    cpu.set_vblank();
+    cpu.set_vblank_interrupt_bit();
+    cpu.set_vblank_interrupt_stat();
+
+    cpu.dispatch_opcode();
+
+    assert_eq!(cpu.state, CpuState::Normal);
+}
+
+#[test]
+fn test_stop() {
+    let mut cpu = Cpu::new();
+
+    assert_eq!(cpu.state, CpuState::Normal);
+    cpu.stop();
+    assert_eq!(cpu.state, CpuState::Stop);
+    cpu.press_a();
+    assert_eq!(cpu.state, CpuState::Normal);
+    cpu.press_b();
+    cpu.press_a();
+    assert_eq!(cpu.state, CpuState::Normal);
+
+    cpu.stop();
+    cpu.press_start();
+    cpu.press_select();
+    assert_eq!(cpu.state, CpuState::Normal);
+}
+
+//TODO: Test execution of DI and EI
