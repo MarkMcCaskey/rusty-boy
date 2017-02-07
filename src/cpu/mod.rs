@@ -431,6 +431,27 @@ impl Cpu {
     unset_stat!(unset_coincidence_flag, 0x04);
     get_stat!(get_coincidence_flag, 0x04);
 
+    pub fn set_hblank(&mut self) {
+        //reset bottom two bits
+        self.mem[STAT_ADDR] &= (!0x3);
+    }
+
+    pub fn set_vblank(&mut self) {
+        //setting LSB, reset next
+        let old_val = self.mem[STAT_ADDR];
+        self.mem[STAT_ADDR] = (old_val | 1) & (!2);
+    }
+
+    pub fn set_oam_lock(&mut self) {
+        //reset LSB, set next
+        let old_val = self.mem[STAT_ADDR];
+        self.mem[STAT_ADDR] = (old_val | 2) & (!1);
+    }
+
+    pub fn set_oam_and_display_lock(&mut self) {
+        //set LSB and next
+        self.mem[STAT_ADDR] |= 0x3;
+    }
 
     
     pub fn lcdc_on(&self) -> bool {
@@ -695,11 +716,30 @@ impl Cpu {
         self.log_event(CpuEvent::Write { to: address as MemAddr});
 
         match address {
+            //TODO: Verify triple dot includes final value
+            v @ DISPLAY_RAM_START ... DISPLAY_RAM_END => {
+                // If in OAM and Display ram are both in use
+                if self.mem[STAT_ADDR] & 3 == 3 {
+                    error!("CPU cannot access address {} at this time", v);
+                } else {
+                    self.mem[v] = value as i8;
+                }
+            },
+            v @ OAM_START ... OAM_END => {
+                //if OAM is in use
+                match self.mem[STAT_ADDR] & 3 {
+                    0b10 | 0b11 => {
+                        error!("CPU cannot access address {} while the OAM is in use", v);
+                    },
+                    _ => self.mem[v] = value as i8,
+                }
+            },
             ad @ 0xE000 ... 0xFE00 | ad @ 0xC000 ... 0xDE00
                 => {
                     self.mem[ad]                     = value;
                     self.mem[ad ^ (0xE000 - 0xC000)] = value;
                 },
+
             0xFF04 => self.mem[0xFF04] = 0,
             0xFF44 => self.mem[0xFF44] = 0,
             0xFF46 => {
@@ -1023,10 +1063,10 @@ impl Cpu {
     }
 
     fn inc(&mut self, reg: CpuRegister) {
-        let old_c = (self.f & HL) == HL;
+        let old_c = (self.f & CL) == CL;
         let old_3bit = self.access_register(reg).expect("invalid register") & 0x8;
 
-        let old_val: u16 = (self.access_register(reg).expect("invalid register") as u8) as u16;
+        let old_val: i16 = self.access_register(reg).expect("invalid register") as i16;
         let new_val = old_val + 1;
         self.set_register(reg, new_val as i8);
         self.set_flags(new_val == 0,
@@ -1453,7 +1493,7 @@ impl Cpu {
     }
 
     fn pop_from_stack(&mut self) -> u16 {
-        let sp_idx = self.sp;
+        let sp_idx = self.sp as u16;
         let val1 = self.get_mem(sp_idx as usize);
         let val2 = self.get_mem((sp_idx-1) as usize);
         self.sp += 2;
@@ -1503,6 +1543,11 @@ impl Cpu {
     fn handle_interrupts(&mut self) {
         if !self.get_interrupts_enabled() {
             return ();
+        }
+        if self.state == CpuState::Halt {
+            self.state = CpuState::Normal;
+        } else if self.state == CpuState::Stop {
+            //TODO: handle interrupt on stop
         }
         
         //Then handle interrupts
