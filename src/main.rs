@@ -333,8 +333,13 @@ fn main() {
             Err(_) => error!("Could not set render scale"),
         }
         //1ms before drawing in terms of CPU time we must throw a vblank interrupt 
-        //TODO: figure out what 70224 is and make it a constant (and/or variable based on whether it's GB, SGB, etc.)
-        if ticks >= 70224 {
+        // TODO make this variable based on whether it's GB, SGB, etc.
+        const CPU_CYCLES_PER_SECOND: u64 = 4194304;
+        const VERT_SYNC_RATE: f32 = 59.73;
+        const CPU_CYCLES_PER_VBLANK: u64 = ((CPU_CYCLES_PER_SECOND as f32) /
+                                            VERT_SYNC_RATE) as u64;
+
+        if ticks >= CPU_CYCLES_PER_VBLANK {
             prev_time = cycle_count;
             renderer.set_draw_color(sdl2::pixels::Color::RGBA(255,0,255,255));
             renderer.clear();
@@ -400,7 +405,7 @@ fn main() {
 
             // How long stuff stays on screen
             // TODO: Should depend on num of cpu cycles and frame delay
-            const FADE_DELAY: u64 = 25531;
+            const FADE_DELAY: u64 = CPU_CYCLES_PER_VBLANK * 15;
 
             // Event visualization
             // TODO: can be used to do partial "smart" redraw, and speed thing up
