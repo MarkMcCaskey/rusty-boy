@@ -7,16 +7,23 @@ pub const LCDC_INTERRUPT_ADDRESS: u16 = 0x48;
 pub const TIMER_OVERFLOW_INTERRUPT_ADDRESS: u16 = 0x50;
 pub const SERIAL_TRANSFER_INTERRUPT_ADDRESS: u16 = 0x58;
 pub const P1013_INTERRUPT_ADDRESS: u16 = 0x60;
+pub const DISPLAY_RAM_START: usize = 0x8000;
+pub const DISPLAY_RAM_END: usize = 0x9FFF;
+pub const OAM_START: usize = 0xFE00;
+pub const OAM_END: usize = 0xFE9F;
+pub const STAT_ADDR: usize = 0xFF41;
 
 
-#[derive(Clone,Copy,PartialEq)]
+
+
+#[derive(Debug,Clone,Copy,PartialEq)]
 pub enum CpuState {
     Normal,
     Halt,
     Stop,
 }
 
-#[derive(Clone,Copy,PartialEq)]
+#[derive(Clone,Copy,PartialEq,Debug)]
 pub enum CpuRegister {
     A,
     B,
@@ -29,7 +36,7 @@ pub enum CpuRegister {
     Num(i8),
 }
 
-#[derive(Clone,Copy,PartialEq)]
+#[derive(Clone,Copy,PartialEq,Debug)]
 pub enum CpuRegister16 {
     BC,
     DE,
