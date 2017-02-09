@@ -1,3 +1,5 @@
+//! The hardware emulation logic
+
 #![allow(dead_code)]
 
 #[macro_use] mod macros;
@@ -10,7 +12,6 @@ use std::num::Wrapping;
 use disasm::*;
 use self::constants::*;
 
-pub type MemAddr = u16;
 
 // Types for storing and visualizing various things happening
 pub enum EventPlace {
@@ -36,8 +37,6 @@ pub struct EventLogEntry {
     pub event: CpuEvent,
 }
 
-// Additional 2 bytes to skip bounds check when fetching instr. operands
-const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 2;
 
 #[inline]
 pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16{
@@ -45,17 +44,17 @@ pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16{
 }
 
 pub struct Cpu {
-    a:   u8,
-    b:   u8,
-    c:   u8,
-    d:   u8,
-    e:   u8,
+    a:   byte,
+    b:   byte,
+    c:   byte,
+    d:   byte,
+    e:   byte,
     //NOTE: bit 7: zero flag; bit 6: subtract flag; bit 5: half carry; bit 4: carry flag
-    pub f: u8,
-    h:   u8,
-    l:   u8,
-    sp:  u16,
-    pub pc:  u16,
+    pub f: byte,
+    h:   byte,
+    l:   byte,
+    sp:  MemAddr,
+    pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
     pub state: CpuState,
     pub event_log_enabled: bool,
@@ -152,7 +151,7 @@ impl Cpu {
      * This needs to be called 16384 (~16779 on SGB) times a second
      */
     fn inc_div(&mut self) {
-        let old_val: u16 = (self.mem[0xFF04] as u16) & 0xFF;
+        let old_val: MemAddr = (self.mem[0xFF04] as MemAddr) & 0xFF;
         self.mem[0xFF04] = (old_val + 1) as byte;
     }
 
@@ -166,13 +165,13 @@ impl Cpu {
         }
     }
 
-    pub fn get_bg_tiles(&self) -> Vec<u8> {
+    pub fn get_bg_tiles(&self) -> Vec<byte> {
         let mut ret = vec![];
         for &i in self.mem[0x8800..0x9800].iter() {
-            ret.push(((i as u8) >> 6) & 0x3u8);
-            ret.push(((i as u8) >> 4) & 0x3u8);
-            ret.push(((i as u8) >> 2) & 0x3u8);
-            ret.push( (i as u8)       & 0x3u8);
+            ret.push(((i as byte) >> 6) & 0x3u8);
+            ret.push(((i as byte) >> 4) & 0x3u8);
+            ret.push(((i as byte) >> 2) & 0x3u8);
+            ret.push( (i as byte)       & 0x3u8);
         }
 
         ret
@@ -180,13 +179,10 @@ impl Cpu {
 
     fn get_current_tile_location() {}
 
-    /*
-    Iterate through tile map, use values there to find tiles in tile data
-     */
-    //gets the next pixel value to be drawn to the screen and updates
-    //the special registers correctly
+    ///gets the next pixel value to be drawn to the screen and updates
+    ///the special registers correctly
     #[allow(dead_code, unused_variables)]
-    pub fn get_next_pixel(&mut self, xval: u8) -> u8 {
+    pub fn get_next_pixel(&mut self, xval: byte) -> byte {
         let yval = self.ly(); 
         let tile_map_base_addr =
             if self.lcdc_bg_tile_map() {0x9C00} else {0x9800};
@@ -485,7 +481,7 @@ impl Cpu {
     }
 
     
-    pub fn get_background_tiles(&self) -> [[u8; 64]; (32 * 32)] {
+    pub fn get_background_tiles(&self) -> [[byte; 64]; (32 * 32)] {
         let mut tiles = [[0u8; 64]; (32*32)];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {0x8000} else {0x9000};
         let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {0x9C00} else {0x9800};
@@ -508,7 +504,7 @@ impl Cpu {
                 for i in 0..16 {
                     for k in 0..4 {
                         //multiply offset by tile size
-                        tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as u16) + ((tile_pointer as u16) * 0x40)) as usize] as u8)
+                        tiles[j][i*(k+1)] = ((self.mem[((tile_data_base_addr as MemAddr) + ((tile_pointer as MemAddr) * 0x40)) as usize] as byte)
                                              >> (k * 2)) & 0x3;
                     }
                 }
@@ -555,9 +551,8 @@ impl Cpu {
     }
 
     fn dma(&mut self) {
-        let addr = ((self.mem[0xFF46] as u8) as u16) << 8;
+        let addr = ((self.mem[0xFF46] as u8) as MemAddr) << 8;
         
-        //TODO: ensure this doesn't include end value
         for i in 0..0xA0 { //number of values to be copied
             let val = self.mem[(addr + i) as usize];
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
@@ -566,29 +561,29 @@ impl Cpu {
         self.mem[0xFF55] = 1;
     }
 
-    pub fn bgp(&self) -> (u8, u8, u8, u8) {
-        let v4 = ((self.mem[0xFF47] >> 6) & 0x3) as u8;
-        let v3 = ((self.mem[0xFF47] >> 4) & 0x3) as u8;
-        let v2 = ((self.mem[0xFF47] >> 2) & 0x3) as u8;
-        let v1 = ((self.mem[0xFF47] >> 0) & 0x3) as u8;
+    pub fn bgp(&self) -> (byte, byte, byte, byte) {
+        let v4 = ((self.mem[0xFF47] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF47] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF47] >> 2) & 0x3) as byte;
+        let v1 = ((self.mem[0xFF47] >> 0) & 0x3) as byte;
 
         (v1,v2,v3,v4)
     }
 
-    pub fn obp0(&self) -> (u8, u8, u8, u8) {
-        let v4 = ((self.mem[0xFF48] >> 6) & 0x3) as u8;
-        let v3 = ((self.mem[0xFF48] >> 4) & 0x3) as u8;
-        let v2 = ((self.mem[0xFF48] >> 2) & 0x3) as u8;
-        let v1 = ((self.mem[0xFF48] >> 0) & 0x3) as u8;
+    pub fn obp0(&self) -> (byte, byte, byte, byte) {
+        let v4 = ((self.mem[0xFF48] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF48] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF48] >> 2) & 0x3) as byte;
+        let v1 = ((self.mem[0xFF48] >> 0) & 0x3) as byte;
 
         (v1,v2,v3,v4)
     }
 
-    pub fn obp1(&self) -> (u8, u8, u8, u8) {
-        let v4 = ((self.mem[0xFF49] >> 6) & 0x3) as u8;
-        let v3 = ((self.mem[0xFF49] >> 4) & 0x3) as u8;
-        let v2 = ((self.mem[0xFF49] >> 2) & 0x3) as u8;
-        let v1 = ((self.mem[0xFF49] >> 0) & 0x3) as u8;
+    pub fn obp1(&self) -> (byte, byte, byte, byte) {
+        let v4 = ((self.mem[0xFF49] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF49] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF49] >> 2) & 0x3) as byte;
+        let v1 = ((self.mem[0xFF49] >> 0) & 0x3) as byte;
 
         (v1,v2,v3,v4)
     }
@@ -714,12 +709,13 @@ impl Cpu {
         self.mem[address]
     }
 
-    /*
-    NOTE: serial I/O is done by accessing memory addresses.
-    It is read at 8192Hz, one bit at a time if external clock is used.
-    See documentation and read carefully before implementing this.
-     */
     pub fn set_mem(&mut self, address: usize, value: byte) {
+        /*!
+        NOTE: serial I/O is done by accessing memory addresses.
+        It is read at 8192Hz, one bit at a time if external clock is used.
+        See documentation and read carefully before implementing this.
+         */
+
         self.log_event(CpuEvent::Write { to: address as MemAddr});
 
         match address {

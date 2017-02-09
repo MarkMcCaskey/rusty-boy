@@ -106,6 +106,53 @@ InstructionZero: CSL::Instruction = {
         
         CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
     },
+    "POP" <rs:PushPopReg16> => {
+        let z = push_pop_disp16(rs);
+        let value = 0xC2 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "PUSH" <rs:PushPopReg16> => {
+        let z = push_pop_disp16(rs);
+        let value = 0xC6 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "INC" <yr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x04 | (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "INC" <zr:Register16> => {
+        let z = cpuReg_dispatch16(zr);
+        let value = 0x03 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "DEC" <yr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x05 | (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "DEC" <zr:Register16> => {
+        let z = cpuReg_dispatch16(zr);
+        let value = 0x0B | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "RST" <str:r"[0-3](0|8)H"> => {
+
+        let num = u8::from_str_radix(&str[0..2], 16).unwrap();
+        if num % 8 != 0 {
+            panic!("INVALID RESET NUMBER");
+        }
+
+        let y = num % 8;
+        let value = 0xC7 | (y << 3);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value }
+    },
 };
 
 InstructionUnary: (u8, u8) = {
@@ -159,6 +206,10 @@ Register16: CpuRegister16 = {
     "DE" => CpuRegister16::DE,
     "HL" => CpuRegister16::HL,
     "SP" => CpuRegister16::SP,
+};
+
+PushPopReg16: &'input str = {
+    "BC", "DE", "HL", "AF",
 };
 
 Number: CSL::Value = { Hex => if <> > (u8::max_value() as u16) {

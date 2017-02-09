@@ -35,7 +35,6 @@ pub fn binary_dispatch(inst: Instruction, v1: Value, v2: Value) -> (u8, u8, u8) 
     unimplemented!();
 }
 
-
 pub fn cpuReg_dispatch(reg: CpuRegister) -> u8 {
     match reg {
         CpuRegister::B => 0,
@@ -50,10 +49,33 @@ pub fn cpuReg_dispatch(reg: CpuRegister) -> u8 {
     }
 }
 
+pub fn cpuReg_dispatch16(reg: CpuRegister16) -> u8 {
+    match reg {
+        CpuRegister16::BC => 0,
+        CpuRegister16::DE => 1,
+        CpuRegister16::HL => 2,
+        CpuRegister16::SP => 3,
+        _ => unreachable!(),
+    }
+}
+
+
 /// Returns in Big Endian
 pub fn lookup_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
     let z = cpuReg_dispatch(reg);
     let value = (n << 4) | z;
 
     (0xCB, value)
+}
+
+/// Dispatches number values from Strings for the PUSH and POP
+/// instructions (uses AF, so not applicable in other situations)
+pub fn push_pop_disp16(regname: &str) -> u8 {
+    match regname {
+        "BC" => 0,
+        "DE" => 1,
+        "HL" => 2,
+        "AF" => 3,
+        _ => unreachable!(),
+    }
 }
