@@ -14,8 +14,8 @@ pub const HL: byte = 0x20;
 pub const CL: byte = 0x10;
 
 /// The size of the Gameboy's memory
-/// Additional 2 bytes to skip bounds check when fetching instr. operands
-pub const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 2;
+/// Additional 3 bytes to skip bounds check when fetching instr. operands
+pub const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 3;
 
 
 /// Where the PC should go when the vblank interupt is handled
@@ -73,6 +73,7 @@ pub enum CpuRegister16 {
     DE,
     HL,
     SP,
+    AF,
     Num(i16),
 }
 
@@ -155,6 +156,17 @@ pub fn cpu16_dispatch(num: u8) -> CpuRegister16 {
         1 => CpuRegister16::DE,
         2 => CpuRegister16::HL,
         3 => CpuRegister16::SP,
+        _ => panic!("Invalid number for 16bit register dispatch"),
+    }
+}
+
+/// Turns a number into a `CpuRegister16`
+pub fn cpu16_dispatch_push_pop(num: u8) -> CpuRegister16 {
+    match num {
+        0 => CpuRegister16::BC,
+        1 => CpuRegister16::DE,
+        2 => CpuRegister16::HL,
+        3 => CpuRegister16::AF,
         _ => panic!("Invalid number for 16bit register dispatch"),
     }
 }

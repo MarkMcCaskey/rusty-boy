@@ -254,7 +254,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                         }
                     }
                     6 => format!("{} {}", idx_alu(y), d8()),
-                    7 => format!("RST {}", y * 8),
+                    7 => format!("RST {:02X}H", y * 8),
                     _ => unreachable!("Impossible opcode"),
                 }
             }
