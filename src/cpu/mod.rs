@@ -43,6 +43,12 @@ pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16{
     (((high_byte as u8) as u16) << 8) | ((low_byte as u8) as u16)
 }
 
+#[inline]
+pub fn add_u16_i8(word: u16, sbyte: i8) -> u16 {
+    //((word as i16) + ((sbyte as i8) as i16)) as u16
+    (Wrapping(word as u16) + Wrapping(sbyte as u16)).0 as u16
+}
+
 pub struct Cpu {
     a:   byte,
     b:   byte,
@@ -853,12 +859,14 @@ impl Cpu {
     }
 
     fn ldac(&mut self) {
-        let val = self.get_mem(0xFF00) + self.c;
+        let reg_c = self.c;
+        // TODO check if C should be unsigned
+        let val = self.get_mem((0xFF00u16 + (reg_c as u16)) as usize);
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldca(&mut self) {
-        let addr = 0xFF00u16 + ((self.c as u8) as u16);
+        let addr = 0xFF00u16 + (self.c as u16);
         let val = self.a;
         self.set_mem(addr as usize, val);
     }
@@ -915,7 +923,7 @@ impl Cpu {
     }
 
     fn ldhlspn(&mut self, n: i8) {
-        let val = (self.sp as i16) + (n as i16);
+        let val = add_u16_i8(self.sp, n as i8);
         self.set_register16(CpuRegister16::HL, val as u16);
 
         self.set_flags(false, false, false, false); //last two need to be checked; TODO:
@@ -980,7 +988,7 @@ impl Cpu {
     }
 
     fn addspn(&mut self, n: i8) {
-        let new_sp = (self.sp as i16) + (n as i16);
+        let new_sp = add_u16_i8(self.sp, (n as i8));
         self.sp = new_sp as u16;
 
         self.set_flags(false, false, false, false); //TODO: review last tw
@@ -1462,14 +1470,14 @@ impl Cpu {
         let old_pc = self.pc;
         let hl = self.hl() as usize;
         let n = self.get_mem(hl);
-        let new_pc = ((old_pc as i32) + ((n as i8) as i32)) as MemAddr;
+        let new_pc = add_u16_i8(old_pc, n as i8);
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
         self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
 
     fn jrn(&mut self, n: i8) {
         let old_pc = self.pc;
-        let new_pc = (((old_pc as i32) + (n as i32)) as i16) as u16;
+        let new_pc = add_u16_i8(old_pc, n);
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
         self.pc = new_pc;
     }
@@ -1484,7 +1492,7 @@ impl Cpu {
                 Cc::C  => (self.f >> 4) & 1,
             } {
                 let old_pc = self.pc;
-                let new_pc = ((old_pc as i32) + (n as i32)) as u16;
+                let new_pc = add_u16_i8(old_pc, n);
                 self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
                 self.pc = new_pc;
                 true
