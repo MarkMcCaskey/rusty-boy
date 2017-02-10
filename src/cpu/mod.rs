@@ -1505,7 +1505,8 @@ impl Cpu {
         self.push_onto_stack(old_pc + 3);
         let new_pc = nn;
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
-        self.pc = new_pc - 3; //nn -3 to account for pc inc in dispatch_opcode
+        //nn -3 to account for pc inc in dispatch_opcode
+        self.pc = (Wrapping(new_pc) - Wrapping(3)).0;
     }
 
     fn push_onto_stack(&mut self, nn: u16) {
@@ -1556,7 +1557,7 @@ impl Cpu {
         let old_pc = self.pc;
         let new_pc = self.pop_from_stack();
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
-        self.pc = new_pc - 1;
+        self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
 
     fn retcc(&mut self, cc: Cc) -> bool {
@@ -1576,7 +1577,7 @@ impl Cpu {
         let old_pc = self.pc;
         let new_pc = self.pop_from_stack();
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
-        self.pc = new_pc - 1;
+        self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
         self.ei();
     }
 
@@ -1705,7 +1706,7 @@ impl Cpu {
         //Then execute instruction
         let (inst_name, inst_len) =
             pp_opcode(first_byte, second_byte, third_byte, self.pc);
-        let next_pc = old_pc + (inst_len as u16);
+        let next_pc = (Wrapping(old_pc) + Wrapping(inst_len as u16)).0;
         match inst_len {
             1 => trace!("Running {:02x}    :  -> 0x{:04X}: {:<20}", first_byte, self.pc, inst_name),
             2 => trace!("Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
@@ -2028,7 +2029,7 @@ impl Cpu {
 
                     7 => {
                         self.rst(8*y);
-                        self.pc -= 1; // or should not be inc later
+                        self.pc = (Wrapping(self.pc) - Wrapping(1)).0; // or should not be inc later
                         inst_time = 16;
                     },
                         
