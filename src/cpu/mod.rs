@@ -1461,7 +1461,8 @@ impl Cpu {
     fn jphl(&mut self) {
         let old_pc = self.pc;
         let hl = self.hl() as usize;
-        let new_pc = self.get_mem(hl) as MemAddr;
+        let n = self.get_mem(hl);
+        let new_pc = ((old_pc as i32) + ((n as i8) as i32)) as MemAddr;
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
         self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
@@ -1682,13 +1683,14 @@ impl Cpu {
             return inst_time; //unsure of this
         } //otherwise it's in normal state:
 
-        trace!("REG: A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} Z:{} N:{} H:{} C:{} (SP):{:04X}",
+        trace!("REG: A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} Z:{} N:{} H:{} C:{} (SP):{:02X}{:02X} (HL):{:02X}",
                self.a, self.b, self.c, self.d, self.e, self.h, self.l, self.sp,
                self.is_flag_set(ZL),
                self.is_flag_set(NLV),
                self.is_flag_set(HL),
                self.is_flag_set(CL),
-               self.sp);
+               self.mem[self.sp as usize + 1], self.mem[self.sp as usize],
+               self.mem[self.hl() as usize]);
 
         let old_pc = self.pc;
         
