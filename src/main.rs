@@ -202,14 +202,34 @@ fn main() {
                         _ => (),
                     }
                 }
-                Event::MouseButtonDown { x, y, .. } => {
-                    memvis::memvis_handle_click(&gameboy, x, y);
+                Event::MouseButtonDown { x, y, mouse_btn, .. } => {
+                    match mouse_btn {
+                        sdl2::mouse::MouseButton::Left => {
+                            memvis::memvis_handle_click(&gameboy, x, y);
+                        },
+                        sdl2::mouse::MouseButton::Right => {
+                            // Jump to clicked addr and bring cpu back to life
+                            match memvis::screen_coord_to_mem_addr(x, y) {
+                                Some(pc) => {
+                                    gameboy.pc = pc;
+                                    gameboy.state = cpu::constants::CpuState::Normal;
+                                },
+                                _ => (),
+                            }
+                        },
+                        _ => (),
+                    }
                 }
                 _ => (),
             }
         }
 
-        let current_op_time = gameboy.dispatch_opcode() as u64;
+        let current_op_time =
+            if gameboy.state != cpu::constants::CpuState::Crashed {
+                gameboy.dispatch_opcode() as u64
+            } else {
+                0
+            };
 
         cycle_count += current_op_time;
         clock_cycles += current_op_time;

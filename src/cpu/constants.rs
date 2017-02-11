@@ -50,6 +50,8 @@ pub enum CpuState {
     Halt,
     /// CPU and screen are off and waiting for a button press
     Stop,
+    /// CPU have executed illegal instruction
+    Crashed,
 }
 
 /// 8-bit registers of the CPU and an 8-bit numeric literal
