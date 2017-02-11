@@ -39,7 +39,7 @@ pub struct EventLogEntry {
 
 
 #[inline]
-pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16{
+pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
     (((high_byte as u8) as u16) << 8) | ((low_byte as u8) as u16)
 }
 
@@ -824,10 +824,11 @@ impl Cpu {
         self.set_register(r1, val);
     }
 
-    fn ldan(&mut self, n: CpuRegister) {
-        let val = self.access_register(n).expect("Invalid register");
-        self.set_register(CpuRegister::A, val);
-    }
+    // ldr1r2 is probably used instead
+    // fn ldan(&mut self, n: CpuRegister) {
+    //     let val = self.access_register(n).expect("Invalid register");
+    //     self.set_register(CpuRegister::A, val);
+    // }
 
     fn ldan16(&mut self, n: CpuRegister16) {
         let addr = self.access_register16(n);
@@ -837,14 +838,15 @@ impl Cpu {
     }
 
     fn ldan16c(&mut self, b1: u8, b2: u8) {
-        let val = self.get_mem((((b2 as u16) << 8) | (b1 as u16)) as usize);
+        let val = self.get_mem(byte_to_u16(b1, b2) as usize);
         self.set_register(CpuRegister::A, val);
     }
 
-    fn ldna(&mut self, n: CpuRegister) {
-        let val = self.access_register(CpuRegister::A).expect("Invalid register");
-        self.set_register(n, val);
-    }
+    // ldr1r2() is used instead
+    // fn ldna(&mut self, n: CpuRegister) {
+    //     let val = self.access_register(CpuRegister::A).expect("Invalid register");
+    //     self.set_register(n, val);
+    // }
 
     fn ldna16(&mut self, n: CpuRegister16) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
@@ -855,7 +857,7 @@ impl Cpu {
 
     fn ldna16c(&mut self, b1: u8, b2: u8) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
-        self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, val);
+        self.set_mem(byte_to_u16(b1, b2) as usize, val);
     }
 
     fn ldac(&mut self) {
@@ -1169,22 +1171,21 @@ impl Cpu {
                        overflow16bit);
     }
 
-    //Consider adding further restrictions to this type; argument must be an immediate value
-    fn add_sp(&mut self, reg: CpuRegister16) {
-        if let CpuRegister16::Num(i) = reg {
-            self.sp = ((self.sp as i16) + i )as u16;
-
-            self.set_flags(
-                false,
-                false,
-                false, //TODO: wat
-                false);//TODO: wat
-        }
-        else {
-            panic!("In add_sp, invalid argument.  It must be an immediate value");
-        }
-
-    }
+    // addspn() is used instead
+    // //Consider adding further restrictions to this type; argument must be an immediate value
+    // fn add_sp(&mut self, reg: CpuRegister16) {
+    //     if let CpuRegister16::Num(i) = reg {
+    //         self.sp = ((self.sp as i16) + i )as u16;
+    //         self.set_flags(
+    //             false,
+    //             false,
+    //             false, //TODO: wat
+    //             false);//TODO: wat
+    //     }
+    //     else {
+    //         panic!("In add_sp, invalid argument.  It must be an immediate value");
+    //     }
+    // }
 
     fn inc16(&mut self, reg: CpuRegister16) {
         match reg {
@@ -1950,7 +1951,7 @@ impl Cpu {
                             inst_time = 8;
                         },
                         5 => { //0xEA
-                            self.ldan16c(second_byte, third_byte);
+                            self.ldna16c(second_byte, third_byte);
                             self.inc_pc();
                             self.inc_pc();
                             inst_time = 16;
