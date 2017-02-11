@@ -998,11 +998,11 @@ impl Cpu {
         let old_a = self.a as i16;
         let old_b = self.reg_or_const(reg);
 
-        let new_a = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) + (b as i16));
+        let new_a = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) + (b as i16)) as byte;
 
-        self.a = new_a as byte;
+        self.a = new_a;
 
-        self.set_flags((new_a as byte) == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        ((old_a % 16) + (old_b % 16)) > 15,
                        (old_a + old_b) > byte::max_value() as i16);
@@ -1012,14 +1012,14 @@ impl Cpu {
         let reg_val = self.reg_or_const(reg);
         let cf: byte = (self.f & HL) >> 5;
 
-        let new_a: i16 = (cf as i16) + (self.a as i16);
+        let new_a: byte = ((cf as i16) + (self.a as i16)) as byte;
         //TODO: verify negatives don't cause problems
         let carry3_a = ((self.a as u16) & 0xFu16) + ((reg_val as u16) & 0xFu16) + (cf as u16);
         let carry7_a = ((self.a as u16) & 0xFF) + ((reg_val as u16) & 0xFF) + (cf as u16);
 
-        self.a = new_a as byte;
+        self.a = new_a;
 
-        self.set_flags(new_a == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        carry3_a > 0xF,
                        carry7_a > 0xFF);
@@ -1028,10 +1028,10 @@ impl Cpu {
     fn sub(&mut self, reg: CpuRegister) {
         let old_a = self.a as i16;
         let old_b = self.reg_or_const(reg);
-        let new_a: i16 = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) - (b as i16));
+        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) - (b as i16)) as byte;
 
-        self.a = new_a as byte;
-        self.set_flags((new_a as byte) == 0,
+        self.a = new_a;
+        self.set_flags(new_a == 0u8,
                        true,
                        (old_a & 0xF) >= (old_b & 0xF),
                        old_b <= old_a as i16);
@@ -1047,31 +1047,31 @@ impl Cpu {
         //NOTE: find out whether this should be self.a - cf
         let new_a: i16 = (self.a as i16) - (cf as i16); //overflow?
         self.a = new_a as byte;
-        self.set_flags((new_a as byte) == 0,
+        self.set_flags((new_a as byte) == 0u8,
                        true,
                        (old_c & 0xF) >= cf,
                        cf <= old_c);
     }
 
     fn and(&mut self, reg: CpuRegister) {
-        let new_a: i16 = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) & (b as i16));
+        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) & (b as i16)) as byte;
 
-        self.a = new_a as byte;
-        self.set_flags(new_a == 0, false, true, false);
+        self.a = new_a;
+        self.set_flags(new_a == 0u8, false, true, false);
     }
 
     fn or(&mut self, reg: CpuRegister) {
-        let new_a: i16 = self.alu_dispatch(reg, |a: byte, b: byte| (((a as u16) & 0xFF)| ((b as u16) & 0xFF)) as i16);
+        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (((a as u16) & 0xFF)| ((b as u16) & 0xFF)) as i16) as byte;
 
-        self.a = new_a as byte;
-        self.set_flags(new_a == 0, false, false, false);
+        self.a = new_a;
+        self.set_flags(new_a == 0u8, false, false, false);
     }
 
     fn xor(&mut self, reg: CpuRegister) {
-        let new_a: i16 = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) ^ (b as i16));
+        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) ^ (b as i16)) as byte;
 
-        self.a = new_a as byte;
-        self.set_flags(new_a == 0, false, false, false);
+        self.a = new_a;
+        self.set_flags(new_a == 0u8, false, false, false);
     }
 
     fn cp(&mut self, reg: CpuRegister) {
@@ -1101,11 +1101,11 @@ impl Cpu {
         let old_3bit = self.access_register(reg).expect("invalid register") & 0x8;
 
         let old_val: i16 = self.access_register(reg).expect("invalid register") as i16;
-        let new_val = old_val + 1;
-        self.set_register(reg, new_val as byte);
-        self.set_flags(new_val == 0,
+        let new_val = (old_val + 1) as byte;
+        self.set_register(reg, new_val);
+        self.set_flags(new_val == 0u8, // this check fails if new_val is i16 :)
                        false,
-                       (old_3bit == 0x8) && ((new_val & 0x8) != 0x8),
+                       (old_3bit == 0x8u8) && ((new_val & 0x8u8) != 0x8),
                        old_c);
     }
 
@@ -1120,7 +1120,7 @@ impl Cpu {
         self.set_register(reg, new_val);
 
         self.set_flags(
-            new_val == 0,
+            new_val == 0u8,
             true,
             (reg_val & 0xF) != 0, //TODO: review 
             old_c);
@@ -1221,8 +1221,8 @@ impl Cpu {
         let top = val & 0xF0u8;
         let bot = val & 0x0Fu8;
         self.set_register(reg, (((top >> 4) & 0xF) | (bot << 4)) as byte);
-        
-        self.f = if val == 0 { ZL } else { 0 };
+
+        self.f = if val == 0u8 { ZL } else { 0 };
     }
 
 
@@ -1235,9 +1235,10 @@ impl Cpu {
         let highest_bits = ((reduced_a & 0xF0) + (if lowest_digit == lowest_bits {0} else {0x10})) & 0xF0;
         let highest_digit = if highest_bits > 0x90 {(highest_bits + 0x60) & 0xF0} else {highest_bits & 0xF0};
 
-        self.a = (highest_digit | lowest_digit) as byte;
+        let new_a: byte = (highest_digit | lowest_digit) as byte;
+        self.a = new_a;
         let old_nflag = (self.f & NLV) == NLV;
-        self.set_flags((highest_digit | lowest_digit) == 0,
+        self.set_flags(new_a == 0u8,
                        old_nflag,
                        false,
                        0x99 < reduced_a); //NOTE: weird documentation, unclear value
@@ -1290,7 +1291,7 @@ impl Cpu {
         let new_a = (self.a << 1) | old_bit7;
         self.a = new_a;
 
-        self.set_flags(new_a == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        false,
                        old_bit7 == 1);
@@ -1304,7 +1305,7 @@ impl Cpu {
         let new_a = (self.a << 1) | old_flags;
         self.a = new_a;
 
-        self.set_flags(new_a == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        false,
                        old_bit7 == 1);       
@@ -1316,7 +1317,7 @@ impl Cpu {
         let new_a = ((self.a >> 1) & 0x7F) | (old_bit0 << 7);
         self.a = new_a;
 
-        self.set_flags(new_a == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1329,7 +1330,7 @@ impl Cpu {
         let new_a = ((self.a >> 1) & 0x7F) | (old_flags << 7);
         self.a = new_a;
 
-        self.set_flags(new_a == 0,
+        self.set_flags(new_a == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1343,7 +1344,7 @@ impl Cpu {
         let new_reg = ((reg_val << 1) & 0xFEu8) | old_carry;
         self.set_register(reg, new_reg as byte);
 
-        self.set_flags(new_reg == 0,
+        self.set_flags(new_reg == 0u8,
                        false,
                        false,
                        old_bit7 == 1);
@@ -1357,7 +1358,7 @@ impl Cpu {
         let new_reg = (reg_val << 1) | old_flags;
         self.set_register(reg, new_reg);
 
-        self.set_flags(new_reg == 0,
+        self.set_flags(new_reg == 0u8,
                        false,
                        false,
                        old_bit7 == 1);
@@ -1370,7 +1371,7 @@ impl Cpu {
         let new_val = ((reg_val >> 1) & 0x7F) | (old_bit0 << 7);
         self.set_register(reg, new_val);
 
-        self.set_flags(new_val == 0,
+        self.set_flags(new_val == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1385,7 +1386,7 @@ impl Cpu {
         let new_val = (reg_val >> 1) | old_flags;
         self.set_register(reg, new_val);
 
-        self.set_flags(new_val == 0,
+        self.set_flags(new_val == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1396,7 +1397,7 @@ impl Cpu {
         let old_bit7 = (reg_val >> 7) & 1;
         self.set_register(reg, reg_val << 1);
 
-        self.set_flags((reg_val << 1) == 0,
+        self.set_flags((reg_val << 1) == 0u8,
                        false,
                        false,
                        old_bit7 == 1);
@@ -1407,7 +1408,7 @@ impl Cpu {
         let old_bit0 = reg_val & 1;
         self.set_register(reg, reg_val >> 1);
 
-        self.set_flags((reg_val >> 1) == 0,
+        self.set_flags((reg_val >> 1) == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1419,7 +1420,7 @@ impl Cpu {
 
         self.set_register(reg, (reg_val >> 1) as byte);
 
-        self.set_flags((reg_val >> 1) == 0,
+        self.set_flags((reg_val >> 1) == 0u8,
                        false,
                        false,
                        old_bit0 == 1);
