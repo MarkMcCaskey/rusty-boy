@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use cpu::*;
 use cpu::constants::*;
 
@@ -5,7 +6,7 @@ use cpu::constants::*;
 pub enum Value {
     Literal8(u8),
     Literal16(u16),
-    Identifer(&'static str),
+    Label(String),
     Register8(CpuRegister),
     Register16(CpuRegister16),
 }
@@ -23,15 +24,40 @@ pub struct Instruction {
     pub prefix: u8,
 }
 
-pub fn unary_dispatch(inst: Instruction, v: Value) -> (u8, u8) {
-    // let z = (inst.prefix >> 6) & 3;
-    // match inst {
-    //
-    unimplemented!();
-
+/// Carries relevant state/data about the program being assembled
+#[derive(Debug)]
+pub struct Environment {
+    /// Labels that are resolved into addresses
+    pub labels: HashMap<String, u16>,
 }
 
-pub fn binary_dispatch(inst: Instruction, v1: Value, v2: Value) -> (u8, u8, u8) {
+impl Environment {
+    pub fn new() -> Environment {
+        Environment { labels: HashMap::new() }
+    }
+}
+
+/// Takes a `Value` and returns it in a usable form (number)
+pub fn resolve_value(v: Value, env: &mut Environment) -> Option<u16> {
+    match v {
+        Value::Literal8(n) => Some(n as u16),
+        Value::Literal16(n) => Some(n),
+        Value::Label(str) => {
+            if let Some(&v) = env.labels.get(&str) {
+                Some(v)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn unary_dispatch(inst: Instruction, v: u8) -> (u8, u8) {
+    (inst.prefix, v)
+}
+
+pub fn binary_dispatch(inst: Instruction, v1: u8, v2: u8) -> (u8, u8, u8) {
     unimplemented!();
 }
 
@@ -60,7 +86,7 @@ pub fn cpuReg_dispatch16(reg: CpuRegister16) -> u8 {
 }
 
 
-/// Returns in Big Endian
+/// Returns in Big endian
 pub fn lookup_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
     let z = cpuReg_dispatch(reg);
     let value = (n << 4) | z;
@@ -77,5 +103,20 @@ pub fn push_pop_disp16(regname: &str) -> u8 {
         "HL" => 2,
         "AF" => 3,
         _ => unreachable!(),
+    }
+}
+
+pub fn bytes_to_unary_instruction(a: u8, b: u8) -> Instruction {
+    Instruction {
+        insttype: InstructionType::Unary(Value::Literal8(b)),
+        prefix: a,
+    }
+}
+
+pub fn extract_8bit_literal(n: Value) -> Option<u8> {
+    if let Value::Literal8(v) = n {
+        Some(v)
+    } else {
+        None
     }
 }
