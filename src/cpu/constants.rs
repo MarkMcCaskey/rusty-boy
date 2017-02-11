@@ -96,7 +96,7 @@ pub enum Cc {
 #[derive(Debug, PartialEq)]
 enum CartridgeType {
     /// The only ROM type being targeted for version 0.1.0
-    RomOnlvy = 0,
+    RomOnly = 0,
     RomMBC1 = 1,
     RomMBC1Ram = 2,
     RomMBC1RamBatt = 3,
