@@ -1671,6 +1671,9 @@ impl Cpu {
     Returned value is number of cycles that the instruction took
      */
     pub fn dispatch_opcode(&mut self) -> u8 {
+        if self.state == CpuState::Crashed {
+            panic!("Attempt to run a crashed cpu PC={}", self.pc);
+        }
         // This may change PC, so should be called before fetching instruction
         self.handle_interrupts();
         
@@ -1980,7 +1983,10 @@ impl Cpu {
                         },
                         6 => self.di(),
                         7 => self.ei(),
-                        _ => panic!("Illegal opcode"),
+                        _ => {
+                            let pc = self.pc;
+                            self.crash(format!("Invalid opcode: {:X} at {:X}", first_byte, pc));
+                        },
                     },
 
                     4 => {
@@ -1993,7 +1999,10 @@ impl Cpu {
                                 self.inc_pc();
                                 self.inc_pc();
                             },
-                            _ => panic!("Invalid opcode: {:X} at {:X}", first_byte, self.pc),
+                            _ => {
+                                let pc = self.pc;
+                                self.crash(format!("Invalid opcode: {:X} at {:X}", first_byte, pc));
+                            },
                         }
                     },
 
@@ -2009,7 +2018,8 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 24;
                         } else {
-                            panic!("Invalid opcode: {}", first_byte)
+                            let pc = self.pc;
+                            self.crash(format!("Invalid opcode: {:X} at {:X}", first_byte, pc));
                         }
                     },
 
@@ -2046,6 +2056,11 @@ impl Cpu {
         self.cycles = (Wrapping(self.cycles) + Wrapping(inst_time as u64)).0;
         
         inst_time
+    }
+
+    pub fn crash(&mut self, info: String) {
+        error!("{}", info);
+        self.state = CpuState::Crashed;
     }
 
     pub fn load_rom(&mut self, file_path: &str) {

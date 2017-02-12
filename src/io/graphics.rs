@@ -1,8 +1,11 @@
 //! Graphics utility functions
 
 use sdl2;
+use sdl2::rect::Rect;
+use sdl2::rect::Point;
 use io::constants::*;
 use cpu::constants::MemAddr;
+use cpu::*;
 
 /// Saves the current screen to file
 pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {
@@ -20,14 +23,4 @@ pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {
     }
 }
 
-/// Returns maybe a memory address given the coordinates of the Gameboy screen?
-pub fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<MemAddr> {
-    let x_scaled = ((x as f32) / X_SCALE) as i32;
-    let y_scaled = ((y as f32) / Y_SCALE) as i32;
-    // FIXME this check is not correct
-    if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
-        Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
-    } else {
-        None
-    }
 }
