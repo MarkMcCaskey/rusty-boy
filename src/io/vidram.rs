@@ -2,35 +2,13 @@
 
 use sdl2;
 use io::constants::*;
-use cpu::constants::MemAddr;
 use cpu::*;
 
-use sdl2::render::Renderer;
 use sdl2::rect::Point;
-use sdl2::rect::Rect;
-use sdl2::pixels::*;
 
 
 // draw whole background buffer (256x256 px)
 // pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {}
-
-const TILE_PATTERN_TABLE_1_START: MemAddr = 0x8000;
-const TILE_PATTERN_TABLE_1_END: MemAddr = 0x8FFF;
-const TILE_PATTERN_TABLE_2_START: MemAddr = 0x8800;
-const TILE_PATTERN_TABLE_2_END: MemAddr = 0x97FF;
-
-// tables are overlapping
-const TILE_PATTERN_TABLES_SIZE: MemAddr = TILE_PATTERN_TABLE_2_END - TILE_PATTERN_TABLE_1_START;
-
-const TILE_SIZE_BYTES: u16 = 16;
-const TILE_SIZE_PX: u16 = 8;
-const BORDER_PX: u16 = 1;
-const TILE_COLUMNS: u16 = 16;
-
-const TILE_PALETTE: [Color; 4] = [Color::RGB(4, 5, 7),
-                                  Color::RGB(235, 135, 140),
-                                  Color::RGB(156, 146, 244),
-                                  Color::RGB(252, 250, 175)];
 
 
 // This is the dumbest and straightforward code for displaying Tile
@@ -69,7 +47,10 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Renderer,
 
                 let point = Point::new((tile_start_x + px) as i32 + screen_offset_x,
                                        (tile_start_y + py) as i32);
-                renderer.draw_point(point);
+                match renderer.draw_point(point) {
+                    Ok(_) => (),
+                    Err(_) => error!("Could not draw point at {:?}", point),
+                };
             }
         }
     }

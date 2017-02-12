@@ -5,9 +5,7 @@ use io::constants::*;
 use cpu::constants::MemAddr;
 use cpu::*;
 
-use sdl2::render::Renderer;
 use sdl2::rect::Point;
-use sdl2::rect::Rect;
 use sdl2::pixels::*;
 
 use disasm;
@@ -169,7 +167,7 @@ pub fn memvis_handle_click(gameboy: &Cpu, x: i32, y: i32) {
             let mem = gameboy.mem;
             let b1 = mem[pc + 1];
             let b2 = mem[pc + 2];
-            let (mnem, size) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
+            let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
             let nn = byte_to_u16(b1, b2);
             println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
                      pc,

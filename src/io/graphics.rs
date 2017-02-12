@@ -1,11 +1,6 @@
 //! Graphics utility functions
 
 use sdl2;
-use sdl2::rect::Rect;
-use sdl2::rect::Point;
-use io::constants::*;
-use cpu::constants::MemAddr;
-use cpu::*;
 
 /// Saves the current screen to file
 pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {

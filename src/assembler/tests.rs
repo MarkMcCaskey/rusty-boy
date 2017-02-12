@@ -11,7 +11,8 @@ fn parse_instruction() {
 
 #[test]
 fn parse_instructions() {
-    let insts = asm::parse_Input(".code SUB B NOP NOP NOP NOP").unwrap();
+    let insts = asm::parse_Input(".code SUB B NOP NOP NOP NOP");
+    assert!(insts.is_ok());
 }
 
 #[test]

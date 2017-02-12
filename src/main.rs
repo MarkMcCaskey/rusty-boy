@@ -32,9 +32,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
 
-use std::time::Duration;
 use sdl2::keyboard::Keycode;
-use sdl2::rect::Point;
 
 pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 2, 255);
 
@@ -195,10 +193,10 @@ fn main() {
                         Keycode::Escape => {
                             info!("Program exiting!");
                             break 'main;
-                        },
+                        }
                         Keycode::F3 => {
                             gameboy.event_log_enabled = !gameboy.event_log_enabled;
-                        },
+                        }
                         _ => (),
                     }
                 }
@@ -206,17 +204,17 @@ fn main() {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
                             memvis::memvis_handle_click(&gameboy, x, y);
-                        },
+                        }
                         sdl2::mouse::MouseButton::Right => {
                             // Jump to clicked addr and bring cpu back to life
                             match memvis::screen_coord_to_mem_addr(x, y) {
                                 Some(pc) => {
                                     gameboy.pc = pc;
                                     gameboy.state = cpu::constants::CpuState::Normal;
-                                },
+                                }
                                 _ => (),
                             }
-                        },
+                        }
                         _ => (),
                     }
                 }
@@ -224,12 +222,11 @@ fn main() {
             }
         }
 
-        let current_op_time =
-            if gameboy.state != cpu::constants::CpuState::Crashed {
-                gameboy.dispatch_opcode() as u64
-            } else {
-                0
-            };
+        let current_op_time = if gameboy.state != cpu::constants::CpuState::Crashed {
+            gameboy.dispatch_opcode() as u64
+        } else {
+            0
+        };
 
         cycle_count += current_op_time;
         clock_cycles += current_op_time;
@@ -299,14 +296,14 @@ fn main() {
             // renderer.draw_point(addr_to_point(pc));
 
             memvis::draw_memory_values(&mut renderer, &gameboy);
-            
+
             if gameboy.event_log_enabled {
                 memvis::draw_memory_events(&mut renderer, &mut gameboy);
             }
 
             vidram::draw_tile_patterns(&mut renderer, &gameboy, MEM_DISP_WIDTH + 2);
-            
-            
+
+
             //   00111100 1110001 00001000
             //   01111110 1110001 00010100
             //   11111111 1110001 00101010

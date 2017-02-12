@@ -1,10 +1,7 @@
 use std::str::FromStr;
-use std::collections::HashMap;
 use super::CSL;
 use super::CSL::*;
-use cpu::constants;
 use cpu::constants::*;
-use cpu::*;
 
 grammar;
 
