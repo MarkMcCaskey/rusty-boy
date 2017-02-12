@@ -26,6 +26,8 @@ use io::vidram;
 use std::num::Wrapping;
 use clap::{Arg, App};
 use sdl2::*;
+use sdl2::rect::Rect;
+use sdl2::rect::Point;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -101,7 +103,10 @@ fn main() {
     // Set up gameboy
     let mut gameboy = Cpu::new();
 
-    gameboy.event_log_enabled = true;
+    let mem_val_display_enabled = true;
+    let mut event_log_enabled = true;
+    // TODO move all init in one place
+    gameboy.event_log_enabled = event_log_enabled;
 
     // Set up SDL; input
     let sdl_context = sdl2::init().unwrap();
@@ -144,6 +149,17 @@ fn main() {
     // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
 
+    let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH,
+                                                      MEM_DISP_HEIGHT,
+                                                      24,
+                                                      12),
+                                            vec![TileDataSelect::Mode1,
+                                                 TileDataSelect::Mode2]);
+
+    // This does not work as intended because of borrowing
+    // let mut buttons = Vec::new();
+    // buttons.push(tile_data_mode_button);
+    
     device.resume();
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
@@ -200,7 +216,13 @@ fn main() {
                             break 'main;
                         }
                         Keycode::F3 => {
-                            gameboy.event_log_enabled = !gameboy.event_log_enabled;
+                            event_log_enabled = !event_log_enabled;
+                            gameboy.event_log_enabled = event_log_enabled;
+                        }
+                        Keycode::R => {
+                            gameboy = Cpu::new();
+                            gameboy.load_rom(rom_file);
+                            gameboy.event_log_enabled = event_log_enabled;
                         }
                         _ => (),
                     }
@@ -209,6 +231,11 @@ fn main() {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
                             memvis::memvis_handle_click(&gameboy, x, y);
+                            let point = Point::new(x / X_SCALE as i32, y / Y_SCALE as i32);
+
+                            if tile_data_mode_button.rect.contains(point) {
+                                tile_data_mode_button.click();
+                            }
                         }
                         sdl2::mouse::MouseButton::Right => {
                             // Jump to clicked addr and bring cpu back to life
@@ -286,6 +313,7 @@ fn main() {
             Ok(_) => (),
             Err(_) => error!("Could not set render scale"),
         }
+
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
 
@@ -300,14 +328,33 @@ fn main() {
             // renderer.set_draw_color(Color::RGB(255, 255, 255));
             // renderer.draw_point(addr_to_point(pc));
 
-            memvis::draw_memory_values(&mut renderer, &gameboy);
-
-            if gameboy.event_log_enabled {
-                memvis::draw_memory_events(&mut renderer, &mut gameboy);
-            }
-
             vidram::draw_tile_patterns(&mut renderer, &gameboy, MEM_DISP_WIDTH + 2);
 
+            // TODO add toggle for this also?
+            let tile_map_offset = TILE_MAP_1_START;
+
+            let bg_select = tile_data_mode_button.value().unwrap();
+            
+            let tile_patterns_offset = match bg_select {
+                TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
+                TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
+            };
+
+            vidram::draw_background_buffer(&mut renderer, &gameboy,
+                                           tile_map_offset,
+                                           tile_patterns_offset);
+
+            if mem_val_display_enabled {
+                memvis::draw_memory_values(&mut renderer, &gameboy);
+                
+                if gameboy.event_log_enabled {
+                    memvis::draw_memory_events(&mut renderer, &mut gameboy);
+                }
+            }
+
+
+            tile_data_mode_button.draw(&mut renderer);
+            
 
             //   00111100 1110001 00001000
             //   01111110 1110001 00010100
