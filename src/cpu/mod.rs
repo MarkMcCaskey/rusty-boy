@@ -218,73 +218,79 @@ impl Cpu {
 
 
     /* sound */
-    pub fn channel1_sweep_time(&self) -> u8 {
-        ((self.mem[0xFF10] >> 4) & 0x7) as u8
-        }
+    pub fn channel1_sweep_time(&self) -> f32 {
+        (((self.mem[0xFF10] >> 4) & 0x7) as f32) / 128.0
+    }
         
-        pub fn channel1_sweep_increase(&self) -> bool {
-            ((self.mem[0xFF10] >> 3) & 1) == 1
-        }
-       
-        pub fn channel1_sweep_shift(&self) -> u8 {
-            (self.mem[0xFF10] & 0x7) as u8
-        }
+    pub fn channel1_sweep_increase(&self) -> bool {
+        ((self.mem[0xFF10] >> 3) & 1) == 0
+    }
+    
+    pub fn channel1_sweep_shift(&self) -> u8 {
+        (self.mem[0xFF10] & 0x7) as u8
+    }
         
-        pub fn channel1_wave_pattern_duty(&self) -> u8 {
-            ((self.mem[0xFF11] >> 6) & 0x3) as u8
+    pub fn channel1_wave_pattern_duty(&self) -> f32 {
+        match ((self.mem[0xFF11] >> 6) & 0x3) {
+            0 => 0.125,
+            1 => 0.25,
+            2 => 0.5,
+            3 => 0.75,
+            _ => unreachable!(),
         }
+    }
+    
+    pub fn channel1_sound_length(&self) -> u8 {
+        (self.mem[0xFF11] & 0x3F) as u8
+    }
         
-        pub fn channel1_sound_length(&self) -> u8 {
-            (self.mem[0xFF11] & 0x3F) as u8
-        }
+    pub fn channel1_envelope_initial_volume(&self) -> u8 {
+        ((self.mem[0xFF12] >> 4) & 0xF) as u8
+    }
         
-        pub fn channel1_envelope_initial_volume(&self) -> u8 {
-            ((self.mem[0xFF12] >> 4) & 0xF) as u8
-        }
-        
-        pub fn channel1_envelope_increasing(&self) -> bool {
-            ((self.mem[0xFF12] >> 3) & 0x1) == 1
-        }
+    pub fn channel1_envelope_increasing(&self) -> bool {
+        ((self.mem[0xFF12] >> 3) & 0x1) == 1
+    }
 
-        pub fn channel1_envelope_sweep(&self) -> u8 {
-            (self.mem[0xFF12] & 0x7) as u8
-        }
+    pub fn channel1_envelope_sweep(&self) -> u8 {
+        (self.mem[0xFF12] & 0x7) as u8
+    }
 
-        pub fn channel1_frequency(&self) -> u16 {
-            let lower = self.mem[0xFF13];
-            let higher = self.mem[0xFF14] & 0x7;
-            byte_to_u16(lower, higher)
-        }
-
-        pub fn channel1_counter_consecutive_selection(&self) -> bool {
-            //TODO:
-            false
-        }
-
-        pub fn channel1_restart_sound(&self) -> bool {
-            ((self.mem[0xFF14] >> 7) & 1) == 1
-        }
+    pub fn channel1_frequency(&self) -> u16 {
+        let lower = self.mem[0xFF13];
+        let higher = self.mem[0xFF14] & 0x7;
+        byte_to_u16(lower, higher)
+    }
+    
+    pub fn channel1_counter_consecutive_selection(&self) -> bool {
+        //TODO:
+        false
+    }
+    
+    pub fn channel1_restart_sound(&self) -> bool {
+        ((self.mem[0xFF14] >> 7) & 1) == 1
+    }
 
     
-        pub fn channel2_wave_pattern_duty(&self) -> u8 {
-            ((self.mem[0xFF16] >> 6) & 0x3) as u8
-        }
-        
-        pub fn channel2_sound_length(&self) -> u8 {
-            (self.mem[0xFF16] & 0x3F) as u8
-        }
-        
-        pub fn channel2_envelope_initial_volume(&self) -> u8 {
-            ((self.mem[0xFF17] >> 4) & 0xF) as u8
-        }
-        
-        pub fn channel2_envelope_increasing(&self) -> bool {
-            ((self.mem[0xFF17] >> 3) & 0x1) == 1
-        }
-        
-        pub fn channel2_envelope_sweep(&self) -> u8 {
-            self.mem[0xFF17] & 0x7
-        }
+    pub fn channel2_wave_pattern_duty(&self) -> u8 {
+        ((self.mem[0xFF16] >> 6) & 0x3) as u8
+    }
+    
+    pub fn channel2_sound_length(&self) -> u8 {
+        (self.mem[0xFF16] & 0x3F) as u8
+    }
+    
+    pub fn channel2_envelope_initial_volume(&self) -> u8 {
+        ((self.mem[0xFF17] >> 4) & 0xF) as u8
+    }
+    
+    pub fn channel2_envelope_increasing(&self) -> bool {
+        ((self.mem[0xFF17] >> 3) & 0x1) == 1
+    }
+    
+    pub fn channel2_envelope_sweep(&self) -> u8 {
+        self.mem[0xFF17] & 0x7
+    }
 
         pub fn channel2_frequency(&self) -> u16 {
             let lower = self.mem[0xFF18];
@@ -391,6 +397,13 @@ impl Cpu {
     set_sound_on!(set_sound3, 0x4);
     set_sound_on!(set_sound4, 0x8);
     set_sound_on!(set_sound_all, 0x80);
+
+    get_sound_on!(get_sound1, 0x1);
+    get_sound_on!(get_sound2, 0x2);
+    get_sound_on!(get_sound3, 0x4);
+    get_sound_on!(get_sound4, 0x8);
+    get_sound_on!(get_sound_all, 0x80);
+
 
     unset_sound_on!(unset_sound1, 0x1u8);
     unset_sound_on!(unset_sound2, 0x2u8);

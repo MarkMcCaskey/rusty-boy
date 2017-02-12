@@ -24,7 +24,7 @@ macro_rules! setter_unsetter_and_getter {
 
         macro_rules! $name_getter {
             ($name:ident, $location:expr) => {
-                fn $name(&self) -> bool{
+                pub fn $name(&self) -> bool{
                     ((self.mem[$memory_location] as u8) & $location)
                         == $location
                 }

@@ -106,11 +106,15 @@ fn main() {
     // Set up SDL; input
     let sdl_context = sdl2::init().unwrap();
 
-    let device = setup_audio(&sdl_context);
+    let mut device = setup_audio(&sdl_context);
+    //  device.resume();
+    // std::thread::sleep_ms(1000);
+    // device.pause();
     setup_controller_subsystem(&sdl_context);
 
     trace!("loading ROM");
     gameboy.load_rom(rom_file);
+
 
     // Set up graphics and window
     trace!("Opening window");
@@ -140,6 +144,7 @@ fn main() {
     // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
 
+    device.resume();
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
@@ -316,12 +321,33 @@ fn main() {
                 frame_num += Wrapping(1);
             }
 
+             if gameboy.get_sound1() {
+                 device.resume();
+             } else {
+                 device.pause();
+             }
+            
+            let mut sound_system = device.lock();
+            sound_system.wave_duty = gameboy.channel1_wave_pattern_duty();
+            sound_system.phase_inc = 1.0 /
+                                     (131072.0 / ((2048 - gameboy.channel1_frequency())) as f32);
+            sound_system.add = gameboy.channel1_sweep_increase();
+            //            131072 / (2048 - gb)
+
+
             renderer.present();
+
+
+
+            //            device.resume();
+            // std::thread::sleep_ms(20);
+            // device.pause();
+
 
             // Visualizations are slow and this is not the best way to do this anyway
             // std::thread::sleep(Duration::from_millis(FRAME_SLEEP));
         }
-
+       
     }
 }
 
