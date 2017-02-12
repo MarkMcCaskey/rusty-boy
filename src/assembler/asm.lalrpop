@@ -24,12 +24,19 @@ pub Input: Vec<u8> = {
                     current_location += 1;
                 },
                 CSL::InstructionType::Unary(v1)      => {
-                    let v1num = CSL::resolve_value(v1, &mut env)
-                        .expect(format!("Could not determine value at {}", current_location).as_ref()) as u8;
-                    let (b1, b2) = CSL::unary_dispatch(inst_copy, v1num);
-                    output.push(b2);
-                    output.push(b1);
-                    current_location += 2;
+                    match v1 {
+                        Value::Label(str) => {
+                            env.labels.insert(str, current_location);
+                        },
+                        _ => {
+                            let v1num = CSL::resolve_value(v1, &mut env)
+                                .expect(format!("Could not determine value at {}", current_location).as_ref()) as u8;
+                            let (b1, b2) = CSL::unary_dispatch(inst_copy, v1num);
+                            output.push(b2);
+                            output.push(b1);
+                            current_location += 2;
+                        }
+                    }
                 },
                 CSL::InstructionType::Binary(v1, v2) => {
                     let v1num = CSL::resolve_value(v1, &mut env)
@@ -61,11 +68,17 @@ Code: Vec<CSL::Instruction> = {
 Instruction: CSL::Instruction = {
     InstructionZero,
     InstructionUnary,
+    InstructionBinary,
+    Label,
 };
 
-Label: CSL::Value = {
+Label: CSL::Instruction = {
     <id:r"[a-zA-Z_][a-zA-Z0-9_-]*:"> => {
-        CSL::Value::Label(id.to_string())
+        Instruction{
+            insttype: InstructionType::Unary(
+                CSL::Value::Label(id[..(id.len() - 1)].to_string())),
+            prefix: 0
+        }
     },
 };
 
@@ -191,7 +204,28 @@ InstructionZero: CSL::Instruction = {
         let value = 0xC7 | (y << 3);
         CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value }
     },
+    "RLCA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x07},
+    "RRCA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x0F},
+    "RLA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x17},
+    "RRA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x1F},
+    "DAA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x27},
+    "CPL" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x2F},
+    "SCF" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x37},
+    "CCF" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x3F},
+    "RET" <Cc> => {
+        let value = 0xC0 | (<> << 3);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "LD" "(" "C" ")" "," "A" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xE2},
+    "LD" "A" "," "(" "C" ")" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xF2},
+    "DI" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xF3},
+    "EI" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xFB},
+    "ADD" "HL" "," <Register16> => {
+        let value = 0x09 | (cpuReg_dispatch16(<>) << 4);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
 };
+
 
 InstructionUnary: CSL::Instruction = {
     "RLC" <zr:Register8> => {
@@ -252,12 +286,121 @@ InstructionUnary: CSL::Instruction = {
     },
     "JR" <JrParser>,
     "STOP" => bytes_to_unary_instruction(0x10, 0),
+    "LDH" "(" <n:Number> ")" "," "A" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE0, nv)
+        } else {
+            panic!("LDH called with invalid argument")
+        }
+    },
+    "ADD" "SP" "," "(" <n:Number> ")" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE8, nv)
+        } else {
+            panic!("ADD called with invalid argument")
+        }
+    },
+    "LDH" "A" "," "(" <n:Number> ")" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF0, nv)
+        } else {
+            panic!("LDH called with invalid argument")
+        }
+    },
+    "LD" "HL" "," "SP" "+" <n:Number> => {
+         if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF8, nv)
+        } else {
+            panic!("LD HL called with invalid argument")
+        }
+    },
+    "ADD" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xC6, nv)
+        } else {
+            panic!("ADD A, X called with invalid argument")
+        }
+    },
+    "ADC" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xCE, nv)
+        } else {
+            panic!("ADC A, X called with invalid argument")
+        }       
+    },
+    "SUB" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xD6, nv)
+        } else {
+            panic!("SUB called with invalid argument")
+        }
+    },
+    "SBC" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xDE, nv)
+        } else {
+            panic!("SBC X called with invalid argument")
+        }       
+    },
+    "AND" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE6, nv)
+        } else {
+            panic!("AND called with invalid argument")
+        }
+    },
+    "XOR" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xEE, nv)
+        } else {
+            panic!("XOR called with invalid argument")
+        }       
+    },
+    "OR" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF6, nv)
+        } else {
+            panic!("OR called with invalid argument")
+        }
+    },
+    "CP" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xFE, nv)
+        } else {
+            panic!("CP called with invalid argument")
+        }       
+   },
+
+
 };
 
 InstructionBinary: CSL::Instruction = {
     "LD" <r:Register16> "," <n:Number> => {
         let value = 0x01 + (cpuReg_dispatch16(r) * 2);
         make_binary_inst(value, n)
+    },
+    "LD" "(" <n:Number> ")" "," "SP" => {
+        make_binary_inst(0x08, n)
+    },
+    "JP" <cv:Cc> "," <n:Number> => {
+        let value = 0xC2 | (cv << 3);
+        make_binary_inst(value, n)
+    },
+    "LD" "(" <n:Number> ")" "," "A" => {
+        make_binary_inst(0xEA, n)
+    },
+    "LD" "A" "," "(" <n:Number> ")" => {
+        make_binary_inst(0xFA, n)
+    },
+    "JP" <n:Number> => {
+        make_binary_inst(0xC3, n)
+    },
+    "CALL" <cv:Cc> "," <n:Number> => {
+        let value = 0xC4 | (cv << 3);
+        make_binary_inst(value, n)
+    },
+    "CALL" <n:Number> => {
+        make_binary_inst(0xCD, n)
     },
 };
 
@@ -294,6 +437,7 @@ MemoryAddressFromRegister: u8 = {
     "(HL-)" => 3,
 };
 
+#[inline]
 Register8: CpuRegister = {
     "A" => CpuRegister::A,
     "B" => CpuRegister::B,
@@ -305,6 +449,7 @@ Register8: CpuRegister = {
     "(HL)" => CpuRegister::HL,
 };
 
+#[inline]
 Register16: CpuRegister16 = {
     "BC" => CpuRegister16::BC,
     "DE" => CpuRegister16::DE,

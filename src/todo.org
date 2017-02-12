@@ -53,12 +53,12 @@ customize zone (m-x find-variable zone-programs) Kappa
 *** TODO General handling
 *** TODO Remapping
 * TODO Tools[0%]
-** TODO Assembler[20%]
+** TODO Assembler[80%]
 *** DONE Instruction translation
-*** TODO Pseudo-instructions?
-*** TODO Automate or use default values to make it easier
+*** CANCELED Pseudo-instructions?
+*** CANCELED Automate or use default values to make it easier
 *** TODO Address resolution
-*** TODO Name substitution
+*** CANCELED Name substitution
 ** TODO Disassembler[66%]
 *** DONE Generate text
 *** DONE Resolve relative jumps

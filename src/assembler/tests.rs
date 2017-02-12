@@ -69,13 +69,13 @@ fn sum_odd_numbers_under_100() {
         r#"
 .code
 LD B, 0
-loop:
+
 INC B
 BIT 0, B
 LD A, B
 ADD HL, BC
 CP 99 
-JP NZ loop
+JP NZ, 0x101
 "#);
     println!("{:?}", insts);
     assert!(insts.is_ok());
