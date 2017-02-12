@@ -230,7 +230,7 @@ fn main() {
         let current_op_time = if gameboy.state != cpu::constants::CpuState::Crashed {
             gameboy.dispatch_opcode() as u64
         } else {
-            0
+            10 // FIXME think about what to return here or refactor code around this
         };
 
         cycle_count += current_op_time;
