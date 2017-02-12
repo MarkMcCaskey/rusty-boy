@@ -82,6 +82,16 @@ InstructionZero: CSL::Instruction = {
         }
         CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
     },
+    "LD" <MemoryAddressFromRegister> "," "A"=> {
+        let value = 0x02 + (<> * 2);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "LD" <yr:Register8> "," <n:Number> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x06 + (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
     "ADD" <yr:Register8> "," <zr:Register8> => {
         let y = cpuReg_dispatch(yr);
         assert_eq!(y, cpuReg_dispatch(CpuRegister::A));
@@ -241,6 +251,14 @@ InstructionUnary: CSL::Instruction = {
         bytes_to_unary_instruction(0xCB, 0xC0 | y | z)
     },
     "JR" <JrParser>,
+    "STOP" => bytes_to_unary_instruction(0x10, 0),
+};
+
+InstructionBinary: CSL::Instruction = {
+    "LD" <r:Register16> "," <n:Number> => {
+        let value = 0x01 + (cpuReg_dispatch16(r) * 2);
+        make_binary_inst(value, n)
+    },
 };
 
 JrParser: CSL::Instruction = {
@@ -267,6 +285,13 @@ Cc: u8 = {
 Cchelper: u8 = {
     "Z" => 0,
     "C" => 2,
+};
+
+MemoryAddressFromRegister: u8 = {
+    "(BC)"  => 0,
+    "(DE)"  => 1,
+    "(HL+)" => 2,
+    "(HL-)" => 3,
 };
 
 Register8: CpuRegister = {

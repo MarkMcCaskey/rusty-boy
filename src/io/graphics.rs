@@ -17,10 +17,9 @@ pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {
     let pitch = format.byte_size_of_pixels(w as usize) as u32;
     let masks = format.into_masks().unwrap();
     let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, w, h, pitch, masks).unwrap();
+
     match surface.save_bmp(filename.clone()) {
         Ok(_) => (),
         Err(_) => error!("Could not save screenshot to {}", filename),
     }
-}
-
 }

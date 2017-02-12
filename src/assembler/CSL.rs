@@ -58,7 +58,7 @@ pub fn unary_dispatch(inst: Instruction, v: u8) -> (u8, u8) {
 }
 
 pub fn binary_dispatch(inst: Instruction, v1: u8, v2: u8) -> (u8, u8, u8) {
-    unimplemented!();
+    (inst.prefix, v1, v2)
 }
 
 pub fn cpuReg_dispatch(reg: CpuRegister) -> u8 {
@@ -118,5 +118,27 @@ pub fn extract_8bit_literal(n: Value) -> Option<u8> {
         Some(v)
     } else {
         None
+    }
+}
+
+pub fn bytes_to_binary_instruction(a: u8, b: u8, c: u8) -> Instruction {
+    Instruction {
+        insttype: InstructionType::Binary(Value::Literal8(b), Value::Literal8(c)),
+        prefix: a,
+    }
+}
+
+pub fn make_binary_inst(a: u8, b: Value) -> Instruction {
+    if let Value::Literal16(bv) = b {
+        // using little endian
+        let first = (bv & 0xFF) as u8;
+        let second = ((bv >> 8) & 0xFF) as u8;
+
+        Instruction {
+            insttype: InstructionType::Binary(Value::Literal8(first), Value::Literal8(second)),
+            prefix: a,
+        }
+    } else {
+        panic!("Unhandled case in make_binary_inst");
     }
 }
