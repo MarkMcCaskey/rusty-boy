@@ -1528,13 +1528,13 @@ impl Cpu {
         let first_half = ((nn >> 8) & 0xFF) as byte;
         let second_half = (nn & 0xFF) as byte;
 
-        let mut sp_idx = self.sp as usize;
-        sp_idx -= 1;
-        self.set_mem(sp_idx, first_half);
-        sp_idx -= 1;
-        self.set_mem(sp_idx, second_half);
+        let mut sp_idx = Wrapping(self.sp as usize);
+        sp_idx -= Wrapping(1);
+        self.set_mem(sp_idx.0, first_half);
+        sp_idx -= Wrapping(1);
+        self.set_mem(sp_idx.0, second_half);
 
-        self.sp -= 2;
+        self.sp = (Wrapping(self.sp) - Wrapping(2)).0;
     }
 
     fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
@@ -1559,12 +1559,12 @@ impl Cpu {
     }
 
     fn pop_from_stack(&mut self) -> u16 {
-        let mut sp_idx = self.sp as usize;
-        let second_half = self.get_mem(sp_idx);
-        sp_idx += 1;
-        let first_half = self.get_mem(sp_idx);
+        let mut sp_idx = Wrapping(self.sp as usize);
+        let second_half = self.get_mem(sp_idx.0);
+        sp_idx += Wrapping(1);
+        let first_half = self.get_mem(sp_idx.0);
         
-        self.sp += 2;
+        self.sp = (Wrapping(self.sp) + Wrapping(2)).0;
         byte_to_u16(second_half, first_half)
     }
 
