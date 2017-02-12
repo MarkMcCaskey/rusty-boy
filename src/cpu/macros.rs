@@ -5,9 +5,9 @@ macro_rules! setter_unsetter_and_getter {
             ($name:ident, $location:expr) => {
                 //TODO: maybe add an option for setting them public?
                 pub fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location];
+                    let orig_val = self.mem[$memory_location] as u8;
 
-                    self.mem[$memory_location] = orig_val | $location;
+                    self.mem[$memory_location] = (orig_val | $location) as byte;
                 }
             }
         }
@@ -15,9 +15,9 @@ macro_rules! setter_unsetter_and_getter {
         macro_rules! $name_unsetter {
             ($name:ident, $location:expr) => {
                 fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location];
+                    let orig_val = self.mem[$memory_location] as u8;
 
-                    self.mem[$memory_location] = orig_val & (!$location);
+                    self.mem[$memory_location] = (orig_val & (!$location)) as byte;
                 }
             }
         }
@@ -25,7 +25,7 @@ macro_rules! setter_unsetter_and_getter {
         macro_rules! $name_getter {
             ($name:ident, $location:expr) => {
                 fn $name(&self) -> bool{
-                    (self.mem[$memory_location] & $location)
+                    ((self.mem[$memory_location] as u8) & $location)
                         == $location
                 }
             }
@@ -95,16 +95,16 @@ TODO: fix Rust macro system to allow this or update interpolate_idents
 macro_rules! button {
     ($press_button:ident, $unpress_button:ident, $location:expr) => {
         pub fn $press_button(&mut self) {
-            let old_val = self.mem[0xFF00];
-            self.mem[0xFF00] = old_val | $location;
+            let old_val = self.mem[0xFF00] as u8;
+            self.mem[0xFF00] = (old_val | $location) as byte;
             if self.state == CpuState::Stop {
                 self.state = CpuState::Normal;
             }
         }
         
         pub fn $unpress_button(&mut self) {
-            let old_val = self.mem[0xFF00];
-            self.mem[0xFF00] = old_val & (!$location);
+            let old_val = self.mem[0xFF00] as u8;
+            self.mem[0xFF00] = (old_val & (!$location)) as byte;
         }
     }
 }

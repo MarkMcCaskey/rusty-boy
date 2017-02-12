@@ -1,67 +1,474 @@
 use std::str::FromStr;
 use super::CSL;
 use super::CSL::*;
-use cpu::constants;
 use cpu::constants::*;
-use cpu::*;
 
 grammar;
 
 pub Input: Vec<u8> = {
     ".code" <Code> => {
         let mut output: Vec<u8> = vec![];
+        let mut env = CSL::Environment::new();
+        /// Where the codegen starts.  This should be configurable in
+        /// a `.data` section eventually
+        let mut current_location = 0x100; 
 
         for inst in <> {
             let inst_copy = inst.clone();
             match inst.insttype {
-                CSL::InstructionType::Zero           => output.push(inst.prefix),
+                CSL::InstructionType::Zero           => {
+                    output.push(inst.prefix);
+                    current_location += 1;
+                },
                 CSL::InstructionType::Unary(v1)      => {
-                    let (b1, b2) = CSL::unary_dispatch(inst_copy, v1);
-                    output.push(b1);
-                    output.push(b2);
+                    match v1 {
+                        Value::Label(str) => {
+                            env.labels.insert(str, current_location);
+                        },
+                        _ => {
+                            let v1num = CSL::resolve_value(v1, &mut env)
+                                .expect(format!("Could not determine value at {}", current_location).as_ref()) as u8;
+                            let (b1, b2) = CSL::unary_dispatch(inst_copy, v1num);
+                            output.push(b2);
+                            output.push(b1);
+                            current_location += 2;
+                        }
+                    }
                 },
                 CSL::InstructionType::Binary(v1, v2) => {
-                    let (b1, b2, b3) = CSL::binary_dispatch(inst_copy, v1, v2);
-                    output.push(b1);
-                    output.push(b2);
+                    let v1num = CSL::resolve_value(v1, &mut env)
+                        .expect(format!("Could not determine value at {}", current_location).as_ref()) as u8;
+                    let v2num = CSL::resolve_value(v2, &mut env)
+                        .expect(format!("Could not determine value at {}", current_location).as_ref()) as u8;
+                    let (b1, b2, b3) = CSL::binary_dispatch(inst_copy, v1num, v2num);
                     output.push(b3);
+                    output.push(b2);
+                    output.push(b1);
+                    current_location += 3;	
                 },
             };
         }
+        output.reverse();
         output
     },
 };
 
-
 Code: Vec<CSL::Instruction> = {
+    <i:Instruction> <v:Code> => {
+        let mut v2 = v.clone();
+        v2.push(i);
+        v2
+    },
     <Instruction> => vec![<>],
 };
 
 Instruction: CSL::Instruction = {
+    InstructionZero,
+    InstructionUnary,
+    InstructionBinary,
+    Label,
+};
+
+Label: CSL::Instruction = {
+    <id:r"[a-zA-Z_][a-zA-Z0-9_-]*:"> => {
+        Instruction{
+            insttype: InstructionType::Unary(
+                CSL::Value::Label(id[..(id.len() - 1)].to_string())),
+            prefix: 0
+        }
+    },
+};
+
+InstructionZero: CSL::Instruction = {
     "NOP" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x0},
+    "HALT" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x76},
+    "LD" <yr:Register8> "," <zr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        let z = cpuReg_dispatch(zr);
+        let value = 0x40 | (y << 3) | z;
+        //make sure invalid inst isn't taken
+        if value == 0x76 {
+            panic!("LD (HL), (HL) is equal to halt... this error to be handeled later");
+        }
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "LD" <MemoryAddressFromRegister> "," "A"=> {
+        let value = 0x02 + (<> * 2);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "LD" <yr:Register8> "," <n:Number> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x06 + (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "ADD" <yr:Register8> "," <zr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        assert_eq!(y, cpuReg_dispatch(CpuRegister::A));
+        let z = cpuReg_dispatch(zr);
+        let value = 0x80 | z;
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "ADC" <yr:Register8> "," <zr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        assert_eq!(y, cpuReg_dispatch(CpuRegister::A));
+        let z = cpuReg_dispatch(zr);
+        let value = 0x88 | z;
+        
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "SUB" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0x90 | z;
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "SBC" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0x98 | z;
+        
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "AND" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0xA0 | z;
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "XOR" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0xA8 | z;
+        
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "OR" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0xB0 | z;
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "CP" <zr:Register8> => {
+        let z = cpuReg_dispatch(zr);
+        let value = 0xB8 | z;
+        
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "POP" <rs:PushPopReg16> => {
+        let z = push_pop_disp16(rs);
+        let value = 0xC2 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "PUSH" <rs:PushPopReg16> => {
+        let z = push_pop_disp16(rs);
+        let value = 0xC6 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "INC" <yr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x04 | (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "INC" <zr:Register16> => {
+        let z = cpuReg_dispatch16(zr);
+        let value = 0x03 | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "DEC" <yr:Register8> => {
+        let y = cpuReg_dispatch(yr);
+        let value = 0x05 | (y << 3);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "DEC" <zr:Register16> => {
+        let z = cpuReg_dispatch16(zr);
+        let value = 0x0B | (z << 4);
+
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "RST" <str:r"[0-3](0|8)H"> => {
+
+        let num = u8::from_str_radix(&str[0..2], 16).unwrap();
+        if num % 8 != 0 {
+            panic!("INVALID RESET NUMBER");
+        }
+
+        let y = num % 8;
+        let value = 0xC7 | (y << 3);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value }
+    },
+    "RLCA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x07},
+    "RRCA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x0F},
+    "RLA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x17},
+    "RRA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x1F},
+    "DAA" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x27},
+    "CPL" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x2F},
+    "SCF" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x37},
+    "CCF" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0x3F},
+    "RET" <Cc> => {
+        let value = 0xC0 | (<> << 3);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
+    "LD" "(" "C" ")" "," "A" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xE2},
+    "LD" "A" "," "(" "C" ")" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xF2},
+    "DI" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xF3},
+    "EI" => CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: 0xFB},
+    "ADD" "HL" "," <Register16> => {
+        let value = 0x09 | (cpuReg_dispatch16(<>) << 4);
+        CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
+    },
 };
 
-Register8: CSL::Value = {
-    "A" => CSL::Value::Register8(CpuRegister::A),
-    "B" => CSL::Value::Register8(CpuRegister::B),
-    "C" => CSL::Value::Register8(CpuRegister::C),
-    "D" => CSL::Value::Register8(CpuRegister::D),
-    "E" => CSL::Value::Register8(CpuRegister::E),
-    "H" => CSL::Value::Register8(CpuRegister::H),
-    "L" => CSL::Value::Register8(CpuRegister::L),
+
+InstructionUnary: CSL::Instruction = {
+    "RLC" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "RRC" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "RL" <zr:Register8> =>  {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "RR" <zr:Register8> =>  {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "SLA" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "SRA" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "SWAP" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    },
+    "SRL" <zr:Register8> => {
+        let (a,b) = lookup_prefix(0, zr);
+        bytes_to_unary_instruction(a,b)
+    } ,
+    "BIT" <n:Decimal> "," <zr:Register8> => {
+        if n < 0 || n > 7 {
+            panic!("Invalid BIT instruction");
+        }
+        let z = cpuReg_dispatch(zr);
+        let y = ((n as u8) << 3) & 0x38;
+        bytes_to_unary_instruction(0xCB, 0x40 | y | z)
+    },
+    "RES" <n:Decimal> "," <zr:Register8> => {
+        if n < 0 || n > 7 {
+            panic!("Invalid RES instruction");
+        }
+        let z = cpuReg_dispatch(zr);
+        let y = ((n as u8) << 3) & 0x38;
+        bytes_to_unary_instruction(0xCB, 0x80 | y | z)
+    },
+    "SET" <n:Decimal> "," <zr:Register8> => {
+        if n < 0 || n > 7 {
+            panic!("Invalid SET instruction");
+        }
+        let z = cpuReg_dispatch(zr);
+        let y = ((n as u8) << 3) & 0x38;
+        bytes_to_unary_instruction(0xCB, 0xC0 | y | z)
+    },
+    "JR" <JrParser>,
+    "STOP" => bytes_to_unary_instruction(0x10, 0),
+    "LDH" "(" <n:Number> ")" "," "A" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE0, nv)
+        } else {
+            panic!("LDH called with invalid argument")
+        }
+    },
+    "ADD" "SP" "," "(" <n:Number> ")" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE8, nv)
+        } else {
+            panic!("ADD called with invalid argument")
+        }
+    },
+    "LDH" "A" "," "(" <n:Number> ")" => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF0, nv)
+        } else {
+            panic!("LDH called with invalid argument")
+        }
+    },
+    "LD" "HL" "," "SP" "+" <n:Number> => {
+         if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF8, nv)
+        } else {
+            panic!("LD HL called with invalid argument")
+        }
+    },
+    "ADD" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xC6, nv)
+        } else {
+            panic!("ADD A, X called with invalid argument")
+        }
+    },
+    "ADC" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xCE, nv)
+        } else {
+            panic!("ADC A, X called with invalid argument")
+        }       
+    },
+    "SUB" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xD6, nv)
+        } else {
+            panic!("SUB called with invalid argument")
+        }
+    },
+    "SBC" "A" "," <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xDE, nv)
+        } else {
+            panic!("SBC X called with invalid argument")
+        }       
+    },
+    "AND" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xE6, nv)
+        } else {
+            panic!("AND called with invalid argument")
+        }
+    },
+    "XOR" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xEE, nv)
+        } else {
+            panic!("XOR called with invalid argument")
+        }       
+    },
+    "OR" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xF6, nv)
+        } else {
+            panic!("OR called with invalid argument")
+        }
+    },
+    "CP" <n:Number> => {
+        if let Value::Literal8(nv) = n {
+            bytes_to_unary_instruction(0xFE, nv)
+        } else {
+            panic!("CP called with invalid argument")
+        }       
+   },
+
+
 };
 
-Register16: CSL::Value = {
-    "BC" => CSL::Value::Register16(CpuRegister16::BC),
-    "DE" => CSL::Value::Register16(CpuRegister16::DE),
-    "HL" => CSL::Value::Register16(CpuRegister16::HL),
-    "SP" => CSL::Value::Register16(CpuRegister16::SP),
+InstructionBinary: CSL::Instruction = {
+    "LD" <r:Register16> "," <n:Number> => {
+        let value = 0x01 + (cpuReg_dispatch16(r) * 2);
+        make_binary_inst(value, n)
+    },
+    "LD" "(" <n:Number> ")" "," "SP" => {
+        make_binary_inst(0x08, n)
+    },
+    "JP" <cv:Cc> "," <n:Number> => {
+        let value = 0xC2 | (cv << 3);
+        make_binary_inst(value, n)
+    },
+    "LD" "(" <n:Number> ")" "," "A" => {
+        make_binary_inst(0xEA, n)
+    },
+    "LD" "A" "," "(" <n:Number> ")" => {
+        make_binary_inst(0xFA, n)
+    },
+    "JP" <n:Number> => {
+        make_binary_inst(0xC3, n)
+    },
+    "CALL" <cv:Cc> "," <n:Number> => {
+        let value = 0xC4 | (cv << 3);
+        make_binary_inst(value, n)
+    },
+    "CALL" <n:Number> => {
+        make_binary_inst(0xCD, n)
+    },
 };
 
-Number: CSL::Value = { Hex => if <> > (u8::max_value() as u16) {
-    CSL::Value::Literal16(<>)
-} else {
-    CSL::Value::Literal8(<> as u8)
-}};
+JrParser: CSL::Instruction = {
+    <cn:Cc> "," <n:Number> => {
+        let v = extract_8bit_literal(n)
+            .expect("Number is greater than 8 bits in JR CC");
+        // value sets top bit of y
+        let value = 0x20 | (cn << 3);
+        bytes_to_unary_instruction(value, v)
+    },
+    <n:Number> => {
+        let v = extract_8bit_literal(n)
+            .expect("JR expects an 8bit value, could not find one");
+        bytes_to_unary_instruction(0x18, v)
+    },
+};
+
+Cc: u8 = {
+    "N" <Cchelper>,
+    "Z" => 1,
+    "C" => 3,
+};
+
+Cchelper: u8 = {
+    "Z" => 0,
+    "C" => 2,
+};
+
+MemoryAddressFromRegister: u8 = {
+    "(BC)"  => 0,
+    "(DE)"  => 1,
+    "(HL+)" => 2,
+    "(HL-)" => 3,
+};
+
+#[inline]
+Register8: CpuRegister = {
+    "A" => CpuRegister::A,
+    "B" => CpuRegister::B,
+    "C" => CpuRegister::C,
+    "D" => CpuRegister::D,
+    "E" => CpuRegister::E,
+    "H" => CpuRegister::H,
+    "L" => CpuRegister::L,
+    "(HL)" => CpuRegister::HL,
+};
+
+#[inline]
+Register16: CpuRegister16 = {
+    "BC" => CpuRegister16::BC,
+    "DE" => CpuRegister16::DE,
+    "HL" => CpuRegister16::HL,
+    "SP" => CpuRegister16::SP,
+};
+
+PushPopReg16: &'input str = {
+    "BC", "DE", "HL", "AF",
+};
+
+Number: CSL::Value = {
+    <Hex> => if <> > (u8::max_value() as u16) {
+        CSL::Value::Literal16(<>)
+    } else {
+        CSL::Value::Literal8(<> as u8)
+    },
+    <Decimal> => if <> > (u8::max_value() as u16) {
+        CSL::Value::Literal16(<>)
+    } else {
+        CSL::Value::Literal8(<> as u8)
+    },
+};
 Hex: u16 = <r"0(x|X)[0-9a-fA-F]+"> => u16::from_str_radix(&<>[2..], 16).unwrap();
 Decimal: u16 = <r"-?[0-9]+"> => u16::from_str(<>).unwrap();

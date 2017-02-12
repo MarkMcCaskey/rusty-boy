@@ -154,6 +154,12 @@ impl Debugger {
 
             // Enter (on linux)
             0xA => {
+                if self.input_buffer.is_empty() {
+                    if let Some(str) = self.get_nth_hist_item(0) {
+                        self.input_buffer = str;
+                    }
+                }
+
                 // do parsing
                 let parseret = match dbglanguage::parse_Input(self.input_buffer.as_ref()) {
                     Ok(v) => Ok(v),
