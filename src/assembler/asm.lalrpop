@@ -162,7 +162,7 @@ InstructionZero: CSL::Instruction = {
     },
     "PUSH" <rs:PushPopReg16> => {
         let z = push_pop_disp16(rs);
-        let value = 0xC6 | (z << 4);
+        let value = 0xC5 | (z << 4);
 
         CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value}
     },
@@ -197,7 +197,7 @@ InstructionZero: CSL::Instruction = {
             panic!("INVALID RESET NUMBER");
         }
 
-        let y = num % 8;
+        let y = num / 8;
         let value = 0xC7 | (y << 3);
         CSL::Instruction{insttype: CSL::InstructionType::Zero, prefix: value }
     },
@@ -226,35 +226,35 @@ InstructionZero: CSL::Instruction = {
 
 InstructionUnary: CSL::Instruction = {
     "RLC" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0, zr);
         bytes_to_unary_instruction(a,b)
     },
     "RRC" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x8, zr);
         bytes_to_unary_instruction(a,b)
     },
     "RL" <zr:Register8> =>  {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x10, zr);
         bytes_to_unary_instruction(a,b)
     },
     "RR" <zr:Register8> =>  {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x18, zr);
         bytes_to_unary_instruction(a,b)
     },
     "SLA" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x20, zr);
         bytes_to_unary_instruction(a,b)
     },
     "SRA" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x28, zr);
         bytes_to_unary_instruction(a,b)
     },
     "SWAP" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x30, zr);
         bytes_to_unary_instruction(a,b)
     },
     "SRL" <zr:Register8> => {
-        let (a,b) = lookup_prefix(0, zr);
+        let (a,b) = lookup_cb_prefix(0x38, zr);
         bytes_to_unary_instruction(a,b)
     } ,
     "BIT" <n:Decimal> "," <zr:Register8> => {

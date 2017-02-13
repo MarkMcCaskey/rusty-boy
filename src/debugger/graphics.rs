@@ -1,8 +1,7 @@
 use ncurses::*;
-//use std::collections::HashMap;
+// use std::collections::HashMap;
 use super::language::*;
 use super::dbglanguage;
-use std;
 use cpu::*;
 use cpu::constants::*;
 use super::super::disasm::*;
@@ -36,8 +35,8 @@ enum DebuggerState {
     Paused,
 }
 
+/// Handles data related to the TUI debugger
 pub struct Debugger {
-    cpu: Cpu,
     //   symbol_table: HashMap<&'str, Expression>,
     asm_win: WINDOW,
     reg_win: WINDOW,
@@ -53,7 +52,7 @@ pub struct Debugger {
 }
 
 impl Debugger {
-    pub fn new(file_name: &str) -> Debugger {
+    pub fn new(cpu: &mut Cpu) -> Debugger {
         use ncurses::*;
 
         let mut max_x = 0;
@@ -65,10 +64,6 @@ impl Debugger {
         echo();
 
         getmaxyx(stdscr(), &mut max_y, &mut max_x);
-        printw(format!("X: {} Y: {}", max_x, max_y).as_ref());
-
-        let mut cpu = Cpu::new();
-        cpu.load_rom(file_name);
 
         let mut romcp = [0u8; 0x8000];
         for i in 0..0x7FFF {
@@ -76,7 +71,6 @@ impl Debugger {
         }
 
         let dbg = Debugger {
-            cpu: cpu,
             //         symbol_table: HashMap::new(),
             asm_win: create_win((max_y / WIN_Y_DIV) * WIN_Y_ADJ,
                                 (max_x / WIN_X_DIV) * WIN_X_ADJ,
@@ -102,12 +96,12 @@ impl Debugger {
         dbg
     }
 
-    pub fn handle_input(&mut self) {
-        timeout(-1); //make input blocking
+    pub fn handle_input(&mut self, cpu: &mut Cpu) {
+        //        timeout(-1); //make input blocking
         let ch = getch();
         match ch {
             KEY_LEFT => {
-                self.cpu.dispatch_opcode();
+                cpu.dispatch_opcode();
             }
             // numbers and letters
             v @ 0x20...0x7F => {
@@ -167,7 +161,7 @@ impl Debugger {
                 };
 
                 let parseval = match parseret {
-                    Ok(v) => self.dispatch_debugger_action(v),
+                    Ok(v) => self.dispatch_debugger_action(cpu, v),
                     Err(e) => e,
                 };
 
@@ -182,7 +176,7 @@ impl Debugger {
         }
     }
 
-    pub fn refresh_screen(&mut self) {
+    pub fn refresh_screen(&mut self, cpu: &mut Cpu) {
         wclear(self.asm_win);
         wclear(self.in_win);
         box_(self.in_win, 0, 0);
@@ -190,12 +184,12 @@ impl Debugger {
         box_(self.reg_win, 0, 0);
 
         //        wscrl(self.reg_win, 5);
-        self.draw_registers();
-        self.draw_registers16();
-        self.draw_watchpoints();
-        self.draw_stack_data();
+        self.draw_registers(cpu);
+        self.draw_registers16(cpu);
+        self.draw_watchpoints(cpu);
+        self.draw_stack_data(cpu);
         self.draw_in();
-        self.draw_asm();
+        self.draw_asm(cpu);
 
 
         wrefresh(self.asm_win);
@@ -234,15 +228,11 @@ impl Debugger {
         wprintw(self.in_win, self.input_buffer.as_ref());
     }
 
-    fn draw_asm(&mut self) {
-        let cur_pc = self.cpu.pc;
+    fn draw_asm(&mut self, cpu: &mut Cpu) {
+        let cur_pc = cpu.pc;
         let ar_max = self.dissassembled_rom.len() - 1;
-        let idx = binsearch_inst(&self.dissassembled_rom,
-                                 cur_pc,
-                                 0,
-                                 ar_max as usize)
-            .expect(format!("INVALID INSTRUCTION at {}", self.cpu.pc)
-                .as_ref()) as u16;
+        let idx = binsearch_inst(&self.dissassembled_rom, cur_pc, 0, ar_max as usize)
+            .expect(format!("INVALID INSTRUCTION at {}", cpu.pc).as_ref()) as u16;
 
         if idx > 7 {
             for i in 0..7 {
@@ -296,7 +286,7 @@ impl Debugger {
     }
 
     // TODO: make this nicer later
-    fn draw_watchpoints(&mut self) {
+    fn draw_watchpoints(&mut self, cpu: &mut Cpu) {
         let mut x = 0;
         let mut y = 0;
         getmaxyx(self.reg_win, &mut y, &mut x);
@@ -308,34 +298,29 @@ impl Debugger {
             wprintw(self.reg_win,
                     format!("({:X}): {:X}",
                             watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
-                            self.cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize])
+                            cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize])
                         .as_ref());
         }
 
     }
 
-    fn draw_register(&mut self, y_loc: i32, name: &str, reg: CpuRegister) {
+    fn draw_register(&mut self, cpu: &Cpu, y_loc: i32, name: &str, reg: CpuRegister) {
         wmove(self.reg_win, y_loc, 1);
         wprintw(self.reg_win,
                 format!("{:4}: 0x{:02X}",
                         name,
-                        self.cpu
-                            .access_register(reg)
+                        cpu.access_register(reg)
                             .expect("invalid register"))
                     .as_ref());
     }
 
-    fn draw_register16(&mut self, y_loc: i32, name: &str, reg: CpuRegister16) {
+    fn draw_register16(&mut self, cpu: &mut Cpu, y_loc: i32, name: &str, reg: CpuRegister16) {
         wmove(self.reg_win, y_loc, 13);
         wprintw(self.reg_win,
-                format!("{:2}: 0x{:04X}",
-                        name,
-                        self.cpu
-                            .access_register16(reg))
-                    .as_ref());
+                format!("{:2}: 0x{:04X}", name, cpu.access_register16(reg)).as_ref());
     }
 
-    fn draw_stack_data(&mut self) {
+    fn draw_stack_data(&mut self, cpu: &mut Cpu) {
         let mut x = 0;
         let mut y = 0;
         getmaxyx(self.reg_win, &mut y, &mut x);
@@ -348,7 +333,7 @@ impl Debugger {
         }
 
         // div by for 16bit addreses
-        let number_of_stack_frames = (0xFFFE - self.cpu.access_register16(CpuRegister16::SP)) / 2;
+        let number_of_stack_frames = (0xFFFE - cpu.access_register16(CpuRegister16::SP)) / 2;
         let effective_stack_frames = if (number_of_stack_frames as i32) > y {
             y
         } else {
@@ -365,40 +350,45 @@ impl Debugger {
             wprintw(self.reg_win,
                     format!("({:X}): {:02X}{:02X}",
                             addr,
-                            self.cpu.mem[(addr + 1) as usize],
-                            self.cpu.mem[addr as usize])
+                            cpu.mem[(addr + 1) as usize],
+                            cpu.mem[addr as usize])
                         .as_ref());
         }
     }
 
-    fn draw_registers(&mut self) {
-        
+    fn draw_registers(&mut self, cpu: &Cpu) {
+
         for i in 0..8 {
-            self.draw_register(i + 1, REG8BIT_NAME[i as usize], REG8BIT_LIST[i as usize]);
+            self.draw_register(cpu,
+                               i + 1,
+                               REG8BIT_NAME[i as usize],
+                               REG8BIT_LIST[i as usize]);
         }
         wmove(self.reg_win, 8, 1);
-        wprintw(self.reg_win,
-                format!("{:4}: 0x{:02X}", "F", self.cpu.f).as_ref());
+        wprintw(self.reg_win, format!("{:4}: 0x{:02X}", "F", cpu.f).as_ref());
 
     }
 
     // draw 16bit registers in the second column (right shifted by 11 characters) of the reg_win
-    fn draw_registers16(&mut self) {
+    fn draw_registers16(&mut self, cpu: &mut Cpu) {
         for i in 0..4 {
-            self.draw_register16(i + 1, REG16BIT_NAME[i as usize], REG16BIT_LIST[i as usize]);
+            self.draw_register16(cpu,
+                                 i + 1,
+                                 REG16BIT_NAME[i as usize],
+                                 REG16BIT_LIST[i as usize]);
         }
 
         // 4
         wmove(self.reg_win, 5, 13);
         wprintw(self.reg_win,
-                format!("{:2}: 0x{:04X}", "PC", self.cpu.pc).as_ref());
+                format!("{:2}: 0x{:04X}", "PC", cpu.pc).as_ref());
     }
 
-    fn dispatch_debugger_action(&mut self, da: DebuggerAction) -> String {
+    fn dispatch_debugger_action(&mut self, cpu: &mut Cpu, da: DebuggerAction) -> String {
         match da {
             DebuggerAction::Echo { str: s } => s,
             DebuggerAction::Reset => {
-                self.cpu.reset();
+                cpu.reset();
                 "CPU resetting".to_string()
             }
             DebuggerAction::Run => {
@@ -406,7 +396,7 @@ impl Debugger {
                 "Running...".to_string()
             }
             DebuggerAction::Step => {
-                self.cpu.dispatch_opcode();
+                cpu.dispatch_opcode();
                 "Stepping...".to_string()
             }
             DebuggerAction::WatchPoint { addr } => {
@@ -439,7 +429,7 @@ impl Debugger {
             DebuggerAction::Show { show } => {
                 match show {
                     ShowableThing::Address { addr } => {
-                        format!("(0x{:X}) = 0x{:X}", addr, self.cpu.mem[addr as usize])
+                        format!("(0x{:X}) = 0x{:X}", addr, cpu.mem[addr as usize])
                     }
                     ShowableThing::Breakpoints => format!("Breakpoints: {:?}", self.breakpoints),
                 }
@@ -475,25 +465,28 @@ impl Debugger {
         }
     }
 
+    /// Returns whether or not the debugger should be running
+    /// Should be called from main loop control
     pub fn should_run(&self) -> bool {
         self.debugger_state == DebuggerState::Running
     }
 
-    pub fn run(&mut self) {
-        let start_time = std::time::Instant::now();
-
-        while start_time.elapsed() < std::time::Duration::from_millis(16) {
-            if self.breakpoints.contains(&self.cpu.pc) {
-                self.debugger_state = DebuggerState::Paused;
-                break;
-            } else if self.run_to_point == Some(self.cpu.pc) {
-                self.debugger_state = DebuggerState::Paused;
-                self.run_to_point = None;
-            }
-            self.cpu.dispatch_opcode();
-        }
-
-    }
+    // pub fn run(&mut self) {
+    // let start_time = std::time::Instant::now();
+    //
+    // while start_time.elapsed() < std::time::Duration::from_millis(16) {
+    // if self.breakpoints.contains(&self.cpu.pc) {
+    // self.debugger_state = DebuggerState::Paused;
+    // break;
+    // } else if self.run_to_point == Some(self.cpu.pc) {
+    // self.debugger_state = DebuggerState::Paused;
+    // self.run_to_point = None;
+    // }
+    // self.cpu.dispatch_opcode();
+    // }
+    //
+    // }
+    //
 
     pub fn make_input_non_blocking(&mut self) {
         timeout(0);
@@ -507,6 +500,21 @@ impl Debugger {
 
     pub fn pause(&mut self) {
         self.debugger_state = DebuggerState::Paused;
+    }
+
+
+    // NOTE: non-blocking read as timeout(delay) or wtimeout(window,delay)
+    pub fn step(&mut self, cpu: &mut Cpu) {
+        self.make_input_non_blocking();
+        self.handle_input(cpu);
+        self.refresh_screen(cpu);
+
+        // if self.should_run() {
+        // self.make_input_non_blocking();
+        // self.run();
+        // self.refresh_screen(cpu);
+        // }
+        //
     }
 }
 

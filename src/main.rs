@@ -1,4 +1,4 @@
-//! RustyBoy
+//! `RustyBoy`
 
 extern crate clap;
 #[macro_use]
@@ -14,7 +14,7 @@ pub mod disasm;
 pub mod io;
 
 use cpu::*;
-use debugger::*;
+use debugger::graphics::*;
 use io::sound::*;
 use io::constants::*;
 use io::input::*;
@@ -26,6 +26,8 @@ use io::vidram;
 use std::num::Wrapping;
 use clap::{Arg, App};
 use sdl2::*;
+use sdl2::rect::Rect;
+use sdl2::rect::Point;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -38,9 +40,6 @@ pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 
 
 #[allow(unused_variables)]
 fn main() {
-    assert!(SCREEN_WIDTH as f32 >= MEM_DISP_WIDTH as f32 * X_SCALE,
-            "Mem vis does not fit in screen");
-
     // Set up logging
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
@@ -90,27 +89,30 @@ fn main() {
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
     let debug_mode = matches.is_present("debug");
 
-
-    if debug_mode {
-        info!("Running in debug mode");
-        run_debugger(rom_file);
-    } else {
-        let handle = log4rs::init_config(config).unwrap();
-    }
-
     // Set up gameboy
     let mut gameboy = Cpu::new();
 
-    gameboy.event_log_enabled = true;
+
+    // Set up debugging or command-line logging
+    let mut debugger = if debug_mode {
+        info!("Running in debug mode");
+        Some(Debugger::new(&mut gameboy))
+    } else {
+        let handle = log4rs::init_config(config).unwrap();
+        None
+    };
+
+    let mem_val_display_enabled = true;
 
     // Set up SDL; input
     let sdl_context = sdl2::init().unwrap();
 
-    let device = setup_audio(&sdl_context);
+    let mut device = setup_audio(&sdl_context);
     setup_controller_subsystem(&sdl_context);
 
     trace!("loading ROM");
     gameboy.load_rom(rom_file);
+
 
     // Set up graphics and window
     trace!("Opening window");
@@ -127,6 +129,7 @@ fn main() {
         .build()
         .unwrap();
 
+    let mut scale = SCALE;
 
     // Set up time
 
@@ -139,6 +142,13 @@ fn main() {
 
     // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
+
+    let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
+                                                vec![TileDataSelect::Mode1, TileDataSelect::Mode2]);
+
+    // This does not work as intended because of borrowing
+    // let mut buttons = Vec::new();
+    // buttons.push(tile_data_mode_button);
 
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
@@ -194,8 +204,11 @@ fn main() {
                             info!("Program exiting!");
                             break 'main;
                         }
-                        Keycode::F3 => {
-                            gameboy.event_log_enabled = !gameboy.event_log_enabled;
+                        Keycode::F3 => gameboy.toggle_logger(),
+                        Keycode::R => {
+                            gameboy = Cpu::new();
+                            gameboy.load_rom(rom_file);
+                            // gameboy.event_log_enabled = event_log_enabled;
                         }
                         _ => (),
                     }
@@ -203,20 +216,31 @@ fn main() {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
-                            memvis::memvis_handle_click(&gameboy, x, y);
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+                            memvis::memvis_handle_click(&gameboy, scaled_x, scaled_y);
+                            let point = Point::new(scaled_x, scaled_y);
+
+                            if tile_data_mode_button.rect.contains(point) {
+                                tile_data_mode_button.click();
+                            }
                         }
                         sdl2::mouse::MouseButton::Right => {
                             // Jump to clicked addr and bring cpu back to life
-                            match memvis::screen_coord_to_mem_addr(x, y) {
-                                Some(pc) => {
-                                    gameboy.pc = pc;
-                                    gameboy.state = cpu::constants::CpuState::Normal;
-                                }
-                                _ => (),
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+
+                            if let Some(pc) = memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
+                                gameboy.pc = pc;
+                                gameboy.state = cpu::constants::CpuState::Normal;
                             }
+
                         }
                         _ => (),
                     }
+                }
+                Event::MouseWheel { y, .. } => {
+                    scale += y as f32;
                 }
                 _ => (),
             }
@@ -225,7 +249,7 @@ fn main() {
         let current_op_time = if gameboy.state != cpu::constants::CpuState::Crashed {
             gameboy.dispatch_opcode() as u64
         } else {
-            0
+            10 // FIXME think about what to return here or refactor code around this
         };
 
         cycle_count += current_op_time;
@@ -277,31 +301,55 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255, 255, 255, 255);
         let color_lookup = [color1, color2, color3, color4];
 
-        match renderer.set_scale(X_SCALE, Y_SCALE) {
+        match renderer.set_scale(scale, scale) {
             Ok(_) => (),
             Err(_) => error!("Could not set render scale"),
         }
+
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
 
         if ticks >= CPU_CYCLES_PER_VBLANK {
+            if let Some(ref mut dbg) = debugger {
+                dbg.step(&mut gameboy);
+            }
+
             prev_time = cycle_count;
             renderer.set_draw_color(NICER_COLOR);
             renderer.clear();
 
+            let tile_patterns_x_offset = (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 4;
+            vidram::draw_tile_patterns(&mut renderer, &gameboy, tile_patterns_x_offset);
 
-            // // draw current PC
-            // let pc = gameboy.pc;
-            // renderer.set_draw_color(Color::RGB(255, 255, 255));
-            // renderer.draw_point(addr_to_point(pc));
+            // TODO add toggle for this also?
+            let tile_map_offset = TILE_MAP_1_START;
 
-            memvis::draw_memory_values(&mut renderer, &gameboy);
+            let bg_select = tile_data_mode_button.value().unwrap();
 
-            if gameboy.event_log_enabled {
+            let tile_patterns_offset = match bg_select {
+                TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
+                TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
+            };
+
+
+            let bg_disp_x_offset = MEM_DISP_WIDTH + 2;
+
+            vidram::draw_background_buffer(&mut renderer,
+                                           &gameboy,
+                                           tile_map_offset,
+                                           tile_patterns_offset,
+                                           bg_disp_x_offset);
+
+            if mem_val_display_enabled {
+                // // dynamic mem access vis
+                // memvis::draw_memory_values(&mut renderer, &gameboy);
+                memvis::draw_memory_access(&mut renderer, &gameboy);
+
                 memvis::draw_memory_events(&mut renderer, &mut gameboy);
             }
 
-            vidram::draw_tile_patterns(&mut renderer, &gameboy, MEM_DISP_WIDTH + 2);
+
+            tile_data_mode_button.draw(&mut renderer);
 
 
             //   00111100 1110001 00001000
@@ -316,7 +364,28 @@ fn main() {
                 frame_num += Wrapping(1);
             }
 
+            if gameboy.get_sound1() {
+                device.resume();
+            } else {
+                device.pause();
+            }
+
+            let mut sound_system = device.lock();
+            sound_system.wave_duty = gameboy.channel1_wave_pattern_duty();
+            sound_system.phase_inc = 1.0 /
+                                     (131072.0 / (2048 - gameboy.channel1_frequency()) as f32);
+            sound_system.add = gameboy.channel1_sweep_increase();
+            //            131072 / (2048 - gb)
+
+
             renderer.present();
+
+
+
+            //            device.resume();
+            // std::thread::sleep_ms(20);
+            // device.pause();
+
 
             // Visualizations are slow and this is not the best way to do this anyway
             // std::thread::sleep(Duration::from_millis(FRAME_SLEEP));

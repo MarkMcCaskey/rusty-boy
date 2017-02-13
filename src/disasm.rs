@@ -5,7 +5,7 @@ extern crate clap;
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
-    let z = (first_byte >> 0) & 0b111;
+    let z = first_byte & 0b111;
     let p = (first_byte >> 4) & 0b011;
     let q = (first_byte >> 3) & 0b001;
 
@@ -94,7 +94,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                 match z {
                     0 => {
                         match y {
-                            0 => format!("NOP"),
+                            0 => "NOP".to_string(),
                             1 => format!("LD ({}),SP", a16()),
                             2 => format!("STOP {}", d8()),
                             3 => format!("JR {}", r8(2)),
@@ -116,19 +116,19 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                         match q {
                             0 => {
                                 match p {
-                                    0 => format!("LD (BC),A"),
-                                    1 => format!("LD (DE),A"),
-                                    2 => format!("LD (HL+),A"),
-                                    3 => format!("LD (HL-),A"),
+                                    0 => "LD (BC),A".to_string(),
+                                    1 => "LD (DE),A".to_string(),
+                                    2 => "LD (HL+),A".to_string(),
+                                    3 => "LD (HL-),A".to_string(),
                                     _ => unreachable!("Impossible opcode"),
                                 }
                             }
                             1 => {
                                 match p {
-                                    0 => format!("LD A,(BC)"),
-                                    1 => format!("LD A,(DE)"),
-                                    2 => format!("LD A,(HL+)"),
-                                    3 => format!("LD A,(HL-)"),
+                                    0 => "LD A,(BC)".to_string(),
+                                    1 => "LD A,(DE)".to_string(),
+                                    2 => "LD A,(HL+)".to_string(),
+                                    3 => "LD A,(HL-)".to_string(),
                                     _ => unreachable!("Impossible opcode"),
                                 }
                             }
@@ -147,14 +147,14 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                     6 => format!("LD {},{}", idx_r(y), d8()),
                     7 => {
                         match y {
-                            0 => format!("RLCA"),
-                            1 => format!("RRCA"),
-                            2 => format!("RLA"),
-                            3 => format!("RRA"),
-                            4 => format!("DAA"),
-                            5 => format!("CPL"),
-                            6 => format!("SCF"),
-                            7 => format!("CCF"),
+                            0 => "RLCA".to_string(),
+                            1 => "RRCA".to_string(),
+                            2 => "RLA".to_string(),
+                            3 => "RRA".to_string(),
+                            4 => "DAA".to_string(),
+                            5 => "CPL".to_string(),
+                            6 => "SCF".to_string(),
+                            7 => "CCF".to_string(),
                             _ => unreachable!("Impossible opcode"),
                         }
                     }
@@ -163,7 +163,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
             }
             1 => {
                 match (z, y) {
-                    (6, 6) => format!("HALT"),
+                    (6, 6) => "HALT".to_string(),
                     _ => format!("LD {},{}", idx_r(y), idx_r(z)),
                 }
             }
@@ -188,10 +188,10 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                             0 => format!("POP {}", idx_rp2(p)),
                             1 => {
                                 match p {
-                                    0 => format!("RET"),
-                                    1 => format!("RETI"),
-                                    2 => format!("JP (HL)"),
-                                    3 => format!("LD SP,HL"),
+                                    0 => "RET".to_string(),
+                                    1 => "RETI".to_string(),
+                                    2 => "JP (HL)".to_string(),
+                                    3 => "LD SP,HL".to_string(),
                                     _ => unreachable!("Impossible opcode"),
                                 }
                             }
@@ -201,9 +201,9 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                     2 => {
                         match y {
                             0...3 => format!("JP {},{}", idx_cc(y), a16()),
-                            4 => format!("LD ($FF00+C),A"),
+                            4 => "LD ($FF00+C),A".to_string(),
                             5 => format!("LD ({}),A", a16()),
-                            6 => format!("LD A,($FF00+C)"),
+                            6 => "LD A,($FF00+C)".to_string(),
                             7 => format!("LD A,({})", a16()),
                             _ => unreachable!("Impossible opcode"),
                         }
@@ -228,8 +228,8 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                                 }
                             }
                             2...5 => illegal_op(first_byte),
-                            6 => format!("DI"),
-                            7 => format!("EI"),
+                            6 => "DI".to_string(),
+                            7 => "EI".to_string(),
                             _ => unreachable!("Impossible opcode"),
                         }
                     }
