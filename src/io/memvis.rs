@@ -81,7 +81,7 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
         // inc coord
         x = (x + 1) % MEM_DISP_WIDTH;
         if x == 0 {
-            y = y + 1; // % 256; // does this matter?
+            y += 1; // % 256; // does this matter?
         }
     }
 
@@ -101,13 +101,13 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
         None => return,
     };
 
-    
+
     for (addr, &p) in event_logger.access_flags.iter().enumerate() {
 
         use sdl2::pixels::*;
 
         let v = gameboy.mem[addr];
-        
+
         // let color = Color::RGB(
         //     clamp_color(v * ((p & 0x2) >> 1) as i16 + v>>2),
         //     clamp_color(v * ((p & 0x1) >> 0) as i16 + v>>2),
@@ -115,15 +115,14 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 
 
         let color = if p == 0 {
-            Color::RGB(v,v,v)
+            Color::RGB(v, v, v)
         } else {
             let b = 32;
-            let v = (v>>2) as i16;
+            let v = (v >> 2) as i16;
             let s = v + b;
-            Color::RGB(
-                clamp_color(s * ((p & 0x2) >> 1) as i16),
-                clamp_color(s * ((p & 0x1) >> 0) as i16),
-                clamp_color(255 * ((p & 0x4) >> 2) as i16))
+            Color::RGB(clamp_color(s * ((p & 0x2) >> 1) as i16),
+                       clamp_color(s * (p & 0x1) as i16),
+                       clamp_color(255 * ((p & 0x4) >> 2) as i16))
         };
 
         renderer.set_draw_color(color);
@@ -139,10 +138,10 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
         // inc coord
         x = (x + 1) % MEM_DISP_WIDTH;
         if x == 0 {
-            y = y + 1; // % 256; // does this matter?
+            y += 1; // % 256; // does this matter?
         }
     }
-    
+
     // draw current PC
     let pc = gameboy.pc;
     renderer.set_draw_color(Color::RGB(255, 0, 255));
@@ -169,10 +168,10 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
             break;
         }
     }
-    
-    for entry in event_logger.events_deq.iter() {
+
+    for entry in &event_logger.events_deq {
         let timestamp = entry.timestamp;
-        let ref event = entry.event;
+        let event = &entry.event;
         {
             let time_diff = gameboy.cycles - timestamp;
             if time_diff < FADE_DELAY {
@@ -234,22 +233,19 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
 }
 
 pub fn memvis_handle_click(gameboy: &Cpu, x: i32, y: i32) {
-    match screen_coord_to_mem_addr(x, y) {
-        Some(pc) => {
-            let pc = pc as usize;
-            let mem = gameboy.mem;
-            let b1 = mem[pc + 1];
-            let b2 = mem[pc + 2];
-            let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
-            let nn = byte_to_u16(b1, b2);
-            println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
-                     pc,
-                     mnem,
-                     mem[pc],
-                     b1,
-                     b2,
-                     nn);
-        }
-        _ => (),
+    if let Some(pc) = screen_coord_to_mem_addr(x, y) {
+        let pc = pc as usize;
+        let mem = gameboy.mem;
+        let b1 = mem[pc + 1];
+        let b2 = mem[pc + 2];
+        let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
+        let nn = byte_to_u16(b1, b2);
+        println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
+                 pc,
+                 mnem,
+                 mem[pc],
+                 b1,
+                 b2,
+                 nn);
     }
 }

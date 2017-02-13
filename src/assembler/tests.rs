@@ -81,3 +81,40 @@ JP NZ, 0x101
     println!("{:?}", insts);
     assert!(insts.is_ok());
 }
+
+#[test]
+fn opcode_tests() {
+    let insts = asm::parse_Input(r#"
+.code
+ADD A, B
+SUB D
+RET NZ
+PUSH HL
+RST 30H
+EI
+DEC HL
+ADC A, 89
+RST 08H
+CPL
+INC A
+JR C, 0
+INC D
+LD A, B
+LD C, E
+RRC D
+SET 1, C
+SET 4, H
+BIT 2, L
+SLA E
+SWAP (HL)
+"#).unwrap();
+    let out_bytes = [0x80, 0x92, 0xC0, 0xE5, 0xF7, 0xFB, 0x2B,
+                     0xCE, 89, 0xCF, 0x2F, 0x3C, 0x38, 0, 0x14,
+                     0x78, 0x4B, 0xCB, 0x0A, 0xCB, 0xC9, 0xCB,
+                     0xE4, 0xCB, 0x55, 0xCB, 0x23, 0xCB, 0x36];
+
+    for i in 0..(out_bytes.len()) {
+        println!("{}: {:X}, {:X}", i, insts[i], out_bytes[i]);
+        assert_eq!(insts[i], out_bytes[i]);
+    }
+}

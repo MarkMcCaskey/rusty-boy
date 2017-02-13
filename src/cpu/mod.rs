@@ -52,7 +52,8 @@ impl CpuEventLogger for DeqCpuEventLogger {
                 self.access_flags[addr as usize] |= FLAG_X;
             }
             _ => {
-                let log_jumps = false;
+                //TODO: make this a commandline arg or something
+                let log_jumps = true;
                 if log_jumps {
                     self.events_deq.push_back(
                         EventLogEntry { timestamp: timestamp,
@@ -930,7 +931,7 @@ impl Cpu {
     fn ldac(&mut self) {
         let reg_c = self.c;
         // TODO check if C should be unsigned
-        let val = self.get_mem((0xFF00u16 + (reg_c as u16)));
+        let val = self.get_mem(0xFF00u16 + (reg_c as u16));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -978,7 +979,7 @@ impl Cpu {
     }
 
     fn ldhan(&mut self, n: u8) {
-        let val = self.get_mem((0xFF00u16 + (n as u16)));
+        let val = self.get_mem(0xFF00u16 + (n as u16));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -1049,11 +1050,9 @@ impl Cpu {
     fn reg_or_const(&mut self, reg: CpuRegister) -> i16 {
         if let Some(r) = self.access_register(reg) {
             r as i16
-        } else { //constant value
-            if let CpuRegister::Num(v) = reg {
-                v as i16
-            } else { unreachable!("The impossible happened!") }
-        }
+        } else if let CpuRegister::Num(v) = reg {
+            v as i16
+        } else {unreachable!()}
     }
 
     fn addspn(&mut self, n: i8) {
@@ -1148,11 +1147,10 @@ impl Cpu {
         let regval =
             if let CpuRegister::Num(n) = reg { 
                 n
-            } else {
-                if let Some(n) = self.access_register(reg) {
-                    n
-                } else {unreachable!()}
-            };
+            } else if let Some(n) = self.access_register(reg) {
+                n
+            } else {unreachable!()};
+        
 
         let a4bit = old_a & 0xF;
         let reg4bit = regval & 0xF;

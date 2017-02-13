@@ -28,20 +28,26 @@ pub struct Toggle<T> {
     values: Vec<T>,
 }
 
-impl<T> Toggle<T> where T: Clone + Debug {
+impl<T> Toggle<T>
+    where T: Clone + Debug
+{
     pub fn new(rect: sdl2::rect::Rect, values: Vec<T>) -> Toggle<T> {
-        Toggle { rect: rect, current: 0, values: values }
+        Toggle {
+            rect: rect,
+            current: 0,
+            values: values,
+        }
     }
     pub fn click(&mut self) {
         self.current = (self.current + 1) % self.values.len();
         debug!("Click! {} {:?}", self.current, self.value());
     }
     pub fn draw(&self, renderer: &mut sdl2::render::Renderer) {
-        renderer.set_draw_color(Color::RGB(255,0,0));
+        renderer.set_draw_color(Color::RGB(255, 0, 0));
         renderer.draw_rect(self.rect).unwrap();
     }
     pub fn value(&self) -> Option<T> {
-        if self.values.len() > 0 {
+        if !self.values.is_empty() {
             Some(self.values[self.current].clone())
         } else {
             None

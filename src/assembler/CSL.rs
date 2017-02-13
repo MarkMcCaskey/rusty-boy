@@ -93,6 +93,16 @@ pub fn lookup_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
     (0xCB, value)
 }
 
+
+/// Returns in Big endian
+/// For prefixed opcodes (0xCB)
+pub fn lookup_cb_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
+    let z = cpuReg_dispatch(reg);
+    let value = n + z;
+
+    (0xCB, value)
+}
+
 /// Dispatches number values from Strings for the PUSH and POP
 /// instructions (uses AF, so not applicable in other situations)
 pub fn push_pop_disp16(regname: &str) -> u8 {

@@ -28,11 +28,11 @@ customize zone (m-x find-variable zone-programs) Kappa
 *** DONE Video
 *** DONE Timer
 * TODO Graphics[0%]
-** TODO Gameboy screen itself[16%]
+** TODO Gameboy screen itself[66%]
 *** DONE Window
-*** TODO Interrupts on pixel draw
-*** TODO Vblank and cpu interrupt
-*** TODO Background
+*** DONE Interrupts on pixel draw
+*** DONE Vblank and cpu interrupt
+*** DONE Background
 *** TODO Window
 *** TODO Sprites
 ** TODO Memory visualization[33%]
@@ -59,10 +59,10 @@ customize zone (m-x find-variable zone-programs) Kappa
 *** CANCELED Automate or use default values to make it easier
 *** TODO Address resolution
 *** CANCELED Name substitution
-** TODO Disassembler[66%]
+** TODO Disassembler[100%]
 *** DONE Generate text
 *** DONE Resolve relative jumps
-*** TODO Needs to trace through program
+*** CANCELED Needs to trace through program
 
     Debugger cannot statically decompile file because of variable
     byte-length and the fact that ROMs store all data together, even

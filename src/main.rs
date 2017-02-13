@@ -1,4 +1,4 @@
-//! RustyBoy
+//! `RustyBoy`
 
 extern crate clap;
 #[macro_use]
@@ -14,7 +14,7 @@ pub mod disasm;
 pub mod io;
 
 use cpu::*;
-use debugger::*;
+use debugger::graphics::*;
 use io::sound::*;
 use io::constants::*;
 use io::input::*;
@@ -89,16 +89,18 @@ fn main() {
     let rom_file = matches.value_of("game").expect("Could not open specified rom");
     let debug_mode = matches.is_present("debug");
 
-
-    if debug_mode {
-        info!("Running in debug mode");
-        run_debugger(rom_file);
-    } else {
-        let handle = log4rs::init_config(config).unwrap();
-    }
-
     // Set up gameboy
     let mut gameboy = Cpu::new();
+
+
+    // Set up debugging or command-line logging
+    let mut debugger = if debug_mode {
+        info!("Running in debug mode");
+        Some(Debugger::new(&mut gameboy))
+    } else {
+        let handle = log4rs::init_config(config).unwrap();
+        None
+    };
 
     let mem_val_display_enabled = true;
 
@@ -106,9 +108,6 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
 
     let mut device = setup_audio(&sdl_context);
-    //  device.resume();
-    // std::thread::sleep_ms(1000);
-    // device.pause();
     setup_controller_subsystem(&sdl_context);
 
     trace!("loading ROM");
@@ -144,18 +143,13 @@ fn main() {
     // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
 
-    let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH,
-                                                      MEM_DISP_HEIGHT,
-                                                      24,
-                                                      12),
-                                            vec![TileDataSelect::Mode1,
-                                                 TileDataSelect::Mode2]);
+    let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
+                                                vec![TileDataSelect::Mode1, TileDataSelect::Mode2]);
 
     // This does not work as intended because of borrowing
     // let mut buttons = Vec::new();
     // buttons.push(tile_data_mode_button);
-    
-    device.resume();
+
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
@@ -210,9 +204,7 @@ fn main() {
                             info!("Program exiting!");
                             break 'main;
                         }
-                        Keycode::F3 => {
-                            gameboy.toggle_logger()
-                        }
+                        Keycode::F3 => gameboy.toggle_logger(),
                         Keycode::R => {
                             gameboy = Cpu::new();
                             gameboy.load_rom(rom_file);
@@ -238,19 +230,17 @@ fn main() {
                             let scaled_x = x / scale as i32;
                             let scaled_y = y / scale as i32;
 
-                            match memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
-                                Some(pc) => {
-                                    gameboy.pc = pc;
-                                    gameboy.state = cpu::constants::CpuState::Normal;
-                                }
-                                _ => (),
+                            if let Some(pc) = memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
+                                gameboy.pc = pc;
+                                gameboy.state = cpu::constants::CpuState::Normal;
                             }
+
                         }
                         _ => (),
                     }
                 }
                 Event::MouseWheel { y, .. } => {
-                    scale += (y as f32)/2.0;
+                    scale += y as f32;
                 }
                 _ => (),
             }
@@ -320,6 +310,10 @@ fn main() {
         // TODO make this variable based on whether it's GB, SGB, etc.
 
         if ticks >= CPU_CYCLES_PER_VBLANK {
+            if let Some(ref mut dbg) = debugger {
+                dbg.step(&mut gameboy);
+            }
+
             prev_time = cycle_count;
             renderer.set_draw_color(NICER_COLOR);
             renderer.clear();
@@ -331,7 +325,7 @@ fn main() {
             let tile_map_offset = TILE_MAP_1_START;
 
             let bg_select = tile_data_mode_button.value().unwrap();
-            
+
             let tile_patterns_offset = match bg_select {
                 TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
                 TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
@@ -340,7 +334,8 @@ fn main() {
 
             let bg_disp_x_offset = MEM_DISP_WIDTH + 2;
 
-            vidram::draw_background_buffer(&mut renderer, &gameboy,
+            vidram::draw_background_buffer(&mut renderer,
+                                           &gameboy,
                                            tile_map_offset,
                                            tile_patterns_offset,
                                            bg_disp_x_offset);
@@ -349,13 +344,13 @@ fn main() {
                 // // dynamic mem access vis
                 // memvis::draw_memory_values(&mut renderer, &gameboy);
                 memvis::draw_memory_access(&mut renderer, &gameboy);
-                
+
                 memvis::draw_memory_events(&mut renderer, &mut gameboy);
             }
 
 
             tile_data_mode_button.draw(&mut renderer);
-            
+
 
             //   00111100 1110001 00001000
             //   01111110 1110001 00010100
@@ -369,16 +364,16 @@ fn main() {
                 frame_num += Wrapping(1);
             }
 
-             if gameboy.get_sound1() {
-                 device.resume();
-             } else {
-                 device.pause();
-             }
-            
+            if gameboy.get_sound1() {
+                device.resume();
+            } else {
+                device.pause();
+            }
+
             let mut sound_system = device.lock();
             sound_system.wave_duty = gameboy.channel1_wave_pattern_duty();
             sound_system.phase_inc = 1.0 /
-                                     (131072.0 / ((2048 - gameboy.channel1_frequency())) as f32);
+                                     (131072.0 / (2048 - gameboy.channel1_frequency()) as f32);
             sound_system.add = gameboy.channel1_sweep_increase();
             //            131072 / (2048 - gb)
 
@@ -395,7 +390,7 @@ fn main() {
             // Visualizations are slow and this is not the best way to do this anyway
             // std::thread::sleep(Duration::from_millis(FRAME_SLEEP));
         }
-       
+
     }
 }
 
