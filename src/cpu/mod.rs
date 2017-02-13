@@ -770,18 +770,19 @@ impl Cpu {
 
 
     #[inline]
-    pub fn get_mem(&mut self, address: usize) -> byte {
+    pub fn get_mem(&mut self, address: MemAddr) -> byte {
         self.log_event(CpuEvent::Read { from: address as MemAddr });
-        self.mem[address]
+        self.mem[address as usize]
     }
 
     #[inline]
-    pub fn set_mem(&mut self, address: usize, value: byte) {
+    pub fn set_mem(&mut self, address: MemAddr, value: byte) {
         /*!
         NOTE: serial I/O is done by accessing memory addresses.
         It is read at 8192Hz, one bit at a time if external clock is used.
         See documentation and read carefully before implementing this.
          */
+        let address = address as usize;
 
         self.log_event(CpuEvent::Write { to: address as MemAddr});
 
@@ -845,7 +846,7 @@ impl Cpu {
             CpuRegister::L  => self.l = val,
             CpuRegister::HL => {
                 let hlv = self.hl();
-                self.set_mem(hlv as usize, val);
+                self.set_mem(hlv, val);
             },
             _               => panic!("Cannot set non-8bit values"),
         } 
@@ -869,13 +870,13 @@ impl Cpu {
 
     fn ldan16(&mut self, n: CpuRegister16) {
         let addr = self.access_register16(n);
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldan16c(&mut self, b1: u8, b2: u8) {
-        let val = self.get_mem(byte_to_u16(b1, b2) as usize);
+        let val = self.get_mem(byte_to_u16(b1, b2));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -889,30 +890,30 @@ impl Cpu {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
         let addr = self.access_register16(n);
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
     }
 
     fn ldna16c(&mut self, b1: u8, b2: u8) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
-        self.set_mem(byte_to_u16(b1, b2) as usize, val);
+        self.set_mem(byte_to_u16(b1, b2), val);
     }
 
     fn ldac(&mut self) {
         let reg_c = self.c;
         // TODO check if C should be unsigned
-        let val = self.get_mem((0xFF00u16 + (reg_c as u16)) as usize);
+        let val = self.get_mem((0xFF00u16 + (reg_c as u16)));
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldca(&mut self) {
         let addr = 0xFF00u16 + (self.c as u16);
         let val = self.a;
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
     }
 
     fn lddahl(&mut self) {
         let addr = self.hl();
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
         self.dec16(CpuRegister16::HL);
@@ -922,13 +923,13 @@ impl Cpu {
         let val = self.a;
         let addr = self.hl();
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
         self.dec16(CpuRegister16::HL);
     }
 
     fn ldiahl(&mut self) {
         let addr = self.hl();
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
         self.inc16(CpuRegister16::HL);
@@ -938,17 +939,17 @@ impl Cpu {
         let val = self.a;
         let addr = self.hl();
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
         self.inc16(CpuRegister16::HL);
     }
 
     fn ldhna(&mut self, n: u8) {
         let val = self.a;
-        self.set_mem((0xFF00u16 + (n as u16)) as usize, val);
+        self.set_mem((0xFF00u16 + (n as u16)), val);
     }
 
     fn ldhan(&mut self, n: u8) {
-        let val = self.get_mem((0xFF00u16 + (n as u16)) as usize);
+        let val = self.get_mem((0xFF00u16 + (n as u16)));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -970,7 +971,7 @@ impl Cpu {
 
     fn ldnnsp(&mut self, b1: u8, b2: u8) {
         let old_sp = self.sp;
-        self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, old_sp as byte);
+        self.set_mem((((b2 as u16) << 8) | (b1 as u16)), old_sp as byte);
     }
 
     // fn pushnn(&mut self, nn: CpuRegister16) {
@@ -1507,7 +1508,7 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let old_pc = self.pc;
-        let hl = self.hl() as usize;
+        let hl = self.hl();
         let n = self.get_mem(hl);
         let new_pc = add_u16_i8(old_pc, n as i8);
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
@@ -1552,7 +1553,7 @@ impl Cpu {
         let first_half = ((nn >> 8) & 0xFF) as byte;
         let second_half = (nn & 0xFF) as byte;
 
-        let mut sp_idx = Wrapping(self.sp as usize);
+        let mut sp_idx = Wrapping(self.sp as u16);
         sp_idx -= Wrapping(1);
         self.set_mem(sp_idx.0, first_half);
         sp_idx -= Wrapping(1);
@@ -1583,7 +1584,7 @@ impl Cpu {
     }
 
     fn pop_from_stack(&mut self) -> u16 {
-        let mut sp_idx = Wrapping(self.sp as usize);
+        let mut sp_idx = Wrapping(self.sp as MemAddr);
         let second_half = self.get_mem(sp_idx.0);
         sp_idx += Wrapping(1);
         let first_half = self.get_mem(sp_idx.0);
