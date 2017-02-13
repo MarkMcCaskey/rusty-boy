@@ -17,20 +17,49 @@ pub trait CpuEventLogger {
     fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent);
 }
 
+type AccessFlag = u8;
+const FLAG_R: u8 = 0x1;
+const FLAG_W: u8 = 0x2;
+const FLAG_X: u8 = 0x4;
+
 pub struct DeqCpuEventLogger {
     pub events_deq: VecDeque<EventLogEntry>,
+    pub access_flags: [AccessFlag; MEM_ARRAY_SIZE],
 }
 
 impl CpuEventLogger for DeqCpuEventLogger {
 
     fn new() -> DeqCpuEventLogger {
-        DeqCpuEventLogger { events_deq: VecDeque::new() }
+        DeqCpuEventLogger {
+            events_deq: VecDeque::new(),
+            access_flags: [0; MEM_ARRAY_SIZE],
+        }
     }
-
+    
     fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent) {
-        self.events_deq.push_back(
-            EventLogEntry { timestamp: timestamp,
-                            event: event });
+        #[warn(unused_variables)]
+        // self.events_deq.push_back(
+        //     EventLogEntry { timestamp: timestamp,
+        //                     event: event });
+        match event {
+            CpuEvent::Read { from: addr } => {
+                self.access_flags[addr as usize] |= FLAG_R;
+            }
+            CpuEvent::Write { to: addr } => {
+                self.access_flags[addr as usize] |= FLAG_W;
+            }
+            CpuEvent::Execute(addr) => {
+                self.access_flags[addr as usize] |= FLAG_X;
+            }
+            _ => {
+                let log_jumps = false;
+                if log_jumps {
+                    self.events_deq.push_back(
+                        EventLogEntry { timestamp: timestamp,
+                                        event: event });
+                }
+            }
+        }
     }
 }
 

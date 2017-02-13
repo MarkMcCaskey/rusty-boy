@@ -71,27 +71,22 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Renderer,
     }
 }
 
-const SCREEN_BUFFER_SIZE_X: u32 = 256;
-const SCREEN_BUFFER_SIZE_Y: u32 = 256;
-
-const SCREEN_BUFFER_TILES_X: u32 = 32;
-const SCREEN_BUFFER_TILES_Y: u32 = 32;
-
 
 /// draw whole background buffer (256x256 px)
 pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
                               gameboy: &Cpu,
                               tile_map_offset: cpu::constants::MemAddr,
-                              tile_patterns_offset: cpu::constants::MemAddr) {
+                              tile_patterns_offset: cpu::constants::MemAddr,
+                              screen_offset_x: i32) {
 
     // TODO implement proper windows/widgets
-    const TOP_X: i32 = (MEM_DISP_WIDTH + (TILE_SIZE_PX+BORDER_PX) as i32 * 16) as i32 + 4;
     const TOP_Y: i32 = 1;
+    let screen_offset_y = TOP_Y;
 
     // TODO draw window position pg 59
     renderer.set_draw_color(Color::RGB(0,0,0));
 
-    renderer.draw_rect(Rect::new(TOP_X,
+    renderer.draw_rect(Rect::new(screen_offset_x,
                                  TOP_Y,
                                  SCREEN_BUFFER_SIZE_X as u32,
                                  SCREEN_BUFFER_SIZE_Y as u32)).unwrap();
@@ -109,8 +104,8 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
                           gameboy,
                           TILE_PATTERN_TABLE_1_START,
                           tile_index as u16, // use index as unsigned 8bit
-                          TOP_X + (tile_x * TILE_SIZE_PX as u32) as i32,
-                          TOP_Y + (tile_y * TILE_SIZE_PX as u32) as i32);
+                          screen_offset_x + (tile_x * TILE_SIZE_PX as u32) as i32,
+                          screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
                 
                 
             }
@@ -126,8 +121,8 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
                           gameboy,
                           TILE_PATTERN_TABLE_2_START,             // reposition origin
                           add_u16_i8(128u16, (tile_index as i8)), // index is signed 8bit
-                          TOP_X + (tile_x * TILE_SIZE_PX as u32) as i32,
-                          TOP_Y + (tile_y * TILE_SIZE_PX as u32) as i32);
+                          screen_offset_x + (tile_x * TILE_SIZE_PX as u32) as i32,
+                          screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
                 
                 
             }

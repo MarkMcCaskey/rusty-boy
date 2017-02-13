@@ -4,8 +4,7 @@ use cpu::constants::*;
 pub const SCREEN_WIDTH: u32 = 1400;
 pub const SCREEN_HEIGHT: u32 = 900;
 
-pub const X_SCALE: f32 = 2.0;
-pub const Y_SCALE: f32 = X_SCALE;
+pub const SCALE: f32 = 2.0;
 
 // pub const MEM_DISP_WIDTH: i32 = SCREEN_WIDTH as i32 / (X_SCALE as i32);
 // Looks nicer when evenly divides mem regions
@@ -62,3 +61,9 @@ pub const TILE_PALETTE: [Color; 4] = [Color::RGB(4, 5, 7),
                                       Color::RGB(235, 135, 140),
                                       Color::RGB(156, 146, 244),
                                       Color::RGB(252, 250, 175)];
+
+pub const SCREEN_BUFFER_SIZE_X: u32 = 256;
+pub const SCREEN_BUFFER_SIZE_Y: u32 = 256;
+
+pub const SCREEN_BUFFER_TILES_X: u32 = 32;
+pub const SCREEN_BUFFER_TILES_Y: u32 = 32;

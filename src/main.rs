@@ -40,9 +40,6 @@ pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 
 
 #[allow(unused_variables)]
 fn main() {
-    assert!(SCREEN_WIDTH as f32 >= MEM_DISP_WIDTH as f32 * X_SCALE,
-            "Mem vis does not fit in screen");
-
     // Set up logging
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
@@ -133,6 +130,7 @@ fn main() {
         .build()
         .unwrap();
 
+    let mut scale = SCALE;
 
     // Set up time
 
@@ -226,8 +224,10 @@ fn main() {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
-                            memvis::memvis_handle_click(&gameboy, x, y);
-                            let point = Point::new(x / X_SCALE as i32, y / Y_SCALE as i32);
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+                            memvis::memvis_handle_click(&gameboy, scaled_x, scaled_y);
+                            let point = Point::new(scaled_x, scaled_y);
 
                             if tile_data_mode_button.rect.contains(point) {
                                 tile_data_mode_button.click();
@@ -235,7 +235,10 @@ fn main() {
                         }
                         sdl2::mouse::MouseButton::Right => {
                             // Jump to clicked addr and bring cpu back to life
-                            match memvis::screen_coord_to_mem_addr(x, y) {
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+
+                            match memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
                                 Some(pc) => {
                                     gameboy.pc = pc;
                                     gameboy.state = cpu::constants::CpuState::Normal;
@@ -245,6 +248,9 @@ fn main() {
                         }
                         _ => (),
                     }
+                }
+                Event::MouseWheel { y, .. } => {
+                    scale += (y as f32)/2.0;
                 }
                 _ => (),
             }
@@ -305,7 +311,7 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255, 255, 255, 255);
         let color_lookup = [color1, color2, color3, color4];
 
-        match renderer.set_scale(X_SCALE, Y_SCALE) {
+        match renderer.set_scale(scale, scale) {
             Ok(_) => (),
             Err(_) => error!("Could not set render scale"),
         }
@@ -318,13 +324,8 @@ fn main() {
             renderer.set_draw_color(NICER_COLOR);
             renderer.clear();
 
-
-            // // draw current PC
-            // let pc = gameboy.pc;
-            // renderer.set_draw_color(Color::RGB(255, 255, 255));
-            // renderer.draw_point(addr_to_point(pc));
-
-            vidram::draw_tile_patterns(&mut renderer, &gameboy, MEM_DISP_WIDTH + 2);
+            let tile_patterns_x_offset = (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 4;
+            vidram::draw_tile_patterns(&mut renderer, &gameboy, tile_patterns_x_offset);
 
             // TODO add toggle for this also?
             let tile_map_offset = TILE_MAP_1_START;
@@ -336,15 +337,20 @@ fn main() {
                 TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
             };
 
+
+            let bg_disp_x_offset = MEM_DISP_WIDTH + 2;
+
             vidram::draw_background_buffer(&mut renderer, &gameboy,
                                            tile_map_offset,
-                                           tile_patterns_offset);
+                                           tile_patterns_offset,
+                                           bg_disp_x_offset);
 
             if mem_val_display_enabled {
-                memvis::draw_memory_values(&mut renderer, &gameboy);
+                // // dynamic mem access vis
+                // memvis::draw_memory_values(&mut renderer, &gameboy);
+                memvis::draw_memory_access(&mut renderer, &gameboy);
                 
                 memvis::draw_memory_events(&mut renderer, &mut gameboy);
-
             }
 
 
