@@ -26,6 +26,8 @@ use io::vidram;
 use std::num::Wrapping;
 use clap::{Arg, App};
 use sdl2::*;
+use sdl2::rect::Rect;
+use sdl2::rect::Point;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -38,9 +40,6 @@ pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 
 
 #[allow(unused_variables)]
 fn main() {
-    assert!(SCREEN_WIDTH as f32 >= MEM_DISP_WIDTH as f32 * X_SCALE,
-            "Mem vis does not fit in screen");
-
     // Set up logging
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
@@ -101,7 +100,7 @@ fn main() {
     // Set up gameboy
     let mut gameboy = Cpu::new();
 
-    gameboy.event_log_enabled = true;
+    let mem_val_display_enabled = true;
 
     // Set up SDL; input
     let sdl_context = sdl2::init().unwrap();
@@ -131,6 +130,7 @@ fn main() {
         .build()
         .unwrap();
 
+    let mut scale = SCALE;
 
     // Set up time
 
@@ -144,6 +144,17 @@ fn main() {
     // Number of frames saved as screenshots
     let mut frame_num = Wrapping(0);
 
+    let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH,
+                                                      MEM_DISP_HEIGHT,
+                                                      24,
+                                                      12),
+                                            vec![TileDataSelect::Mode1,
+                                                 TileDataSelect::Mode2]);
+
+    // This does not work as intended because of borrowing
+    // let mut buttons = Vec::new();
+    // buttons.push(tile_data_mode_button);
+    
     device.resume();
     'main: loop {
         for event in sdl_context.event_pump().unwrap().poll_iter() {
@@ -200,7 +211,12 @@ fn main() {
                             break 'main;
                         }
                         Keycode::F3 => {
-                            gameboy.event_log_enabled = !gameboy.event_log_enabled;
+                            gameboy.toggle_logger()
+                        }
+                        Keycode::R => {
+                            gameboy = Cpu::new();
+                            gameboy.load_rom(rom_file);
+                            // gameboy.event_log_enabled = event_log_enabled;
                         }
                         _ => (),
                     }
@@ -208,11 +224,21 @@ fn main() {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
-                            memvis::memvis_handle_click(&gameboy, x, y);
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+                            memvis::memvis_handle_click(&gameboy, scaled_x, scaled_y);
+                            let point = Point::new(scaled_x, scaled_y);
+
+                            if tile_data_mode_button.rect.contains(point) {
+                                tile_data_mode_button.click();
+                            }
                         }
                         sdl2::mouse::MouseButton::Right => {
                             // Jump to clicked addr and bring cpu back to life
-                            match memvis::screen_coord_to_mem_addr(x, y) {
+                            let scaled_x = x / scale as i32;
+                            let scaled_y = y / scale as i32;
+
+                            match memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
                                 Some(pc) => {
                                     gameboy.pc = pc;
                                     gameboy.state = cpu::constants::CpuState::Normal;
@@ -223,6 +249,9 @@ fn main() {
                         _ => (),
                     }
                 }
+                Event::MouseWheel { y, .. } => {
+                    scale += (y as f32)/2.0;
+                }
                 _ => (),
             }
         }
@@ -230,7 +259,7 @@ fn main() {
         let current_op_time = if gameboy.state != cpu::constants::CpuState::Crashed {
             gameboy.dispatch_opcode() as u64
         } else {
-            0
+            10 // FIXME think about what to return here or refactor code around this
         };
 
         cycle_count += current_op_time;
@@ -282,10 +311,11 @@ fn main() {
         let color4 = sdl2::pixels::Color::RGBA(255, 255, 255, 255);
         let color_lookup = [color1, color2, color3, color4];
 
-        match renderer.set_scale(X_SCALE, Y_SCALE) {
+        match renderer.set_scale(scale, scale) {
             Ok(_) => (),
             Err(_) => error!("Could not set render scale"),
         }
+
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
 
@@ -294,20 +324,38 @@ fn main() {
             renderer.set_draw_color(NICER_COLOR);
             renderer.clear();
 
+            let tile_patterns_x_offset = (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 4;
+            vidram::draw_tile_patterns(&mut renderer, &gameboy, tile_patterns_x_offset);
 
-            // // draw current PC
-            // let pc = gameboy.pc;
-            // renderer.set_draw_color(Color::RGB(255, 255, 255));
-            // renderer.draw_point(addr_to_point(pc));
+            // TODO add toggle for this also?
+            let tile_map_offset = TILE_MAP_1_START;
 
-            memvis::draw_memory_values(&mut renderer, &gameboy);
+            let bg_select = tile_data_mode_button.value().unwrap();
+            
+            let tile_patterns_offset = match bg_select {
+                TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
+                TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
+            };
 
-            if gameboy.event_log_enabled {
+
+            let bg_disp_x_offset = MEM_DISP_WIDTH + 2;
+
+            vidram::draw_background_buffer(&mut renderer, &gameboy,
+                                           tile_map_offset,
+                                           tile_patterns_offset,
+                                           bg_disp_x_offset);
+
+            if mem_val_display_enabled {
+                // // dynamic mem access vis
+                // memvis::draw_memory_values(&mut renderer, &gameboy);
+                memvis::draw_memory_access(&mut renderer, &gameboy);
+                
                 memvis::draw_memory_events(&mut renderer, &mut gameboy);
             }
 
-            vidram::draw_tile_patterns(&mut renderer, &gameboy, MEM_DISP_WIDTH + 2);
 
+            tile_data_mode_button.draw(&mut renderer);
+            
 
             //   00111100 1110001 00001000
             //   01111110 1110001 00010100

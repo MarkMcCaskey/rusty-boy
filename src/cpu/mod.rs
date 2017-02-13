@@ -12,6 +12,56 @@ use std::num::Wrapping;
 use disasm::*;
 use self::constants::*;
 
+pub trait CpuEventLogger {
+    fn new() -> Self;
+    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent);
+}
+
+type AccessFlag = u8;
+const FLAG_R: u8 = 0x1;
+const FLAG_W: u8 = 0x2;
+const FLAG_X: u8 = 0x4;
+
+pub struct DeqCpuEventLogger {
+    pub events_deq: VecDeque<EventLogEntry>,
+    pub access_flags: [AccessFlag; MEM_ARRAY_SIZE],
+}
+
+impl CpuEventLogger for DeqCpuEventLogger {
+
+    fn new() -> DeqCpuEventLogger {
+        DeqCpuEventLogger {
+            events_deq: VecDeque::new(),
+            access_flags: [0; MEM_ARRAY_SIZE],
+        }
+    }
+    
+    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent) {
+        #[warn(unused_variables)]
+        // self.events_deq.push_back(
+        //     EventLogEntry { timestamp: timestamp,
+        //                     event: event });
+        match event {
+            CpuEvent::Read { from: addr } => {
+                self.access_flags[addr as usize] |= FLAG_R;
+            }
+            CpuEvent::Write { to: addr } => {
+                self.access_flags[addr as usize] |= FLAG_W;
+            }
+            CpuEvent::Execute(addr) => {
+                self.access_flags[addr as usize] |= FLAG_X;
+            }
+            _ => {
+                let log_jumps = false;
+                if log_jumps {
+                    self.events_deq.push_back(
+                        EventLogEntry { timestamp: timestamp,
+                                        event: event });
+                }
+            }
+        }
+    }
+}
 
 // Types for storing and visualizing various things happening
 pub enum EventPlace {
@@ -30,7 +80,7 @@ pub enum CpuEvent {
     Jump { from: MemAddr, to: MemAddr },
 }
 
-type CycleCount = u64;
+pub type CycleCount = u64;
 
 pub struct EventLogEntry {
     pub timestamp: CycleCount,
@@ -63,8 +113,7 @@ pub struct Cpu {
     pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
     pub state: CpuState,
-    pub event_log_enabled: bool,
-    pub events_deq: VecDeque<EventLogEntry>,
+    pub event_logger: Option<DeqCpuEventLogger>,
     pub cycles: CycleCount,
 }
 
@@ -84,8 +133,7 @@ impl Cpu {
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
             state: CpuState::Normal,
-            event_log_enabled: false,
-            events_deq: VecDeque::new(),
+            event_logger: Some(DeqCpuEventLogger::new()),
             cycles: 0,
         };
         new_cpu.reset();
@@ -144,12 +192,17 @@ impl Cpu {
         self.mem[0xFFFF] = 0x_1 as byte;
     }
 
+    pub fn toggle_logger(&mut self) {
+        match self.event_logger {
+            Some(_) => self.event_logger = None,
+            None => self.event_logger = Some(DeqCpuEventLogger::new()),
+        }
+    }
+    
     #[inline]
     fn log_event(&mut self, event: CpuEvent) {
-        if self.event_log_enabled {
-            self.events_deq.push_back(
-                EventLogEntry { timestamp: self.cycles,
-                                event: event });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_event(self.cycles, event);
         };
     }
 
@@ -231,7 +284,7 @@ impl Cpu {
     }
         
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
-        match ((self.mem[0xFF11] >> 6) & 0x3) {
+        match (self.mem[0xFF11] >> 6) & 0x3 {
             0 => 0.125,
             1 => 0.25,
             2 => 0.5,
@@ -746,18 +799,19 @@ impl Cpu {
 
 
     #[inline]
-    pub fn get_mem(&mut self, address: usize) -> byte {
+    pub fn get_mem(&mut self, address: MemAddr) -> byte {
         self.log_event(CpuEvent::Read { from: address as MemAddr });
-        self.mem[address]
+        self.mem[address as usize]
     }
 
     #[inline]
-    pub fn set_mem(&mut self, address: usize, value: byte) {
+    pub fn set_mem(&mut self, address: MemAddr, value: byte) {
         /*!
         NOTE: serial I/O is done by accessing memory addresses.
         It is read at 8192Hz, one bit at a time if external clock is used.
         See documentation and read carefully before implementing this.
          */
+        let address = address as usize;
 
         self.log_event(CpuEvent::Write { to: address as MemAddr});
 
@@ -821,7 +875,7 @@ impl Cpu {
             CpuRegister::L  => self.l = val,
             CpuRegister::HL => {
                 let hlv = self.hl();
-                self.set_mem(hlv as usize, val);
+                self.set_mem(hlv, val);
             },
             _               => panic!("Cannot set non-8bit values"),
         } 
@@ -845,13 +899,13 @@ impl Cpu {
 
     fn ldan16(&mut self, n: CpuRegister16) {
         let addr = self.access_register16(n);
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldan16c(&mut self, b1: u8, b2: u8) {
-        let val = self.get_mem(byte_to_u16(b1, b2) as usize);
+        let val = self.get_mem(byte_to_u16(b1, b2));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -865,30 +919,30 @@ impl Cpu {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
         let addr = self.access_register16(n);
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
     }
 
     fn ldna16c(&mut self, b1: u8, b2: u8) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
-        self.set_mem(byte_to_u16(b1, b2) as usize, val);
+        self.set_mem(byte_to_u16(b1, b2), val);
     }
 
     fn ldac(&mut self) {
         let reg_c = self.c;
         // TODO check if C should be unsigned
-        let val = self.get_mem((0xFF00u16 + (reg_c as u16)) as usize);
+        let val = self.get_mem((0xFF00u16 + (reg_c as u16)));
         self.set_register(CpuRegister::A, val);
     }
 
     fn ldca(&mut self) {
         let addr = 0xFF00u16 + (self.c as u16);
         let val = self.a;
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
     }
 
     fn lddahl(&mut self) {
         let addr = self.hl();
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
         self.dec16(CpuRegister16::HL);
@@ -898,13 +952,13 @@ impl Cpu {
         let val = self.a;
         let addr = self.hl();
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
         self.dec16(CpuRegister16::HL);
     }
 
     fn ldiahl(&mut self) {
         let addr = self.hl();
-        let val = self.get_mem(addr as usize);
+        let val = self.get_mem(addr);
 
         self.set_register(CpuRegister::A, val);
         self.inc16(CpuRegister16::HL);
@@ -914,17 +968,17 @@ impl Cpu {
         let val = self.a;
         let addr = self.hl();
 
-        self.set_mem(addr as usize, val);
+        self.set_mem(addr, val);
         self.inc16(CpuRegister16::HL);
     }
 
     fn ldhna(&mut self, n: u8) {
         let val = self.a;
-        self.set_mem((0xFF00u16 + (n as u16)) as usize, val);
+        self.set_mem((0xFF00u16 + (n as u16)), val);
     }
 
     fn ldhan(&mut self, n: u8) {
-        let val = self.get_mem((0xFF00u16 + (n as u16)) as usize);
+        let val = self.get_mem((0xFF00u16 + (n as u16)));
         self.set_register(CpuRegister::A, val);
     }
 
@@ -946,7 +1000,7 @@ impl Cpu {
 
     fn ldnnsp(&mut self, b1: u8, b2: u8) {
         let old_sp = self.sp;
-        self.set_mem((((b2 as u16) << 8) | (b1 as u16)) as usize, old_sp as byte);
+        self.set_mem((((b2 as u16) << 8) | (b1 as u16)), old_sp as byte);
     }
 
     // fn pushnn(&mut self, nn: CpuRegister16) {
@@ -1483,7 +1537,7 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let old_pc = self.pc;
-        let hl = self.hl() as usize;
+        let hl = self.hl();
         let n = self.get_mem(hl);
         let new_pc = add_u16_i8(old_pc, n as i8);
         self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
@@ -1528,13 +1582,13 @@ impl Cpu {
         let first_half = ((nn >> 8) & 0xFF) as byte;
         let second_half = (nn & 0xFF) as byte;
 
-        let mut sp_idx = self.sp as usize;
-        sp_idx -= 1;
-        self.set_mem(sp_idx, first_half);
-        sp_idx -= 1;
-        self.set_mem(sp_idx, second_half);
+        let mut sp_idx = Wrapping(self.sp as u16);
+        sp_idx -= Wrapping(1);
+        self.set_mem(sp_idx.0, first_half);
+        sp_idx -= Wrapping(1);
+        self.set_mem(sp_idx.0, second_half);
 
-        self.sp -= 2;
+        self.sp = (Wrapping(self.sp) - Wrapping(2)).0;
     }
 
     fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
@@ -1559,12 +1613,12 @@ impl Cpu {
     }
 
     fn pop_from_stack(&mut self) -> u16 {
-        let mut sp_idx = self.sp as usize;
-        let second_half = self.get_mem(sp_idx);
-        sp_idx += 1;
-        let first_half = self.get_mem(sp_idx);
+        let mut sp_idx = Wrapping(self.sp as MemAddr);
+        let second_half = self.get_mem(sp_idx.0);
+        sp_idx += Wrapping(1);
+        let first_half = self.get_mem(sp_idx.0);
         
-        self.sp += 2;
+        self.sp = (Wrapping(self.sp) + Wrapping(2)).0;
         byte_to_u16(second_half, first_half)
     }
 
@@ -2080,9 +2134,6 @@ impl Cpu {
         use std::fs::File;
         use std::io::Read;
 
-        let prev_event_log_enabled = self.event_log_enabled;
-        self.event_log_enabled = false;
-
         let mut rom = File::open(file_path).expect("Could not open rom file");
         let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 
@@ -2093,7 +2144,6 @@ impl Cpu {
             self.mem[i] = rom_buffer[i] as byte;
         }
 
-        self.event_log_enabled = prev_event_log_enabled;
     }
 }
 

@@ -6,6 +6,12 @@
 # More information here http://doc.crates.io/guide.html#cargotoml-vs-cargolock
 Cargo.lock
 
-# ignore generated code
+# Ignore generated code
 src/debug/dbglanguage.rs
 src/assembler/asm.rs
+
+# Ignore emacs backup files
+*~
+
+# Ignore rustfmt backup files
+*rs.bk
