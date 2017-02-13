@@ -12,6 +12,27 @@ use std::num::Wrapping;
 use disasm::*;
 use self::constants::*;
 
+pub trait CpuEventLogger {
+    fn new() -> Self;
+    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent);
+}
+
+pub struct DeqCpuEventLogger {
+    pub events_deq: VecDeque<EventLogEntry>,
+}
+
+impl CpuEventLogger for DeqCpuEventLogger {
+
+    fn new() -> DeqCpuEventLogger {
+        DeqCpuEventLogger { events_deq: VecDeque::new() }
+    }
+
+    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent) {
+        self.events_deq.push_back(
+            EventLogEntry { timestamp: timestamp,
+                            event: event });
+    }
+}
 
 // Types for storing and visualizing various things happening
 pub enum EventPlace {
@@ -30,7 +51,7 @@ pub enum CpuEvent {
     Jump { from: MemAddr, to: MemAddr },
 }
 
-type CycleCount = u64;
+pub type CycleCount = u64;
 
 pub struct EventLogEntry {
     pub timestamp: CycleCount,
@@ -63,8 +84,7 @@ pub struct Cpu {
     pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
     pub state: CpuState,
-    pub event_log_enabled: bool,
-    pub events_deq: VecDeque<EventLogEntry>,
+    pub event_logger: Option<DeqCpuEventLogger>,
     pub cycles: CycleCount,
 }
 
@@ -84,8 +104,7 @@ impl Cpu {
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
             state: CpuState::Normal,
-            event_log_enabled: false,
-            events_deq: VecDeque::new(),
+            event_logger: Some(DeqCpuEventLogger::new()),
             cycles: 0,
         };
         new_cpu.reset();
@@ -144,12 +163,17 @@ impl Cpu {
         self.mem[0xFFFF] = 0x_1 as byte;
     }
 
+    pub fn toggle_logger(&mut self) {
+        match self.event_logger {
+            Some(_) => self.event_logger = None,
+            None => self.event_logger = Some(DeqCpuEventLogger::new()),
+        }
+    }
+    
     #[inline]
     fn log_event(&mut self, event: CpuEvent) {
-        if self.event_log_enabled {
-            self.events_deq.push_back(
-                EventLogEntry { timestamp: self.cycles,
-                                event: event });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_event(self.cycles, event);
         };
     }
 
@@ -231,7 +255,7 @@ impl Cpu {
     }
         
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
-        match ((self.mem[0xFF11] >> 6) & 0x3) {
+        match (self.mem[0xFF11] >> 6) & 0x3 {
             0 => 0.125,
             1 => 0.25,
             2 => 0.5,
@@ -2080,9 +2104,6 @@ impl Cpu {
         use std::fs::File;
         use std::io::Read;
 
-        let prev_event_log_enabled = self.event_log_enabled;
-        self.event_log_enabled = false;
-
         let mut rom = File::open(file_path).expect("Could not open rom file");
         let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 
@@ -2093,7 +2114,6 @@ impl Cpu {
             self.mem[i] = rom_buffer[i] as byte;
         }
 
-        self.event_log_enabled = prev_event_log_enabled;
     }
 }
 

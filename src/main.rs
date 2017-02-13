@@ -104,9 +104,6 @@ fn main() {
     let mut gameboy = Cpu::new();
 
     let mem_val_display_enabled = true;
-    let mut event_log_enabled = true;
-    // TODO move all init in one place
-    gameboy.event_log_enabled = event_log_enabled;
 
     // Set up SDL; input
     let sdl_context = sdl2::init().unwrap();
@@ -216,13 +213,12 @@ fn main() {
                             break 'main;
                         }
                         Keycode::F3 => {
-                            event_log_enabled = !event_log_enabled;
-                            gameboy.event_log_enabled = event_log_enabled;
+                            gameboy.toggle_logger()
                         }
                         Keycode::R => {
                             gameboy = Cpu::new();
                             gameboy.load_rom(rom_file);
-                            gameboy.event_log_enabled = event_log_enabled;
+                            // gameboy.event_log_enabled = event_log_enabled;
                         }
                         _ => (),
                     }
@@ -347,9 +343,8 @@ fn main() {
             if mem_val_display_enabled {
                 memvis::draw_memory_values(&mut renderer, &gameboy);
                 
-                if gameboy.event_log_enabled {
-                    memvis::draw_memory_events(&mut renderer, &mut gameboy);
-                }
+                memvis::draw_memory_events(&mut renderer, &mut gameboy);
+
             }
 
 

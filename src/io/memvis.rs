@@ -1,12 +1,13 @@
 //! Memory visualization
 
 use sdl2;
+use sdl2::rect::Point;
+use sdl2::pixels::*;
+
 use io::constants::*;
 use cpu::constants::MemAddr;
 use cpu::*;
 
-use sdl2::rect::Point;
-use sdl2::pixels::*;
 
 use disasm;
 
@@ -90,7 +91,13 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut Cpu) {
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
     // But event logging itself is extremely slow
-    for entry in gameboy.events_deq.iter() {
+
+    let mut event_logger = match gameboy.event_logger {
+        Some(ref mut logger) => logger,
+        None => return,
+    };
+    
+    for entry in event_logger.events_deq.iter() {
         let timestamp = entry.timestamp;
         let ref event = entry.event;
         {
@@ -150,10 +157,10 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
         }
     }
 
-    while !gameboy.events_deq.is_empty() {
-        let timestamp = gameboy.events_deq.front().unwrap().timestamp;
+    while !event_logger.events_deq.is_empty() {
+        let timestamp = event_logger.events_deq.front().unwrap().timestamp;
         if (gameboy.cycles - timestamp) >= FADE_DELAY {
-            gameboy.events_deq.pop_front();
+            event_logger.events_deq.pop_front();
         } else {
             break;
         }
