@@ -118,8 +118,8 @@ fn main() {
     trace!("Opening window");
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window(gameboy.get_game_name().as_str(),
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT)
+                RB_SCREEN_WIDTH,
+                RB_SCREEN_HEIGHT)
         .position_centered()
         .build()
         .unwrap();

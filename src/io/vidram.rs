@@ -83,14 +83,6 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
     const TOP_Y: i32 = 1;
     let screen_offset_y = TOP_Y;
 
-    // TODO draw window position pg 59
-    renderer.set_draw_color(Color::RGB(0,0,0));
-
-    renderer.draw_rect(Rect::new(screen_offset_x,
-                                 TOP_Y,
-                                 SCREEN_BUFFER_SIZE_X as u32,
-                                 SCREEN_BUFFER_SIZE_Y as u32)).unwrap();
-
     // FIXME rethink how to do this better
     match tile_patterns_offset {
         TILE_PATTERN_TABLE_1_ORIGIN => {
@@ -131,4 +123,22 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
         _ => panic!("Wrong tile data select"),
     };
 
+    draw_screen_border(renderer, gameboy, screen_offset_x, TOP_Y);
+}
+
+/// Draw rectangle showing values of SCX and SCY registers,
+/// i.e. visible screen area.
+fn draw_screen_border(renderer: &mut sdl2::render::Renderer,
+                      gameboy: &Cpu,
+                      screen_offset_x: i32,
+                      screen_offset_y: i32) {
+    renderer.set_draw_color(Color::RGB(255,0,255));
+    let scx: u8 = gameboy.scx();
+    let scy: u8 = gameboy.scy();
+
+    // TODO clip and wrap around
+    renderer.draw_rect(Rect::new(screen_offset_x + scx as i32 - 1,
+                                 screen_offset_y + scy as i32 - 1,
+                                 GB_SCREEN_WIDTH as u32 + 2,
+                                 GB_SCREEN_HEIGHT as u32 + 2)).unwrap();
 }

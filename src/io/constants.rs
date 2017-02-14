@@ -1,8 +1,8 @@
 use sdl2::pixels::*;
 use cpu::constants::*;
 
-pub const SCREEN_WIDTH: u32 = 1400;
-pub const SCREEN_HEIGHT: u32 = 900;
+pub const RB_SCREEN_WIDTH: u32 = 1400;
+pub const RB_SCREEN_HEIGHT: u32 = 900;
 
 pub const SCALE: f32 = 2.0;
 
@@ -68,3 +68,6 @@ pub const SCREEN_BUFFER_SIZE_Y: u32 = 256;
 
 pub const SCREEN_BUFFER_TILES_X: u32 = 32;
 pub const SCREEN_BUFFER_TILES_Y: u32 = 32;
+
+pub const GB_SCREEN_WIDTH: u8 = 160;
+pub const GB_SCREEN_HEIGHT: u8 = 144;
