@@ -37,6 +37,7 @@ pub const TILE_PATTERN_TABLE_2_ORIGIN: MemAddr = 0x9000;
 
 #[derive(Clone,Debug)]
 pub enum TileDataSelect {
+    Auto,
     Mode1,
     Mode2,
 }

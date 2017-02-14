@@ -144,7 +144,9 @@ fn main() {
     let mut frame_num = Wrapping(0);
 
     let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
-                                                vec![TileDataSelect::Mode1, TileDataSelect::Mode2]);
+                                                vec![TileDataSelect::Auto,
+                                                     TileDataSelect::Mode1,
+                                                     TileDataSelect::Mode2]);
 
     // This does not work as intended because of borrowing
     // let mut buttons = Vec::new();
@@ -327,6 +329,12 @@ fn main() {
             let bg_select = tile_data_mode_button.value().unwrap();
 
             let tile_patterns_offset = match bg_select {
+                TileDataSelect::Auto =>
+                    if gameboy.lcdc_bg_tile_map() {
+                        TILE_PATTERN_TABLE_1_ORIGIN
+                    } else {
+                        TILE_PATTERN_TABLE_2_ORIGIN
+                    },
                 TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
                 TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
             };
