@@ -208,6 +208,7 @@ fn main() {
                         }
                         Keycode::F3 => gameboy.toggle_logger(),
                         Keycode::R => {
+                            // Reset/reload emu
                             gameboy = Cpu::new();
                             gameboy.load_rom(rom_file);
                             // gameboy.event_log_enabled = event_log_enabled;
@@ -218,11 +219,13 @@ fn main() {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
+                            // Print info about clicked address
                             let scaled_x = x / scale as i32;
                             let scaled_y = y / scale as i32;
                             memvis::memvis_handle_click(&gameboy, scaled_x, scaled_y);
+                            
+                            // Switch Tile Map manually
                             let point = Point::new(scaled_x, scaled_y);
-
                             if tile_data_mode_button.rect.contains(point) {
                                 tile_data_mode_button.click();
                             }
@@ -233,8 +236,12 @@ fn main() {
                             let scaled_y = y / scale as i32;
 
                             if let Some(pc) = memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
+                                info!("Jumping to ${:04X}", pc);
                                 gameboy.pc = pc;
-                                gameboy.state = cpu::constants::CpuState::Normal;
+                                if gameboy.state != cpu::constants::CpuState::Normal {
+                                    info!("CPU was '{:?}', forcing run.", gameboy.state);
+                                    gameboy.state = cpu::constants::CpuState::Normal;
+                                }
                             }
 
                         }
