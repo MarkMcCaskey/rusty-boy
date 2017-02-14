@@ -132,13 +132,25 @@ fn draw_screen_border(renderer: &mut sdl2::render::Renderer,
                       gameboy: &Cpu,
                       screen_offset_x: i32,
                       screen_offset_y: i32) {
-    renderer.set_draw_color(Color::RGB(255,0,255));
+    renderer.set_draw_color(Color::RGB(255, 255, 255));
     let scx: u8 = gameboy.scx();
     let scy: u8 = gameboy.scy();
 
-    // TODO clip and wrap around
-    renderer.draw_rect(Rect::new(screen_offset_x + scx as i32 - 1,
-                                 screen_offset_y + scy as i32 - 1,
-                                 GB_SCREEN_WIDTH as u32 + 2,
-                                 GB_SCREEN_HEIGHT as u32 + 2)).unwrap();
+    renderer.set_clip_rect(Some(Rect::new(screen_offset_x,
+                                          screen_offset_y,
+                                          SCREEN_BUFFER_SIZE_X,
+                                          SCREEN_BUFFER_SIZE_Y)));
+    // Draw 9 versions to do wrap around
+    // FIXME is this inefficient/dumb and there is a better way? probably.
+    for x in -1..2 {
+        for y in -1..2 {
+            let offset_x = screen_offset_x.wrapping_add(x*SCREEN_BUFFER_SIZE_X as i32);
+            let offset_y = screen_offset_y.wrapping_add(y*SCREEN_BUFFER_SIZE_X as i32);
+            renderer.draw_rect(Rect::new(offset_x + scx as i32 - 1,
+                                         offset_y + scy as i32 - 1,
+                                         GB_SCREEN_WIDTH as u32 + 2,
+                                         GB_SCREEN_HEIGHT as u32 + 2)).unwrap();
+        }
+    }
+    renderer.set_clip_rect(None);
 }
