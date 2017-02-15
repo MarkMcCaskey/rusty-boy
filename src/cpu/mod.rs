@@ -160,37 +160,37 @@ impl Cpu {
         self.set_bc(0x0013);
         self.set_de(0x00D8);
         self.set_hl(0x014D);
-        self.mem[0xFF05] = 0x_1 as byte;
-        self.mem[0xFF06] = 0x_1 as byte;
-        self.mem[0xFF07] = 0x_1 as byte;
-        self.mem[0xFF10] = 0x_1 as byte;
-        self.mem[0xFF11] = 0x_1 as byte;
-        self.mem[0xFF12] = 0x_1 as byte;
-        self.mem[0xFF14] = 0x_1 as byte;
-        self.mem[0xFF16] = 0x_1 as byte;
-        self.mem[0xFF17] = 0x_1 as byte;
-        self.mem[0xFF19] = 0x_1 as byte;
-        self.mem[0xFF1A] = 0x_1 as byte;
-        self.mem[0xFF1B] = 0x_1 as byte;
-        self.mem[0xFF1C] = 0x_1 as byte;
-        self.mem[0xFF1E] = 0x_1 as byte;
-        self.mem[0xFF20] = 0x_1 as byte;
-        self.mem[0xFF21] = 0x_1 as byte;
-        self.mem[0xFF22] = 0x_1 as byte;
-        self.mem[0xFF23] = 0x_1 as byte;
-        self.mem[0xFF24] = 0x_1 as byte;
-        self.mem[0xFF25] = 0x_1 as byte;
-        self.mem[0xFF26] = 0x_1 as byte; //F1 for GB // TODOA:
-        self.mem[0xFF40] = 0x_1 as byte;
-        self.mem[0xFF42] = 0x_1 as byte;
-        self.mem[0xFF43] = 0x_1 as byte;
-        self.mem[0xFF45] = 0x_1 as byte;
-        self.mem[0xFF47] = 0x_1 as byte;
-        self.mem[0xFF48] = 0x_1 as byte;
-        self.mem[0xFF49] = 0x_1 as byte;
-        self.mem[0xFF4A] = 0x_1 as byte;
-        self.mem[0xFF4B] = 0x_1 as byte;
-        self.mem[0xFFFF] = 0x_1 as byte;
+        self.mem[0xFF05] = 0x00;
+        self.mem[0xFF06] = 0x00;
+        self.mem[0xFF07] = 0x00;
+        self.mem[0xFF10] = 0x80;
+        self.mem[0xFF11] = 0xBF;
+        self.mem[0xFF12] = 0xF3;
+        self.mem[0xFF14] = 0xBF;
+        self.mem[0xFF16] = 0x3F;
+        self.mem[0xFF17] = 0x00;
+        self.mem[0xFF19] = 0xBF;
+        self.mem[0xFF1A] = 0x7F;
+        self.mem[0xFF1B] = 0xFF;
+        self.mem[0xFF1C] = 0x9F;
+        self.mem[0xFF1E] = 0xBF;
+        self.mem[0xFF20] = 0xFF;
+        self.mem[0xFF21] = 0x00;
+        self.mem[0xFF22] = 0x00;
+        self.mem[0xFF23] = 0xBF;
+        self.mem[0xFF24] = 0x77;
+        self.mem[0xFF25] = 0xF3;
+        self.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
+        self.mem[0xFF40] = 0x91;
+        self.mem[0xFF42] = 0x00;
+        self.mem[0xFF43] = 0x00;
+        self.mem[0xFF45] = 0x00;
+        self.mem[0xFF47] = 0xFC;
+        self.mem[0xFF48] = 0xFF;
+        self.mem[0xFF49] = 0xFF;
+        self.mem[0xFF4A] = 0x00;
+        self.mem[0xFF4B] = 0x00;
+        self.mem[0xFFFF] = 0x00;
     }
 
     pub fn toggle_logger(&mut self) {
@@ -1650,7 +1650,7 @@ impl Cpu {
 
     fn read_instruction(&self) -> (u8, u8, u8, u8) {
         // if self.pc > (0xFFFF - 3) {
-        //     panic!("Less than _1 as bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
+        //     panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
         // }
         (self.mem[self.pc as usize] as u8,
          self.mem[(self.pc as usize) + 1] as u8,
