@@ -11,6 +11,7 @@ use cpu::*;
 
 use disasm;
 
+
 /// Returns maybe a memory address given the coordinates of the memory visualization
 pub fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<MemAddr> {
     let x_scaled = x as i32;
@@ -23,6 +24,7 @@ pub fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<MemAddr> {
     }
 }
 
+/// Returns point on screen where pixel representing address is drawn.
 #[inline]
 fn addr_to_point(addr: u16) -> Point {
     let x = (addr as i32) % MEM_DISP_WIDTH;
@@ -30,6 +32,8 @@ fn addr_to_point(addr: u16) -> Point {
     Point::new(x as i32, y as i32)
 }
 
+
+/// Clamp i16 value to 0-255 range.
 #[inline]
 fn clamp_color(v: i16) -> u8 {
     if v < 0 {
@@ -41,15 +45,18 @@ fn clamp_color(v: i16) -> u8 {
     }
 }
 
-// FIXME this is just lazy code
+
+/// Simple saturating color addition.
 #[inline]
 fn mix_color(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> (u8, u8, u8) {
+    // FIXME this is just lazy code
     (clamp_color(r1 as i16 + r2 as i16),
      clamp_color(g1 as i16 + g2 as i16),
      clamp_color(b1 as i16 + b2 as i16))
 }
 
 
+/// Use u8 value to scale other one.
 // FIXME this is just lazy code
 #[inline]
 fn scale_col(scale: u8, color: u8) -> u8 {
@@ -57,6 +64,8 @@ fn scale_col(scale: u8, color: u8) -> u8 {
 }
 
 
+/// Draw all memory values represented by pixels. Width is determined
+/// by `MEM_DISP_WIDTH`.
 pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {
     let mut x = 0;
     let mut y = 0;
@@ -92,6 +101,8 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 }
 
 
+/// Draw memory values represented by pixels with colors showing types
+/// of access (r/w/x).
 pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {
     let mut x = 0;
     let mut y = 0;
@@ -106,7 +117,7 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 
         use sdl2::pixels::*;
 
-        let v = gameboy.mem[addr];
+        let value = gameboy.mem[addr];
 
         // let color = Color::RGB(
         //     clamp_color(v * ((p & 0x2) >> 1) as i16 + v>>2),
@@ -115,14 +126,23 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 
 
         let color = if p == 0 {
-            Color::RGB(v, v, v)
+            // Was not accessed
+            Color::RGB(value, value, value)
         } else {
-            let b = 32;
-            let v = (v >> 2) as i16;
-            let s = v + b;
-            Color::RGB(clamp_color(s * ((p & 0x2) >> 1) as i16),
-                       clamp_color(s * (p & 0x1) as i16),
-                       clamp_color(255 * ((p & 0x4) >> 2) as i16))
+            // FIXME The color is determined by value in memory, we
+            // want to fade max color somewhat (to use bright colors
+            // by other stuff), but also show at least something
+            // instead of black.
+            //
+            // It will not overflow normally because input value is
+            // 8bit, and "base" is added to 16bit value, and then the
+            // value "clamped" so you get "saturating addition(?)"
+            let base = 32;
+            let value = (value >> 2) as i16;
+            let scale = value + base;
+            Color::RGB(clamp_color(scale * ((p & FLAG_W) >> 1) as i16),
+                       clamp_color(scale * (p & FLAG_R) as i16),
+                       clamp_color(255 * ((p & FLAG_X) >> 2) as i16))
         };
 
         renderer.set_draw_color(color);
@@ -150,7 +170,8 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 }
 
 
-// Event visualization
+/// Draw all CpuEvents that fade depending on current cpu time. When
+/// age of event is more that `FADE_DELAY`, event is removed.
 pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut Cpu) {
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
     // But event logging itself is extremely slow
@@ -160,6 +181,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
         None => return,
     };
 
+    // Remove events that are too old
     while !event_logger.events_deq.is_empty() {
         let timestamp = event_logger.events_deq.front().unwrap().timestamp;
         if (gameboy.cycles - timestamp) >= FADE_DELAY {
@@ -169,6 +191,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
         }
     }
 
+    // Draw current events with color determined by age
     for entry in &event_logger.events_deq {
         let timestamp = entry.timestamp;
         let event = &entry.event;
@@ -232,6 +255,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
     }
 }
 
+/// Handle mouse click at pos. Prints some info about clicked address.
 pub fn memvis_handle_click(gameboy: &Cpu, x: i32, y: i32) {
     if let Some(pc) = screen_coord_to_mem_addr(x, y) {
         let pc = pc as usize;
