@@ -305,3 +305,12 @@ fn test_interrupt_disabling() {
    // assert_eq!(cpu.state, CpuState::Stop);
 }
 
+
+#[test]
+fn test_running_program() {
+    use assembler::*;
+
+    let program = asm::parse_Input(r#"
+.code
+"#);
+}
