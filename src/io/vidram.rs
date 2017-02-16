@@ -72,7 +72,7 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Renderer,
 }
 
 
-/// draw whole background buffer (256x256 px)
+/// Draw whole background buffer (256x256 px)
 pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
                               gameboy: &Cpu,
                               tile_map_offset: cpu::constants::MemAddr,

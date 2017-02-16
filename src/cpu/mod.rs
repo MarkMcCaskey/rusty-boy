@@ -18,9 +18,9 @@ pub trait CpuEventLogger {
 }
 
 type AccessFlag = u8;
-const FLAG_R: u8 = 0x1;
-const FLAG_W: u8 = 0x2;
-const FLAG_X: u8 = 0x4;
+pub const FLAG_R: u8 = 0x1;
+pub const FLAG_W: u8 = 0x2;
+pub const FLAG_X: u8 = 0x4;
 
 pub struct DeqCpuEventLogger {
     pub events_deq: VecDeque<EventLogEntry>,
