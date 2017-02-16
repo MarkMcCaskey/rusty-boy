@@ -2,6 +2,8 @@
 
 extern crate clap;
 
+use std::num::Wrapping;
+
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
@@ -42,8 +44,10 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
         let mut r8 = |insize| {
             used_r8 += 1; //instruction_size += 1;
             // jump is relative to post pc increment!
-            format!("Addr_{:04X}",
-                    (((pc + insize) as i32) + ((second_byte as i8) as i32)) as u16)
+            let addr = (Wrapping(pc) +
+                        Wrapping(insize) +
+                        Wrapping((second_byte as i8) as u16)).0;
+            format!("Addr_{:04X}", addr)
         };
 
         let mut a16 = || {
@@ -276,9 +280,21 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
 fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
     let mut pc = 0;
 
-    while pc < rom_size {
-        let (mnemonic, size) = pp_opcode(rom[pc], rom[pc + 1], rom[pc + 2], pc as u16);
-        println!("\t{}\t\t; ${:04X} 0x{:02X} {}", mnemonic, pc, rom[pc], size);
+    let crash_preventing_size = rom_size - 2; // FIXME
+    while pc < crash_preventing_size {
+        let b1 = rom[pc];
+        let b2 = rom[pc + 1];
+        let b3 = rom[pc + 2];
+        let (mnemonic, size) = pp_opcode(b1, b2, b3, pc as u16);
+        print!("\t{:25}; ${:04X} ", mnemonic, pc);
+        match size {
+            1 => print!("{:02x}", b1),
+            2 => print!("{:02x}{:02x}", b1, b2),
+            3 => print!("{:02x}{:02x}{:02x}", b1, b2, b3),
+            _ => unreachable!(),
+        }
+        println!();
+
         pc += size as usize;
     }
 }
@@ -351,11 +367,10 @@ fn main() {
         .author("spawnedartifact")
         .about("GB z80 disassembler")
         .arg(Arg::with_name("game")
-            .short("g")
-            .long("game")
-            .value_name("FILE")
-            .help("Specifies ROM to load")
-            .takes_value(true))
+             .index(1)
+             .value_name("FILE")
+             .help("Specifies ROM to disassemble")
+             .takes_value(true))
         .get_matches();
 
 

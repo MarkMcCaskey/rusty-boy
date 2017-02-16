@@ -118,8 +118,8 @@ fn main() {
     trace!("Opening window");
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window(gameboy.get_game_name().as_str(),
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT)
+                RB_SCREEN_WIDTH,
+                RB_SCREEN_HEIGHT)
         .position_centered()
         .build()
         .unwrap();
@@ -144,7 +144,9 @@ fn main() {
     let mut frame_num = Wrapping(0);
 
     let mut tile_data_mode_button = Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
-                                                vec![TileDataSelect::Mode1, TileDataSelect::Mode2]);
+                                                vec![TileDataSelect::Auto,
+                                                     TileDataSelect::Mode1,
+                                                     TileDataSelect::Mode2]);
 
     // This does not work as intended because of borrowing
     // let mut buttons = Vec::new();
@@ -206,6 +208,7 @@ fn main() {
                         }
                         Keycode::F3 => gameboy.toggle_logger(),
                         Keycode::R => {
+                            // Reset/reload emu
                             gameboy = Cpu::new();
                             gameboy.load_rom(rom_file);
                             // gameboy.event_log_enabled = event_log_enabled;
@@ -216,11 +219,13 @@ fn main() {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     match mouse_btn {
                         sdl2::mouse::MouseButton::Left => {
+                            // Print info about clicked address
                             let scaled_x = x / scale as i32;
                             let scaled_y = y / scale as i32;
                             memvis::memvis_handle_click(&gameboy, scaled_x, scaled_y);
+                            
+                            // Switch Tile Map manually
                             let point = Point::new(scaled_x, scaled_y);
-
                             if tile_data_mode_button.rect.contains(point) {
                                 tile_data_mode_button.click();
                             }
@@ -231,8 +236,12 @@ fn main() {
                             let scaled_y = y / scale as i32;
 
                             if let Some(pc) = memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
+                                info!("Jumping to ${:04X}", pc);
                                 gameboy.pc = pc;
-                                gameboy.state = cpu::constants::CpuState::Normal;
+                                if gameboy.state != cpu::constants::CpuState::Normal {
+                                    info!("CPU was '{:?}', forcing run.", gameboy.state);
+                                    gameboy.state = cpu::constants::CpuState::Normal;
+                                }
                             }
 
                         }
@@ -327,6 +336,12 @@ fn main() {
             let bg_select = tile_data_mode_button.value().unwrap();
 
             let tile_patterns_offset = match bg_select {
+                TileDataSelect::Auto =>
+                    if gameboy.lcdc_bg_tile_map() {
+                        TILE_PATTERN_TABLE_1_ORIGIN
+                    } else {
+                        TILE_PATTERN_TABLE_2_ORIGIN
+                    },
                 TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
                 TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
             };
