@@ -308,7 +308,7 @@ fn test_interrupt_disabling() {
 
 #[test]
 fn test_running_program() {
-    use assembler::*;
+    use assembler::asm;
 
     let program = asm::parse_Input(r#"
 .code

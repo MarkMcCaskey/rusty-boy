@@ -1,3 +1,4 @@
+use sdl2;
 use sdl2::pixels::*;
 use cpu::constants::*;
 
@@ -71,3 +72,6 @@ pub const SCREEN_BUFFER_TILES_Y: u32 = 32;
 
 pub const GB_SCREEN_WIDTH: u8 = 160;
 pub const GB_SCREEN_HEIGHT: u8 = 144;
+
+
+pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 2, 255);

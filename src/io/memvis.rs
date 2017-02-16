@@ -8,6 +8,7 @@ use io::constants::*;
 use cpu::constants::MemAddr;
 use cpu::*;
 
+use std::num::Wrapping;
 
 use disasm;
 
@@ -170,7 +171,7 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 }
 
 
-/// Draw all CpuEvents that fade depending on current cpu time. When
+/// Draw all `CpuEvents` that fade depending on current cpu time. When
 /// age of event is more that `FADE_DELAY`, event is removed.
 pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut Cpu) {
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
@@ -184,7 +185,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
     // Remove events that are too old
     while !event_logger.events_deq.is_empty() {
         let timestamp = event_logger.events_deq.front().unwrap().timestamp;
-        if (gameboy.cycles - timestamp) >= FADE_DELAY {
+        if (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
             event_logger.events_deq.pop_front();
         } else {
             break;
@@ -196,7 +197,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
         let timestamp = entry.timestamp;
         let event = &entry.event;
         {
-            let time_diff = gameboy.cycles - timestamp;
+            let time_diff = (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0;
             if time_diff < FADE_DELAY {
                 let time_norm = 1.0 - (time_diff as f32) / (FADE_DELAY as f32);
                 let colval = (time_norm * 255.0) as u8;

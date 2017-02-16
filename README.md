@@ -12,6 +12,12 @@ progress toward the first milestone.
 
 Feel free to submit issues and pull requests.
 
+## About
+
+Project done for fun and learning about Rust and complexity management.
+
+Memory visualization inspired by [ICU64 / Frodo Redpill v0.1](https://icu64.blogspot.com/2009/09/first-public-release-of-icu64frodo.html)
+
 ## Building
 
 First install `libsdl2-dev`.  If you're new to Rust, install `rustup`

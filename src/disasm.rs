@@ -4,6 +4,8 @@ extern crate clap;
 
 use std::num::Wrapping;
 
+#[allow(unknown_lints)]
+#[allow(many_single_char_names)]
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
@@ -44,9 +46,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
         let mut r8 = |insize| {
             used_r8 += 1; //instruction_size += 1;
             // jump is relative to post pc increment!
-            let addr = (Wrapping(pc) +
-                        Wrapping(insize) +
-                        Wrapping((second_byte as i8) as u16)).0;
+            let addr = (Wrapping(pc) + Wrapping(insize) + Wrapping((second_byte as i8) as u16)).0;
             format!("Addr_{:04X}", addr)
         };
 
@@ -337,14 +337,14 @@ pub fn binsearch_inst(vec: &Vec<(String, u16)>,
 
     let (_, b) = vec[search];
 
-    return if b == desired_pc {
+    if b == desired_pc {
         Some(search)
     } else if b > desired_pc {
         binsearch_inst(vec, desired_pc, begin, (search + 1) as usize)
     } else {
         // if b > desired_pc {
         binsearch_inst(vec, desired_pc, (search - 1) as usize, end)
-    };
+    }
 }
 
 #[allow(dead_code)]
@@ -367,10 +367,10 @@ fn main() {
         .author("spawnedartifact")
         .about("GB z80 disassembler")
         .arg(Arg::with_name("game")
-             .index(1)
-             .value_name("FILE")
-             .help("Specifies ROM to disassemble")
-             .takes_value(true))
+            .index(1)
+            .value_name("FILE")
+            .help("Specifies ROM to disassemble")
+            .takes_value(true))
         .get_matches();
 
 

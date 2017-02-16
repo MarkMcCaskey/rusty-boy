@@ -27,6 +27,19 @@ pub struct DeqCpuEventLogger {
     pub access_flags: [AccessFlag; MEM_ARRAY_SIZE],
 }
 
+/// WARNING: NOT A REAL CLONE, deletes event information
+impl Clone for DeqCpuEventLogger {
+    fn clone(&self) -> DeqCpuEventLogger {
+        DeqCpuEventLogger::new()
+    }
+}
+
+impl Default for DeqCpuEventLogger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuEventLogger for DeqCpuEventLogger {
 
     fn new() -> DeqCpuEventLogger {
@@ -64,13 +77,15 @@ impl CpuEventLogger for DeqCpuEventLogger {
     }
 }
 
-// Types for storing and visualizing various things happening
+/// Types for storing and visualizing various things happening
+#[derive(Copy, Clone)]
 pub enum EventPlace {
     Addr(MemAddr),
     Register(CpuRegister),
     Register16(CpuRegister16),
 }
 
+#[derive(Copy, Clone)]
 pub enum CpuEvent {
     Read { from: MemAddr },
     Write { to: MemAddr },
@@ -83,6 +98,7 @@ pub enum CpuEvent {
 
 pub type CycleCount = u64;
 
+#[derive(Copy, Clone)]
 pub struct EventLogEntry {
     pub timestamp: CycleCount,
     pub event: CpuEvent,
@@ -116,6 +132,31 @@ pub struct Cpu {
     pub state: CpuState,
     pub event_logger: Option<DeqCpuEventLogger>,
     pub cycles: CycleCount,
+}
+
+impl Clone for Cpu {
+    fn clone(&self) -> Cpu {
+        let mut new_cpu = Cpu{a: self.a,
+                              b: self.b,
+                              c: self.c,
+                              d: self.d,
+                              e: self.e,
+                              f: self.f,
+                              h: self.h,
+                              l: self.l,
+                              sp: self.sp,
+                              pc: self.pc,
+                              mem: [0; MEM_ARRAY_SIZE],
+                              state: self.state,
+                              event_logger: self.event_logger.clone(),
+                              cycles: self.cycles};
+
+        for i in 0..MEM_ARRAY_SIZE {
+            new_cpu.mem[i] = self.mem[i];
+        }
+
+        new_cpu
+    }
 }
 
 impl Cpu {
@@ -155,6 +196,9 @@ impl Cpu {
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
+        if let Some(ref mut el) = self.event_logger {
+            el.events_deq.clear();
+        }
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
@@ -1928,8 +1972,7 @@ impl Cpu {
                     (n,m) => {
                         self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n));
                         inst_time = match (cpu_dispatch(m), cpu_dispatch(n)) {
-                            (CpuRegister::HL,_) => 8,
-                            (_,CpuRegister::HL) => 8,
+                            (CpuRegister::HL,_) |  (_,CpuRegister::HL) => 8,
                             _                   => 4,
                         }
                     },

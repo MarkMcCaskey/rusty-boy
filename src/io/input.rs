@@ -1,6 +1,9 @@
+//! Input related functions for the emulator (controls)
 use sdl2;
 
-pub fn setup_controller_subsystem(sdl_context: &sdl2::Sdl) {
+///
+pub fn setup_controller_subsystem(sdl_context: &sdl2::Sdl)
+                                  -> Option<sdl2::controller::GameController> {
     let controller_subsystem = sdl_context.game_controller().unwrap();
     controller_subsystem.load_mappings("controllers/sneslayout.txt").unwrap();
 
@@ -31,9 +34,5 @@ pub fn setup_controller_subsystem(sdl_context: &sdl2::Sdl) {
         }
     }
 
-    match controller {
-        Some(c) => trace!("Controller mapping: {}", c.mapping()),
-        None => trace!("Could not open any controller!"),
-    };
-
+    controller
 }

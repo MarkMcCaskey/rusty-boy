@@ -24,7 +24,7 @@ pub struct Instruction {
 }
 
 /// Carries relevant state/data about the program being assembled
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Environment {
     /// Labels that are resolved into addresses
     pub labels: HashMap<String, u16>,
