@@ -10,8 +10,8 @@ use cpu;
 use io::constants::*;
 use io::input::*;
 use io::graphics::*;
-use io::graphics::Toggle;
 use io::memvis;
+use io::memvis::MemVisState;
 use io::sound::*;
 use io::vidram;
 
@@ -40,28 +40,7 @@ pub struct ApplicationState {
     initial_gameboy_state: cpu::Cpu,
     logger_handle: Option<log4rs::Handle>,
     controller: Option<sdl2::controller::GameController>,
-}
-
-/// State for the memory visualization system
-pub struct MemVisState {
-    scale: f32,
-    tile_data_mode_button: Toggle<TileDataSelect>,
-    mem_val_display_enabled: bool,
     screenshot_frame_num: Wrapping<u64>,
-}
-
-impl MemVisState {
-    pub fn new() -> MemVisState {
-        MemVisState {
-            scale: SCALE,
-            tile_data_mode_button: Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
-                                               vec![TileDataSelect::Auto,
-                                                    TileDataSelect::Mode1,
-                                                    TileDataSelect::Mode2]),
-            mem_val_display_enabled: true,
-            screenshot_frame_num: Wrapping(0),
-        }
-    }
 }
 
 
@@ -137,6 +116,7 @@ impl ApplicationState {
             initial_gameboy_state: gbcopy,
             logger_handle: handle,
             controller: controller,
+            screenshot_frame_num: Wrapping(0),
         }
     }
 
@@ -202,12 +182,16 @@ impl ApplicationState {
                         Keycode::F3 => self.gameboy.toggle_logger(),
                         Keycode::R => {
                             // Reset/reload emu
+                            // TODO Keep previous visualization settings
                             self.gameboy.reset();
                             let gbcopy = self.initial_gameboy_state.clone();
                             self.gameboy = gbcopy;
-                            //                        gameboy = Cpu::new();
-                            //                       gameboy.load_rom(rom_file);
-                            // gameboy.event_log_enabled = event_log_enabled;
+
+                            // // This way makes it possible to edit rom
+                            // // with external editor and see changes
+                            // // instantly.
+                            // gameboy = Cpu::new();
+                            // gameboy.load_rom(rom_file);
                         }
                         _ => (),
                     }
@@ -381,8 +365,8 @@ impl ApplicationState {
             if record_screen {
                 save_screenshot(&self.renderer,
                                 format!("screen{:010}.bmp",
-                                        self.mem_vis_state.screenshot_frame_num.0));
-                self.mem_vis_state.screenshot_frame_num += Wrapping(1);
+                                        self.screenshot_frame_num.0));
+                self.screenshot_frame_num += Wrapping(1);
             }
 
             if self.gameboy.get_sound1() {
