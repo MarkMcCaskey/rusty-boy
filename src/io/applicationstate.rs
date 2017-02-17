@@ -242,8 +242,7 @@ impl ApplicationState {
                     // Find clicked widget
                     for widget in self.widgets.iter_mut() {
                         if widget.rect.contains(click_point) {
-                            let rel_point = click_point - widget.rect.top_left();
-                            widget.click(mouse_btn, rel_point, &mut self.gameboy);
+                            widget.click(mouse_btn, click_point, &mut self.gameboy);
                             break;
                         }
                     }

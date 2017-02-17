@@ -61,7 +61,10 @@ impl<T> Toggle<T>
 }
 
 
-/// Simple "window" inside of main gui window.
+/// Simple "window" inside of main gui window. Contains Drawable and
+/// is Drawable itself. It moves contained drawable `vis` to new
+/// position on screen given by `rect`. Sets clipping and viewport
+/// before calling draw() of `vis` and resets it after.
 pub struct PositionedFrame {
     /// Position and size
     pub rect: Rect,
@@ -111,8 +114,9 @@ impl Drawable for PositionedFrame {
     }
     
     fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu) {
-        debug!("Clicked at relative {:?} with {:?}", position, button);
-        self.vis.click(button, position, cpu);
+        let rel_point = position - self.rect.top_left();
+        debug!("Clicked at relative {:?} with {:?}", rel_point, button);
+        self.vis.click(button, rel_point, cpu);
     }
 }
 
