@@ -46,8 +46,13 @@ impl Drawable for VidRamBGDisplay {
                                0);
     }
     
-    fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, _: &mut Cpu) {
-        debug!("Clicked bg buffer @ {:?} with {:?}", position, button);
+    fn click(&mut self, _: sdl2::mouse::MouseButton, _: Point, _: &mut Cpu) {
+        self.tile_data_select = match self.tile_data_select {
+            TileDataSelect::Auto => TileDataSelect::Mode1,
+            TileDataSelect::Mode1 => TileDataSelect::Mode2,
+            TileDataSelect::Mode2 => TileDataSelect::Auto,
+        };
+        debug!("BG buffer tile data: {:?}", self.tile_data_select);
     }
 }
 
@@ -57,7 +62,8 @@ pub struct VidRamTileDisplay {
 }
 
 
-/// Display for tile data
+/// Display for tile data. Display tiles in `TILE_COLUMNS` with
+/// `BORDER_PX` spacing.
 impl Drawable for VidRamTileDisplay {
     fn get_initial_size(&self) -> (u32, u32) {
         let cell_size = TILE_SIZE_PX + BORDER_PX;

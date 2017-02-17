@@ -18,17 +18,12 @@ use disasm;
 
 /// State for the memory visualization system
 pub struct MemVisState {
-    pub tile_data_mode_button: Toggle<TileDataSelect>,
     pub mem_val_display_enabled: bool,
 }
 
 impl MemVisState {
     pub fn new() -> MemVisState {
         MemVisState {
-            tile_data_mode_button: Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
-                                               vec![TileDataSelect::Auto,
-                                                    TileDataSelect::Mode1,
-                                                    TileDataSelect::Mode2]),
             mem_val_display_enabled: true,
         }
     }
