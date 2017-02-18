@@ -10,7 +10,7 @@ pub const SCALE: f32 = 2.0;
 // pub const MEM_DISP_WIDTH: i32 = SCREEN_WIDTH as i32 / (X_SCALE as i32);
 // Looks nicer when evenly divides mem regions
 pub const MEM_DISP_WIDTH: i32 = 0x0100;
-pub const MEM_DISP_HEIGHT: i32 = 0xFFFF / MEM_DISP_WIDTH; // TODO check this?
+pub const MEM_DISP_HEIGHT: i32 = 0xFFFF / MEM_DISP_WIDTH + 1; // TODO check this?
 
 pub const CYCLES_PER_HSYNC: u64 = 114; // FIXME this is probably wrong
 
@@ -20,7 +20,7 @@ pub const CPU_CYCLES_PER_VBLANK: u64 = ((CPU_CYCLES_PER_SECOND as f32) / VERT_SY
 
 // How long stuff stays on screen
 // TODO: Should depend on num of cpu cycles and frame delay
-pub const FADE_DELAY: u64 = CPU_CYCLES_PER_VBLANK * 15;
+pub const FADE_DELAY: u64 = CPU_CYCLES_PER_VBLANK * 10;
 
 pub const FRAME_SLEEP: u64 = 1000 / 120;
 

@@ -22,7 +22,7 @@ impl Drawable for VidRamBGDisplay {
         (SCREEN_BUFFER_SIZE_X, SCREEN_BUFFER_SIZE_Y)
     }
     
-    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu) {
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
         // TODO add toggle for this also?
         let tile_map_offset = TILE_MAP_1_START;
         
@@ -72,7 +72,7 @@ impl Drawable for VidRamTileDisplay {
          ((tile_num / TILE_COLUMNS) * cell_size) as u32)
     }
     
-    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu) {
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
         draw_tile_patterns(renderer, cpu);
     }
     

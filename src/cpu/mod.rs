@@ -13,8 +13,11 @@ use disasm::*;
 use self::constants::*;
 
 pub trait CpuEventLogger {
-    fn new() -> Self;
-    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent);
+    fn new(mem: Option<&[u8]>) -> Self;
+    fn log_read(&mut self, timestamp: CycleCount, addr: MemAddr);
+    fn log_write(&mut self, timestamp: CycleCount, addr: MemAddr, value: byte);
+    fn log_exec(&mut self, timestamp: CycleCount, addr: MemAddr);
+    fn log_jump(&mut self, timestamp: CycleCount, src: MemAddr, dst: MemAddr);
 }
 
 type AccessFlag = u8;
@@ -22,57 +25,103 @@ pub const FLAG_R: u8 = 0x1;
 pub const FLAG_W: u8 = 0x2;
 pub const FLAG_X: u8 = 0x4;
 
+/// Use RGB + Alpha for cpu event visualization
+pub const COLOR_DEPTH: usize = 4;
+
+/// Texture size for storing RGBA pixels for every memory address.
+/// (+0x100 for some reason).
+pub const EVENT_LOGGER_TEXTURE_SIZE: usize = (0xFFFF + 0x100) * COLOR_DEPTH;
+
+/// Structure for storing info about things happening in memory/cpu.
 pub struct DeqCpuEventLogger {
+    /// Deque for storing events. (currently used only for jump events)
     pub events_deq: VecDeque<EventLogEntry>,
-    pub access_flags: [AccessFlag; MEM_ARRAY_SIZE],
+    /// Mirror of addressable memory values (stored as 4 channel texture)
+    pub values: Box<[AccessFlag; EVENT_LOGGER_TEXTURE_SIZE]>,
+    /// Color coding for address access types (r/w/x)
+    pub access_flags: Box<[AccessFlag; EVENT_LOGGER_TEXTURE_SIZE]>,
+    /// Store of recent accesses. Used for fading effect.
+    pub access_times: Box<[AccessFlag; EVENT_LOGGER_TEXTURE_SIZE]>,
 }
 
 /// WARNING: NOT A REAL CLONE, deletes event information
 impl Clone for DeqCpuEventLogger {
     fn clone(&self) -> DeqCpuEventLogger {
-        DeqCpuEventLogger::new()
+        DeqCpuEventLogger::new(None)
     }
 }
 
 impl Default for DeqCpuEventLogger {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
+const EVENT_LOGGER_ACCESS_TYPE_ALPHA: u8 = 76;
+
 impl CpuEventLogger for DeqCpuEventLogger {
 
-    fn new() -> DeqCpuEventLogger {
-        DeqCpuEventLogger {
+    fn new(mem: Option<&[u8]>) -> DeqCpuEventLogger {
+        let mut logger = DeqCpuEventLogger {
             events_deq: VecDeque::new(),
-            access_flags: [0; MEM_ARRAY_SIZE],
+            values: Box::new([0; EVENT_LOGGER_TEXTURE_SIZE]),
+            access_flags: Box::new([0; EVENT_LOGGER_TEXTURE_SIZE]),
+            access_times: Box::new([0; EVENT_LOGGER_TEXTURE_SIZE]),
+        };
+        // Mirror current memory values and init other textures.
+        if let Some(mem) = mem {
+            for (i, v) in mem.iter().enumerate() {
+                let p = *v;
+                let pi = i * COLOR_DEPTH;
+                // Base alpha value
+                logger.values[pi] = 255;
+                // Fade values a little bit to see access better.
+                logger.values[pi + 1] = p/4;
+                logger.values[pi + 2] = p/4;
+                logger.values[pi + 3] = p/4;
+
+                // Initial alpha for access types (should be lower
+                // than value used for displaying current access).
+                logger.access_flags[pi] = EVENT_LOGGER_ACCESS_TYPE_ALPHA;
+                // initial alpha for current access
+                logger.access_times[pi] = 255;
+
+            }
         }
+        logger
+    }
+
+    fn log_read(&mut self, _: CycleCount, addr: MemAddr) {
+        let pi = addr as usize * COLOR_DEPTH;
+        self.access_flags[pi + 1] = 255;
+        self.access_times[pi + 1] = 255;
     }
     
-    fn log_event(&mut self, timestamp: CycleCount, event: CpuEvent) {
-        #[warn(unused_variables)]
-        // self.events_deq.push_back(
-        //     EventLogEntry { timestamp: timestamp,
-        //                     event: event });
-        match event {
-            CpuEvent::Read { from: addr } => {
-                self.access_flags[addr as usize] |= FLAG_R;
-            }
-            CpuEvent::Write { to: addr } => {
-                self.access_flags[addr as usize] |= FLAG_W;
-            }
-            CpuEvent::Execute(addr) => {
-                self.access_flags[addr as usize] |= FLAG_X;
-            }
-            _ => {
-                //TODO: make this a commandline arg or something
-                let log_jumps = true;
-                if log_jumps {
-                    self.events_deq.push_back(
-                        EventLogEntry { timestamp: timestamp,
-                                        event: event });
-                }
-            }
+    fn log_write(&mut self, _: CycleCount, addr: MemAddr, value: byte) {
+        let pi = addr as usize * COLOR_DEPTH;
+        // Mirror written value into texture
+        self.values[pi] = 255;   // Alpha
+        // Fade values a little bit to see access better.
+        self.values[pi + 1] = value/4; // Blue
+        self.values[pi + 2] = value/4; // Green
+        self.values[pi + 3] = value/4; // Red
+
+        self.access_flags[pi + 3] = 255;
+        self.access_times[pi + 3] = 255;
+    }
+    
+    fn log_exec(&mut self, _: CycleCount, addr: MemAddr) {
+        let pi = addr as usize * COLOR_DEPTH;
+        self.access_flags[pi + 2] = 255;
+        self.access_times[pi + 2] = 255;
+    }
+    
+    fn log_jump(&mut self, timestamp: CycleCount, src: MemAddr, dst: MemAddr) {
+        let log_jumps = true;
+        if log_jumps {
+            self.events_deq.push_back(
+                EventLogEntry { timestamp: timestamp,
+                                event: CpuEvent::Jump { from: src, to: dst }});
         }
     }
 }
@@ -175,7 +224,7 @@ impl Cpu {
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
             state: CpuState::Normal,
-            event_logger: Some(DeqCpuEventLogger::new()),
+            event_logger: Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
         };
         new_cpu.reset();
@@ -196,9 +245,11 @@ impl Cpu {
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
-        if let Some(ref mut el) = self.event_logger {
-            el.events_deq.clear();
-        }
+        // if let Some(ref mut el) = self.event_logger {
+        //     el.events_deq.clear();
+        // }
+        info!("reset");
+        self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
@@ -237,19 +288,23 @@ impl Cpu {
         self.mem[0xFFFF] = 0x00;
     }
 
+    pub fn reinit_logger(&mut self) {
+        self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
+    }
+    
     pub fn toggle_logger(&mut self) {
         match self.event_logger {
             Some(_) => self.event_logger = None,
-            None => self.event_logger = Some(DeqCpuEventLogger::new()),
+            None => self.reinit_logger(),
         }
     }
     
-    #[inline]
-    fn log_event(&mut self, event: CpuEvent) {
-        if let Some(ref mut logger) = self.event_logger {
-            logger.log_event(self.cycles, event);
-        };
-    }
+    // #[inline]
+    // fn log_event(&mut self, event: CpuEvent) {
+    //     if let Some(ref mut logger) = self.event_logger {
+    //         logger.log_event(self.cycles, event);
+    //     };
+    // }
 
     //FF04 Div
     /*
@@ -845,7 +900,9 @@ impl Cpu {
 
     #[inline]
     pub fn get_mem(&mut self, address: MemAddr) -> byte {
-        self.log_event(CpuEvent::Read { from: address as MemAddr });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_read(self.cycles, address);
+        }
         self.mem[address as usize]
     }
 
@@ -856,9 +913,11 @@ impl Cpu {
         It is read at 8192Hz, one bit at a time if external clock is used.
         See documentation and read carefully before implementing this.
          */
-        let address = address as usize;
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_write(self.cycles, address, value);
+        }
 
-        self.log_event(CpuEvent::Write { to: address as MemAddr});
+        let address = address as usize;
 
         match address {
             //TODO: Verify triple dot includes final value
@@ -1559,7 +1618,11 @@ impl Cpu {
     fn jpnn(&mut self, nn: u16) {
         let old_pc = self.pc;
         let new_pc = (Wrapping(nn) - Wrapping(3)).0;
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
+        
         self.pc = new_pc; //NOTE: Verify this byte order
     }
 
@@ -1582,14 +1645,20 @@ impl Cpu {
         let hl = self.hl();
         let n = self.get_mem(hl);
         let new_pc = add_u16_i8(old_pc, n as i8);
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
+
         self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
 
     fn jrn(&mut self, n: i8) {
         let old_pc = self.pc;
         let new_pc = add_u16_i8(old_pc, n);
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
         self.pc = new_pc;
     }
 
@@ -1604,7 +1673,9 @@ impl Cpu {
             } {
                 let old_pc = self.pc;
                 let new_pc = add_u16_i8(old_pc, n);
-                self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+                if let Some(ref mut logger) = self.event_logger {
+                    logger.log_jump(self.cycles, old_pc, new_pc);
+                }
                 self.pc = new_pc;
                 true
             } else { false }
@@ -1615,7 +1686,9 @@ impl Cpu {
         let old_pc = self.pc;
         self.push_onto_stack(old_pc + 3);
         let new_pc = nn;
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
         //nn -3 to account for pc inc in dispatch_opcode
         self.pc = (Wrapping(new_pc) - Wrapping(3)).0;
     }
@@ -1667,7 +1740,9 @@ impl Cpu {
     fn ret(&mut self) {
         let old_pc = self.pc;
         let new_pc = self.pop_from_stack();
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
         self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
     }
 
@@ -1687,7 +1762,9 @@ impl Cpu {
     fn reti(&mut self) {
         let old_pc = self.pc;
         let new_pc = self.pop_from_stack();
-        self.log_event(CpuEvent::Jump { from: old_pc, to: new_pc });
+        if let Some(ref mut logger) = self.event_logger {
+            logger.log_jump(self.cycles, old_pc, new_pc);
+        }
         self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
         self.ei();
     }
@@ -1795,7 +1872,9 @@ impl Cpu {
 
         {
             let cur_pc = self.pc;
-            self.log_event(CpuEvent::Execute(cur_pc as MemAddr));
+            if let Some(ref mut logger) = self.event_logger {
+                logger.log_exec(self.cycles, cur_pc);
+            }
         }
 
         //First check if CPU is in a running state
@@ -2185,6 +2264,7 @@ impl Cpu {
             self.mem[i] = rom_buffer[i] as byte;
         }
 
+        self.reinit_logger();
     }
 }
 

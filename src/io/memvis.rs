@@ -3,15 +3,16 @@
 use sdl2;
 use sdl2::rect::{Rect, Point};
 use sdl2::pixels::*;
+use sdl2::surface::Surface;
 use sdl2::mouse::MouseButton;
 
 use std::num::Wrapping;
 
 use io::constants::*;
-use io::graphics::Toggle;
 use io::graphics::Drawable;
 use cpu::constants::MemAddr;
 use cpu::constants::CpuState;
+use cpu::COLOR_DEPTH;
 use cpu::*;
 
 use disasm;
@@ -19,12 +20,14 @@ use disasm;
 /// State for the memory visualization system
 pub struct MemVisState {
     pub mem_val_display_enabled: bool,
+    pub texture: sdl2::render::Texture,
 }
 
 impl MemVisState {
-    pub fn new() -> MemVisState {
+    pub fn new(texture: sdl2::render::Texture) -> MemVisState {
         MemVisState {
             mem_val_display_enabled: true,
+            texture: texture,
         }
     }
 
@@ -46,10 +49,84 @@ impl Drawable for MemVisState {
         (MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32)
     }
     
-    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu) {
-        draw_memory_access(renderer, cpu);
-        // // FIXME make this take imutable cpu arg
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
+        // draw_memory_access(renderer, cpu);
+        // // FIXME make this take immutable cpu arg
         // draw_memory_events(renderer, cpu);
+        let dst_rect = Rect::new(0,
+                                 0,
+                                 MEM_DISP_WIDTH as u32,
+                                 MEM_DISP_HEIGHT as u32);
+        
+        if let &mut Some(ref mut logger) = &mut cpu.event_logger {
+            let depth = COLOR_DEPTH;
+            let memvis_pitch = MEM_DISP_WIDTH as usize * depth;
+
+            // Draw memory values just by copying them
+            self.texture.set_blend_mode(sdl2::render::BlendMode::None);
+            self.texture.update(None, &logger.values[..], memvis_pitch).unwrap();
+            renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            // Blend access type on top of values
+            self.texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            self.texture.update(None, &logger.access_flags[..], memvis_pitch).unwrap();
+            renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
+
+            // FIXME This copy is here to please the Borrow Checker
+            // God and ideally needs to be removed.
+            let mut copy = [0; EVENT_LOGGER_TEXTURE_SIZE];
+            copy[..].clone_from_slice(&logger.access_times[..]);
+
+            // Create Surface from values stored in logger
+            let mut surface = Surface::from_data(&mut copy,
+                                                 MEM_DISP_WIDTH as u32,
+                                                 MEM_DISP_HEIGHT as u32,
+                                                 memvis_pitch as u32,
+                                                 txt_format).unwrap();
+            
+            // This determines how fast access fades (actual speed
+            // will depend on the frame rate).
+            const ACCESS_FADE_ALPHA: u8 = 40;
+            
+            // Create texture with alpha to do fading effect
+            let mut blend = Surface::new(MEM_DISP_WIDTH as u32,
+                                         MEM_DISP_HEIGHT as u32,
+                                         txt_format).unwrap();
+            blend.fill_rect(None, Color::RGBA(0, 0, 0, ACCESS_FADE_ALPHA)).unwrap();
+
+            // Default blend mode works, whatever it is.
+            // blend.set_blend_mode(sdl2::render::BlendMode::Blend);
+            // surface.set_blend_mode(sdl2::render::BlendMode::Add);
+            
+            // Do the actual fading effect
+            blend.blit(None, &mut surface, None).unwrap();
+
+            // Store faded values back into logger
+            // NOTE sizes of textures differ from EVENT_LOGGER_TEXTURE_SIZE
+            // FIXME there must be a better way to do this without copying
+            surface.with_lock(|pixels| {
+                    logger.access_times[0..pixels.len()].clone_from_slice(&pixels[0..pixels.len()])
+            });
+
+            // Add access_time texture to make recent accesses brigher
+            let mut blend_texture = renderer.create_texture_from_surface(surface).unwrap();
+            blend_texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            renderer.copy(&blend_texture, None, Some(dst_rect)).unwrap();
+            
+            // self.texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            // self.texture.update(None, &logger.access_times[..], memvis_pitch).unwrap();
+            // renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            // Reset blend mode to make other operations faster
+            renderer.set_blend_mode(sdl2::render::BlendMode::None);
+        }
+
+        // Draw jumps
+        draw_memory_events(renderer, cpu);
+
+        // TODO Draw instant pc, again
     }
     
     /// Handle mouse click at pos. Prints some info about clicked
@@ -158,6 +235,7 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 /// Draw memory values represented by pixels with colors showing types
 /// of access (r/w/x).
 pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {
+    // TODO replace this function with parts of MemVisState::draw()
     let mut x = 0;
     let mut y = 0;
 
@@ -167,18 +245,18 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     };
 
 
-    for (addr, &p) in event_logger.access_flags.iter().enumerate() {
+    for &p in event_logger.values.iter() {
 
         use sdl2::pixels::*;
 
-        let value = gameboy.mem[addr];
+        // let value = gameboy.mem[addr];
+        let value = p;
 
         // let color = Color::RGB(
         //     clamp_color(v * ((p & 0x2) >> 1) as i16 + v>>2),
         //     clamp_color(v * ((p & 0x1) >> 0) as i16 + v>>2),
         //     clamp_color(v * ((p & 0x4) >> 2) as i16 + v>>2));
-
-
+        
         let color = if p == 0 {
             // Was not accessed
             Color::RGB(value, value, value)
@@ -198,8 +276,18 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
                        clamp_color(scale * (p & FLAG_R) as i16),
                        clamp_color(255 * ((p & FLAG_X) >> 2) as i16))
         };
-
         renderer.set_draw_color(color);
+
+        // let r = event_logger.access_flags[(addr * 4)];
+        // let g = event_logger.access_flags[(addr * 4) + 1];
+        // let b = event_logger.access_flags[(addr * 4) + 2];
+
+        // renderer.set_draw_color(
+        //     if r == 0 && g == 0 && b == 0 {
+        //         Color::RGB(p,p,p)
+        //     } else {
+        //         Color::RGB(r,g,b)
+        //     });
 
 
         let point = Point::new(x, y);
@@ -230,6 +318,8 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
     // But event logging itself is extremely slow
 
+    renderer.set_blend_mode(sdl2::render::BlendMode::Add);
+    
     let mut event_logger = match gameboy.event_logger {
         Some(ref mut logger) => logger,
         None => return,
@@ -283,7 +373,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
                         }
                     }
                     CpuEvent::Jump { from: src, to: dst } => {
-                        renderer.set_draw_color(Color::RGB(colval, colval, 0));
+                        renderer.set_draw_color(Color::RGBA(200, 200, 0, colval));
                         let src_point = addr_to_point(src);
                         let dst_point = addr_to_point(dst);
                         // Horizontal lines are drawn with scaling but diagonal
@@ -307,6 +397,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
             }
         }
     }
+    renderer.set_blend_mode(sdl2::render::BlendMode::None);
 }
 
 fn print_address_info(pc: MemAddr, cpu: &Cpu) {
