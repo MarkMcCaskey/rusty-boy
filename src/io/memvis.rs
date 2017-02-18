@@ -1,29 +1,82 @@
 //! Memory visualization
 
 use sdl2;
-use sdl2::rect::Point;
+use sdl2::rect::{Rect, Point};
 use sdl2::pixels::*;
-
-use io::constants::*;
-use cpu::constants::MemAddr;
-use cpu::*;
+use sdl2::mouse::MouseButton;
 
 use std::num::Wrapping;
 
+use io::constants::*;
+use io::graphics::Toggle;
+use io::graphics::Drawable;
+use cpu::constants::MemAddr;
+use cpu::constants::CpuState;
+use cpu::*;
+
 use disasm;
 
+/// State for the memory visualization system
+pub struct MemVisState {
+    pub mem_val_display_enabled: bool,
+}
 
-/// Returns maybe a memory address given the coordinates of the memory visualization
-pub fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<MemAddr> {
-    let x_scaled = x as i32;
-    let y_scaled = y as i32;
-    // FIXME this check is not correct
-    if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
-        Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
-    } else {
-        None
+impl MemVisState {
+    pub fn new() -> MemVisState {
+        MemVisState {
+            mem_val_display_enabled: true,
+        }
+    }
+
+    /// Returns maybe a memory address given the coordinates of the memory visualization
+    pub fn screen_coord_to_mem_addr(&self, point: Point) -> Option<MemAddr> {
+        let x_scaled = point.x() as i32;
+        let y_scaled = point.y() as i32;
+        // FIXME this check is not correct
+        if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
+            Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
+        } else {
+            None
+        }
     }
 }
+
+impl Drawable for MemVisState {
+    fn get_initial_size(&self) -> (u32, u32) {
+        (MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32)
+    }
+    
+    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu) {
+        draw_memory_access(renderer, cpu);
+        // // FIXME make this take imutable cpu arg
+        // draw_memory_events(renderer, cpu);
+    }
+    
+    /// Handle mouse click at pos. Prints some info about clicked
+    /// address or jumps to it.
+    fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu) {
+        match button {
+            MouseButton::Left => {
+                if let Some(pc) = self.screen_coord_to_mem_addr(position) {
+                    print_address_info(pc, cpu);
+                }
+            },
+            MouseButton::Right => {
+                if let Some(pc) = self.screen_coord_to_mem_addr(position) {
+                    info!("Jumping to ${:04X}", pc);
+                    cpu.pc = pc;
+                    if cpu.state != CpuState::Normal {
+                        info!("CPU state was '{:?}', forcing run.", cpu.state);
+                        cpu.state = CpuState::Normal;
+                    }
+                }
+            },
+            _ => (),
+        }
+    }
+}
+
+
 
 /// Returns point on screen where pixel representing address is drawn.
 #[inline]
@@ -256,21 +309,19 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
     }
 }
 
-/// Handle mouse click at pos. Prints some info about clicked address.
-pub fn memvis_handle_click(gameboy: &Cpu, x: i32, y: i32) {
-    if let Some(pc) = screen_coord_to_mem_addr(x, y) {
-        let pc = pc as usize;
-        let mem = gameboy.mem;
-        let b1 = mem[pc + 1];
-        let b2 = mem[pc + 2];
-        let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
-        let nn = byte_to_u16(b1, b2);
-        println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
-                 pc,
-                 mnem,
-                 mem[pc],
-                 b1,
-                 b2,
-                 nn);
-    }
+fn print_address_info(pc: MemAddr, cpu: &Cpu) {
+    let pc = pc as usize;
+    let mem = cpu.mem;
+    let b1 = mem[pc + 1];
+    let b2 = mem[pc + 2];
+    let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
+    let nn = byte_to_u16(b1, b2);
+    println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
+             pc,
+             mnem,
+             mem[pc],
+             b1,
+             b2,
+             nn);
+
 }

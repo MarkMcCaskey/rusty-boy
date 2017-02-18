@@ -10,10 +10,9 @@ use cpu;
 use io::constants::*;
 use io::input::*;
 use io::graphics::*;
-use io::graphics::Toggle;
-use io::memvis;
+use io::memvis::MemVisState;
+use io::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use io::sound::*;
-use io::vidram;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -28,7 +27,6 @@ use std::num::Wrapping;
 /// Holds all the data needed to use the emulator in meaningful ways
 pub struct ApplicationState {
     pub gameboy: cpu::Cpu,
-    mem_vis_state: MemVisState,
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
     sound_system: AudioDevice<SquareWave>,
     renderer: render::Renderer<'static>,
@@ -38,30 +36,12 @@ pub struct ApplicationState {
     prev_hsync_cycles: u64,
     clock_cycles: u64,
     initial_gameboy_state: cpu::Cpu,
-    logger_handle: Option<log4rs::Handle>,
-    controller: Option<sdl2::controller::GameController>,
-}
-
-/// State for the memory visualization system
-pub struct MemVisState {
-    scale: f32,
-    tile_data_mode_button: Toggle<TileDataSelect>,
-    mem_val_display_enabled: bool,
+    logger_handle: Option<log4rs::Handle>, // storing to keep alive
+    controller: Option<sdl2::controller::GameController>, // storing to keep alive
     screenshot_frame_num: Wrapping<u64>,
-}
-
-impl MemVisState {
-    pub fn new() -> MemVisState {
-        MemVisState {
-            scale: SCALE,
-            tile_data_mode_button: Toggle::new(Rect::new(MEM_DISP_WIDTH, MEM_DISP_HEIGHT, 24, 12),
-                                               vec![TileDataSelect::Auto,
-                                                    TileDataSelect::Mode1,
-                                                    TileDataSelect::Mode2]),
-            mem_val_display_enabled: true,
-            screenshot_frame_num: Wrapping(0),
-        }
-    }
+    ui_scale: f32,
+    ui_offset: Point, // TODO whole interface pan
+    widgets: Vec<PositionedFrame>,
 }
 
 
@@ -95,7 +75,6 @@ impl ApplicationState {
 
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
-        let mem_vis_state = MemVisState::new();
 
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
@@ -119,13 +98,44 @@ impl ApplicationState {
             .build()
             .unwrap();
 
-
-
         let gbcopy = gameboy.clone();
+
+
+        // TODO function for widget creation and automaic layout
+        let widget_memvis = {
+            let vis = MemVisState::new();
+            let (w, h) = vis.get_initial_size();
+            PositionedFrame { rect: Rect::new(1, 1, w, h),
+                              scale: 1.0,
+                              vis: Box::new(vis) }
+        };
+
+        let widget_vidram_bg = {
+            let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
+            let (w, h) = vis.get_initial_size();
+            PositionedFrame { rect: Rect::new(MEM_DISP_WIDTH+3, 1, w, h),
+                              scale: 1.0,
+                              vis: Box::new(vis) }
+        };
+
+        let widget_vidram_tiles = {
+            let vis = VidRamTileDisplay { tile_data_select: TileDataSelect::Auto };
+            let (w, h) = vis.get_initial_size();
+            PositionedFrame { rect: Rect::new((MEM_DISP_WIDTH +
+                                               SCREEN_BUFFER_SIZE_X as i32)
+                                              as i32 + 5,
+                                              0, w, h),
+                              scale: 1.0,
+                              vis: Box::new(vis) }
+        };
+
+        let mut widgets = Vec::new();
+        widgets.push(widget_memvis);
+        widgets.push(widget_vidram_bg);
+        widgets.push(widget_vidram_tiles);
 
         ApplicationState {
             gameboy: gameboy,
-            mem_vis_state: mem_vis_state,
             sdl_context: sdl_context,
             sound_system: device,
             renderer: renderer,
@@ -137,10 +147,19 @@ impl ApplicationState {
             initial_gameboy_state: gbcopy,
             logger_handle: handle,
             controller: controller,
+            screenshot_frame_num: Wrapping(0),
+            ui_scale: SCALE,
+            ui_offset: Point::new(0, 0),
+            widgets: widgets,
         }
     }
 
-
+    pub fn display_coords_to_ui_point(&self, x: i32, y: i32) -> Point {
+        let s_x = (x as f32 / self.ui_scale) as i32;
+        let s_y = (y as f32 / self.ui_scale) as i32;
+        Point::new(s_x, s_y)
+    }
+    
 
 
     pub fn handle_events(&mut self) {
@@ -202,51 +221,42 @@ impl ApplicationState {
                         Keycode::F3 => self.gameboy.toggle_logger(),
                         Keycode::R => {
                             // Reset/reload emu
+                            // TODO Keep previous visualization settings
                             self.gameboy.reset();
                             let gbcopy = self.initial_gameboy_state.clone();
                             self.gameboy = gbcopy;
-                            //                        gameboy = Cpu::new();
-                            //                       gameboy.load_rom(rom_file);
-                            // gameboy.event_log_enabled = event_log_enabled;
+
+                            // // This way makes it possible to edit rom
+                            // // with external editor and see changes
+                            // // instantly.
+                            // gameboy = Cpu::new();
+                            // gameboy.load_rom(rom_file);
                         }
                         _ => (),
                     }
                 }
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
-                    match mouse_btn {
-                        sdl2::mouse::MouseButton::Left => {
-                            // Print info about clicked address
-                            let scaled_x = x / self.mem_vis_state.scale as i32;
-                            let scaled_y = y / self.mem_vis_state.scale as i32;
-                            memvis::memvis_handle_click(&self.gameboy, scaled_x, scaled_y);
-
-                            // Switch Tile Map manually
-                            let point = Point::new(scaled_x, scaled_y);
-                            if self.mem_vis_state.tile_data_mode_button.rect.contains(point) {
-                                self.mem_vis_state.tile_data_mode_button.click();
-                            }
+                    // Transform screen coordinates in UI coordinates
+                    let click_point = self.display_coords_to_ui_point(x, y);
+                    
+                    // Find clicked widget
+                    for widget in self.widgets.iter_mut() {
+                        if widget.rect.contains(click_point) {
+                            widget.click(mouse_btn, click_point, &mut self.gameboy);
+                            break;
                         }
-                        sdl2::mouse::MouseButton::Right => {
-                            // Jump to clicked addr and bring cpu back to lifetimes
-                            let scaled_x = x / self.mem_vis_state.scale as i32;
-                            let scaled_y = y / self.mem_vis_state.scale as i32;
-
-                            if let Some(pc) = memvis::screen_coord_to_mem_addr(scaled_x, scaled_y) {
-                                info!("Jumping to ${:04X}", pc);
-                                self.gameboy.pc = pc;
-                                if self.gameboy.state != cpu::constants::CpuState::Normal {
-                                    info!("CPU was '{:?}', forcing run.", self.gameboy.state);
-                                    self.gameboy.state = cpu::constants::CpuState::Normal;
-                                }
-                            }
-
-                        }
-                        _ => (),
                     }
                 }
                 Event::MouseWheel { y, .. } => {
-                    self.mem_vis_state.scale += y as f32;
+                    self.ui_scale += y as f32;
+                    // self.widgets[0].scale += y as f32;
                 }
+                // // Event::MouseMotion { x, y, mousestate, xrel, yrel, .. } => {
+                // Event::MouseMotion { x, y, .. } => {
+                //     // Test widget position
+                //     let mouse_pos = self.display_coords_to_ui_point(x+5, y+5);
+                //     self.widgets[0].rect.reposition(mouse_pos);
+                // }
                 _ => (),
             }
         }
@@ -311,7 +321,7 @@ impl ApplicationState {
         // vsync at 59.73Hz
 
 
-        let scale = self.mem_vis_state.scale;
+        let scale = self.ui_scale;
         match self.renderer.set_scale(scale, scale) {
             Ok(_) => (),
             Err(_) => error!("Could not set render scale"),
@@ -330,46 +340,10 @@ impl ApplicationState {
             self.renderer.set_draw_color(NICER_COLOR);
             self.renderer.clear();
 
-            let tile_patterns_x_offset = (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 4;
-            vidram::draw_tile_patterns(&mut self.renderer, &self.gameboy, tile_patterns_x_offset);
-
-            // TODO add toggle for this also?
-            let tile_map_offset = TILE_MAP_1_START;
-
-            let bg_select = self.mem_vis_state.tile_data_mode_button.value().unwrap();
-
-            let tile_patterns_offset = match bg_select {
-                TileDataSelect::Auto => {
-                    if self.gameboy.lcdc_bg_tile_map() {
-                        TILE_PATTERN_TABLE_1_ORIGIN
-                    } else {
-                        TILE_PATTERN_TABLE_2_ORIGIN
-                    }
-                }
-                TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
-                TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
-            };
-
-
-            let bg_disp_x_offset = MEM_DISP_WIDTH + 2;
-
-            vidram::draw_background_buffer(&mut self.renderer,
-                                           &self.gameboy,
-                                           tile_map_offset,
-                                           tile_patterns_offset,
-                                           bg_disp_x_offset);
-
-            if self.mem_vis_state.mem_val_display_enabled {
-                // // dynamic mem access vis
-                // memvis::draw_memory_values(&mut renderer, &gameboy);
-                memvis::draw_memory_access(&mut self.renderer, &self.gameboy);
-
-                memvis::draw_memory_events(&mut self.renderer, &mut self.gameboy);
+            // Draw all widgets
+            for ref widget in self.widgets.iter_mut() {
+                widget.draw(&mut self.renderer, &self.gameboy);
             }
-
-
-            self.mem_vis_state.tile_data_mode_button.draw(&mut self.renderer);
-
 
             //   00111100 1110001 00001000
             //   01111110 1110001 00010100
@@ -381,8 +355,8 @@ impl ApplicationState {
             if record_screen {
                 save_screenshot(&self.renderer,
                                 format!("screen{:010}.bmp",
-                                        self.mem_vis_state.screenshot_frame_num.0));
-                self.mem_vis_state.screenshot_frame_num += Wrapping(1);
+                                        self.screenshot_frame_num.0));
+                self.screenshot_frame_num += Wrapping(1);
             }
 
             if self.gameboy.get_sound1() {
