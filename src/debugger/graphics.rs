@@ -155,10 +155,16 @@ impl Debugger {
                 }
 
                 // do parsing
+
+                #[cfg(feature = "debugger")]
                 let parseret = match dbglanguage::parse_Input(self.input_buffer.as_ref()) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(format!("{:?}", e)),
                 };
+
+                #[cfg(not(feature = "debugger"))]
+                let parseret = Err("Compile with --features=debugger to turn on the debugger"
+                    .to_string());
 
                 let parseval = match parseret {
                     Ok(v) => self.dispatch_debugger_action(cpu, v),

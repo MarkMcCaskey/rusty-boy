@@ -165,6 +165,10 @@ pub fn add_u16_i8(word: u16, sbyte: i8) -> u16 {
     (Wrapping(word as u16) + Wrapping(sbyte as u16)).0 as u16
 }
 
+/// The CPU itself.
+///
+///Currently contains memory (including the ROM (which is not
+/// read-only!), which should be abstracted later)
 pub struct Cpu {
     a:   byte,
     b:   byte,
@@ -178,11 +182,18 @@ pub struct Cpu {
     sp:  MemAddr,
     pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
+
+    /// Whether or not the CPU is running, waiting for input, or stopped
     pub state: CpuState,
+
+    /// Log of events, used in `MemVis`
     pub event_logger: Option<DeqCpuEventLogger>,
+
+    /// TODO: document this
     pub cycles: CycleCount,
 }
 
+/// Used for save-states and reverting to old CPU on resets
 impl Clone for Cpu {
     fn clone(&self) -> Cpu {
         let mut new_cpu = Cpu{a: self.a,
@@ -227,11 +238,13 @@ impl Cpu {
             event_logger: Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
         };
+        /// The reset state is the default state of the CPU
         new_cpu.reset();
 
         new_cpu
     }
 
+    /// Sets the CPU to as it would be after the boot rom has executed
     pub fn reset(&mut self) {
         self.state = CpuState::Normal;
         self.a  = 0x01; //for GB/SGB (GBP & GBC need different values)
@@ -306,15 +319,17 @@ impl Cpu {
     //     };
     // }
 
-    //FF04 Div
-    /*
-     * This needs to be called 16384 (~16779 on SGB) times a second
-     */
+    ///FF04 Div
+    ///
+    /// This needs to be called 16384 (~16779 on SGB) times a second
+    /// 
     fn inc_div(&mut self) {
         let old_val: MemAddr = (self.mem[0xFF04] as MemAddr) & 0xFF;
         self.mem[0xFF04] = (old_val + 1) as byte;
     }
 
+    /// The speed at which the timer runs, settable by the program by
+    /// writing to 0xFF07
     pub fn timer_frequency(&self) -> u16 {
         match self.mem[0xFF07] & 0x3 {
             0 => 4,
@@ -336,8 +351,6 @@ impl Cpu {
 
         ret
     }
-
-    fn get_current_tile_location() {}
 
     ///gets the next pixel value to be drawn to the screen and updates
     ///the special registers correctly
@@ -498,6 +511,9 @@ impl Cpu {
         ret
     }
     
+    /// Abstracts the logic of the timer
+    /// Call this from the loop when the timer should be incremented
+    /// NOTE: does not appear to take timer frequency into account...
     pub fn timer_cycle(&mut self) {
         if self.is_timer_on() {
             self.inc_timer();
@@ -509,16 +525,18 @@ impl Cpu {
     }
 
     fn inc_timer(&mut self) {
-        let old_val: u16 = (self.mem[0xFF05] as u16) & 0xFF;
+        let old_val = self.mem[0xFF05];
+        // TMA; value which is to be set on overflow
         let new_val = self.mem[0xFF06];
 
         self.mem[0xFF05] =
-            if old_val + 1 > 255 {
+            if old_val.wrapping_add(1) == 0 {
+                // on overflow...
                 if self.get_interrupts_enabled() {
                     self.set_timer_interrupt_bit();
                 }
                 new_val
-            } else {old_val as byte};
+            } else {old_val.wrapping_add(1)};
     }
 
 
@@ -622,6 +640,7 @@ impl Cpu {
         self.mem[STAT_ADDR] = (old_val | 2) & (!1);
     }
 
+    /// A.K.A Transfering data to the LCD driver
     pub fn set_oam_and_display_lock(&mut self) {
         //set LSB and next
         self.mem[STAT_ADDR] |= 0x3;
@@ -690,48 +709,61 @@ impl Cpu {
 
 
     pub fn scy(&self) -> u8 {
-        self.mem[0xFF42] as u8
+        self.mem[0xFF42] 
     }
     pub fn scx(&self) -> u8 {
-        self.mem[0xFF43] as u8
+        self.mem[0xFF43]
     }
 
     pub fn ly(&self) -> u8 {
-        self.mem[0xFF44] as u8
+        self.mem[0xFF44]
     }
 
     pub fn inc_ly(&mut self) {
-        let v = (self.ly() + 1) % 154;
+        let v = self.ly().wrapping_add(1) % 154;
         self.mem[0xFF44] = v as byte;
-        //maybe set flags for being in vblank or whatever here?
-        if v > 143 {
-            self.set_vblank_interrupt_bit();
+        // interrupt should only be thrown on the rising edge (when ly
+        // turns to 144)
+        if v == 144 {
+            //TODO: verify that this should only be done if the interrupt is enabled
+            if self.get_interrupts_enabled() && self.get_vblank_interrupt_enabled() {
+                self.set_vblank_interrupt_bit();
+            }
         }
+        //LY check is done any time LY is updated
+        self.lyc_compare();
     }
 
     pub fn lyc(&self) -> u8 {
         self.mem[0xFF45] as u8
     }
 
-    pub fn lyc_compare(&mut self) {
+    fn lyc_compare(&mut self) {
         let ly = self.ly();
         let lyc = self.lyc();
 
         if ly == lyc {
-            //TODO: review if correct: set STAT coincident flag...
             self.set_coincidence_flag();
+        } else {
+            self.unset_coincidence_flag();
         }
     }
 
+    /// Direct memory access, lets the CPU copy memory without being
+    /// directly involve 
+    ///
+    /// Should take 160 microseconds
+    ///
+    /// During DMA, everything but high memory should be blocked
     fn dma(&mut self) {
-        let addr = ((self.mem[0xFF46] as u8) as MemAddr) << 8;
+        let addr = (self.mem[0xFF46] as MemAddr) << 8;
         
-        for i in 0..0xA0 { //number of values to be copied
+        for i in 0..0x9A { //number of values to be copied
             let val = self.mem[(addr + i) as usize];
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
         }
-        //signal dma is over
-        self.mem[0xFF55] = 1;
+        //signal dma is over (GBC ONLY)
+       // self.mem[0xFF55] = 1;
     }
 
     pub fn bgp(&self) -> (byte, byte, byte, byte) {
@@ -945,7 +977,14 @@ impl Cpu {
                 },
 
             0xFF04 => self.mem[0xFF04] = 0,
+            // TODO: Check whether vblank should be turned off on
+            // writes to 0xFF44
             0xFF44 => self.mem[0xFF44] = 0,
+            0xFF45 => {
+                //LY check is done every time LY or LYC value is updated
+                self.mem[0xFF45] = value;
+                self.lyc_compare();
+            }
             0xFF46 => {
                 self.mem[0xFF46] = value;
                 self.dma();

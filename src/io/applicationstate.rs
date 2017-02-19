@@ -1,3 +1,5 @@
+//! The wrapper around the information needed to meaningfully run this program
+
 use std;
 
 use sdl2::*;
@@ -47,6 +49,7 @@ pub struct ApplicationState {
 
 
 impl ApplicationState {
+    //! Sets up the environment for running in memory visualization mode
     pub fn new(trace_mode: bool, debug_mode: bool, rom_file_name: &str) -> ApplicationState {
         // Set up logging
         let stdout = ConsoleAppender::builder()
@@ -63,7 +66,7 @@ impl ApplicationState {
             .unwrap();
 
         // Set up debugging or command-line logging
-        let (debugger, handle) = if debug_mode {
+        let (debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
             // Some(Debugger::new(&mut gameboy))
             (None, None)
@@ -109,28 +112,34 @@ impl ApplicationState {
         let widget_memvis = {
             let vis = MemVisState::new(memvis_texture);
             let (w, h) = vis.get_initial_size();
-            PositionedFrame { rect: Rect::new(1, 1, w, h),
-                              scale: 1.0,
-                              vis: Box::new(vis) }
+            PositionedFrame {
+                rect: Rect::new(1, 1, w, h),
+                scale: 1.0,
+                vis: Box::new(vis),
+            }
         };
 
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
             let (w, h) = vis.get_initial_size();
-            PositionedFrame { rect: Rect::new(MEM_DISP_WIDTH+3, 1, w, h),
-                              scale: 1.0,
-                              vis: Box::new(vis) }
+            PositionedFrame {
+                rect: Rect::new(MEM_DISP_WIDTH + 3, 1, w, h),
+                scale: 1.0,
+                vis: Box::new(vis),
+            }
         };
 
         let widget_vidram_tiles = {
             let vis = VidRamTileDisplay { tile_data_select: TileDataSelect::Auto };
             let (w, h) = vis.get_initial_size();
-            PositionedFrame { rect: Rect::new((MEM_DISP_WIDTH +
-                                               SCREEN_BUFFER_SIZE_X as i32)
-                                              as i32 + 5,
-                                              0, w, h),
-                              scale: 1.0,
-                              vis: Box::new(vis) }
+            PositionedFrame {
+                rect: Rect::new((MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 5,
+                                0,
+                                w,
+                                h),
+                scale: 1.0,
+                vis: Box::new(vis),
+            }
         };
 
         let mut widgets = Vec::new();
@@ -163,7 +172,7 @@ impl ApplicationState {
         let s_y = (y as f32 / self.ui_scale) as i32;
         Point::new(s_x, s_y)
     }
-    
+
 
 
     pub fn handle_events(&mut self) {
@@ -230,7 +239,7 @@ impl ApplicationState {
                             let gbcopy = self.initial_gameboy_state.clone();
                             self.gameboy = gbcopy;
                             self.gameboy.reinit_logger();
-                            
+
                             // // This way makes it possible to edit rom
                             // // with external editor and see changes
                             // // instantly.
@@ -243,7 +252,7 @@ impl ApplicationState {
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {
                     // Transform screen coordinates in UI coordinates
                     let click_point = self.display_coords_to_ui_point(x, y);
-                    
+
                     // Find clicked widget
                     for widget in self.widgets.iter_mut() {
                         if widget.rect.contains(click_point) {
@@ -359,8 +368,7 @@ impl ApplicationState {
             let record_screen = false;
             if record_screen {
                 save_screenshot(&self.renderer,
-                                format!("screen{:010}.bmp",
-                                        self.screenshot_frame_num.0));
+                                format!("screen{:010}.bmp", self.screenshot_frame_num.0));
                 self.screenshot_frame_num += Wrapping(1);
             }
 
