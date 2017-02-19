@@ -100,10 +100,14 @@ impl ApplicationState {
 
         let gbcopy = gameboy.clone();
 
+        let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
+        let w = MEM_DISP_WIDTH as u32;
+        let h = MEM_DISP_HEIGHT as u32;
+        let memvis_texture = renderer.create_texture_streaming(txt_format, w, h).unwrap();
 
         // TODO function for widget creation and automaic layout
         let widget_memvis = {
-            let vis = MemVisState::new();
+            let vis = MemVisState::new(memvis_texture);
             let (w, h) = vis.get_initial_size();
             PositionedFrame { rect: Rect::new(1, 1, w, h),
                               scale: 1.0,
@@ -225,7 +229,8 @@ impl ApplicationState {
                             self.gameboy.reset();
                             let gbcopy = self.initial_gameboy_state.clone();
                             self.gameboy = gbcopy;
-
+                            self.gameboy.reinit_logger();
+                            
                             // // This way makes it possible to edit rom
                             // // with external editor and see changes
                             // // instantly.
@@ -341,8 +346,8 @@ impl ApplicationState {
             self.renderer.clear();
 
             // Draw all widgets
-            for ref widget in self.widgets.iter_mut() {
-                widget.draw(&mut self.renderer, &self.gameboy);
+            for ref mut widget in self.widgets.iter_mut() {
+                widget.draw(&mut self.renderer, &mut self.gameboy);
             }
 
             //   00111100 1110001 00001000

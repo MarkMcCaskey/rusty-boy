@@ -96,7 +96,7 @@ impl PositionedFrame {
 
 pub trait Drawable {
     fn get_initial_size(&self) -> (u32, u32);
-    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu);
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu);
     fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu);
 }
 
@@ -106,7 +106,7 @@ impl Drawable for PositionedFrame {
         self.vis.get_initial_size()
     }
     
-    fn draw(&self, renderer: &mut sdl2::render::Renderer, cpu: &Cpu) {
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
         self.before_draw(renderer);
         // draw_frame_bounds(self, renderer); // Use to debug clipping
         self.vis.draw(renderer, cpu);
