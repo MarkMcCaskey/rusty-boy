@@ -108,7 +108,7 @@ impl Debugger {
                 self.input_buffer.push_str(String::from_utf8(vec![v as u8]).unwrap().as_ref())
             }
             // This shouldn't need to be handled
-            KEY_RESIZE => (),
+            // KEY_RESIZE => (),
             // backspace
             0x8 | KEY_BACKSPACE => {
                 self.input_buffer.pop();
@@ -155,10 +155,16 @@ impl Debugger {
                 }
 
                 // do parsing
+
+                #[cfg(feature = "debugger")]
                 let parseret = match dbglanguage::parse_Input(self.input_buffer.as_ref()) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(format!("{:?}", e)),
                 };
+
+                #[cfg(not(feature = "debugger"))]
+                let parseret = Err("Compile with --features=debugger to turn on the debugger"
+                    .to_string());
 
                 let parseval = match parseret {
                     Ok(v) => self.dispatch_debugger_action(cpu, v),
@@ -218,7 +224,7 @@ impl Debugger {
             .enumerate()
             .collect();
 
-        for &(i, hist) in relevant_hist.iter() {
+        for &(i, hist) in &relevant_hist {
             wmove(self.in_win, num_lines - (i as i32), 1);
             wprintw(self.in_win, hist.as_ref());
         }
@@ -282,7 +288,7 @@ impl Debugger {
 
     fn draw_instruction(&mut self, y_loc: i32, disinst: &str) {
         wmove(self.asm_win, y_loc, 1);
-        wprintw(self.asm_win, format!("{}", disinst).as_ref());
+        wprintw(self.asm_win, disinst);
     }
 
     // TODO: make this nicer later

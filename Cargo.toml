@@ -5,6 +5,15 @@ authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 
 build = "build.rs"
 
+[features]
+
+default = []
+
+asm = []
+debugger = []
+development = ["asm", "debugger"]
+
+
 [dependencies.lalrpop-util]
 version = "0.12.4"
 

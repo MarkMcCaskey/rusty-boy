@@ -305,3 +305,15 @@ fn test_interrupt_disabling() {
    // assert_eq!(cpu.state, CpuState::Stop);
 }
 
+
+#[cfg(feature = "asm")]
+mod assembly_tests {
+    #[test]
+    fn test_running_program() {
+        use assembler::asm;
+        
+        let program = asm::parse_Input(r#"
+.code
+"#);
+    }
+}

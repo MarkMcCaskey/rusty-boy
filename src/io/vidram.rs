@@ -9,6 +9,79 @@ use sdl2::rect::Point;
 use sdl2::rect::Rect;
 use sdl2::pixels::*;
 
+use io::graphics::Drawable;
+
+
+pub struct VidRamBGDisplay {
+    pub tile_data_select: TileDataSelect,
+}
+
+/// Display for backround screen buffer
+impl Drawable for VidRamBGDisplay {
+    fn get_initial_size(&self) -> (u32, u32) {
+        (SCREEN_BUFFER_SIZE_X, SCREEN_BUFFER_SIZE_Y)
+    }
+    
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
+        // TODO add toggle for this also?
+        let tile_map_offset = TILE_MAP_1_START;
+        
+        let ref bg_select = self.tile_data_select;
+
+        let tile_patterns_offset = match *bg_select {
+            TileDataSelect::Auto => {
+                if cpu.lcdc_bg_tile_map() {
+                    TILE_PATTERN_TABLE_1_ORIGIN
+                } else {
+                    TILE_PATTERN_TABLE_2_ORIGIN
+                }
+            }
+            TileDataSelect::Mode1 => TILE_PATTERN_TABLE_1_ORIGIN,
+            TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
+        };
+        
+        draw_background_buffer(renderer, cpu,
+                               tile_map_offset,
+                               tile_patterns_offset,
+                               0);
+    }
+    
+    fn click(&mut self, _: sdl2::mouse::MouseButton, _: Point, _: &mut Cpu) {
+        self.tile_data_select = match self.tile_data_select {
+            TileDataSelect::Auto => TileDataSelect::Mode1,
+            TileDataSelect::Mode1 => TileDataSelect::Mode2,
+            TileDataSelect::Mode2 => TileDataSelect::Auto,
+        };
+        debug!("BG buffer tile data: {:?}", self.tile_data_select);
+    }
+}
+
+
+pub struct VidRamTileDisplay {
+    pub tile_data_select: TileDataSelect,
+}
+
+
+/// Display for tile data. Display tiles in `TILE_COLUMNS` with
+/// `BORDER_PX` spacing.
+impl Drawable for VidRamTileDisplay {
+    fn get_initial_size(&self) -> (u32, u32) {
+        let cell_size = TILE_SIZE_PX + BORDER_PX;
+        let tile_num = TILE_PATTERN_TABLES_SIZE / TILE_SIZE_BYTES;
+        ((TILE_COLUMNS * cell_size) as u32,
+         ((tile_num / TILE_COLUMNS) * cell_size) as u32)
+    }
+    
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
+        draw_tile_patterns(renderer, cpu);
+    }
+    
+    fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, _: &mut Cpu) {
+        debug!("Clicked tile display @ {:?} with {:?}", position, button);
+    }
+}
+
+
 /// Draw single tile at given screen position
 pub fn draw_tile(renderer: &mut sdl2::render::Renderer,
                  gameboy: &Cpu,
@@ -53,8 +126,7 @@ pub fn draw_tile(renderer: &mut sdl2::render::Renderer,
 /// Patterns. It displays both background and sprite "tiles" as they
 /// overlap in memory.
 pub fn draw_tile_patterns(renderer: &mut sdl2::render::Renderer,
-                          gameboy: &Cpu,
-                          screen_offset_x: i32) {
+                          gameboy: &Cpu) {
 
     for tile_idx in 0..(TILE_PATTERN_TABLES_SIZE / TILE_SIZE_BYTES) + 1 {
 
@@ -66,13 +138,13 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Renderer,
                   gameboy,
                   TILE_PATTERN_TABLE_1_START,
                   tile_idx,
-                  tile_start_x as i32 + screen_offset_x,
+                  tile_start_x as i32,
                   tile_start_y as i32);
     }
 }
 
 
-/// draw whole background buffer (256x256 px)
+/// Draw whole background buffer (256x256 px)
 pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
                               gameboy: &Cpu,
                               tile_map_offset: cpu::constants::MemAddr,
@@ -82,14 +154,6 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
     // TODO implement proper windows/widgets
     const TOP_Y: i32 = 1;
     let screen_offset_y = TOP_Y;
-
-    // TODO draw window position pg 59
-    renderer.set_draw_color(Color::RGB(0,0,0));
-
-    renderer.draw_rect(Rect::new(screen_offset_x,
-                                 TOP_Y,
-                                 SCREEN_BUFFER_SIZE_X as u32,
-                                 SCREEN_BUFFER_SIZE_Y as u32)).unwrap();
 
     // FIXME rethink how to do this better
     match tile_patterns_offset {
@@ -131,4 +195,35 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Renderer,
         _ => panic!("Wrong tile data select"),
     };
 
+    draw_screen_border(renderer, gameboy, screen_offset_x, TOP_Y);
+}
+
+
+/// Draw rectangle showing values of SCX and SCY registers,
+/// i.e. visible screen area.
+fn draw_screen_border(renderer: &mut sdl2::render::Renderer,
+                      gameboy: &Cpu,
+                      screen_offset_x: i32,
+                      screen_offset_y: i32) {
+    renderer.set_draw_color(Color::RGB(255, 255, 255));
+    let scx: u8 = gameboy.scx();
+    let scy: u8 = gameboy.scy();
+
+    renderer.set_clip_rect(Some(Rect::new(screen_offset_x,
+                                          screen_offset_y,
+                                          SCREEN_BUFFER_SIZE_X,
+                                          SCREEN_BUFFER_SIZE_Y)));
+    // Draw 9 versions to do wrap around
+    // FIXME is this inefficient/dumb and there is a better way? probably.
+    for x in -1..2 {
+        for y in -1..2 {
+            let offset_x = screen_offset_x.wrapping_add(x*SCREEN_BUFFER_SIZE_X as i32);
+            let offset_y = screen_offset_y.wrapping_add(y*SCREEN_BUFFER_SIZE_X as i32);
+            renderer.draw_rect(Rect::new(offset_x + scx as i32 - 1,
+                                         offset_y + scy as i32 - 1,
+                                         GB_SCREEN_WIDTH as u32 + 2,
+                                         GB_SCREEN_HEIGHT as u32 + 2)).unwrap();
+        }
+    }
+    renderer.set_clip_rect(None);
 }

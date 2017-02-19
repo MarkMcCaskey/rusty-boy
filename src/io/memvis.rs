@@ -1,28 +1,161 @@
 //! Memory visualization
 
 use sdl2;
-use sdl2::rect::Point;
+use sdl2::rect::{Rect, Point};
 use sdl2::pixels::*;
+use sdl2::surface::Surface;
+use sdl2::mouse::MouseButton;
+
+use std::num::Wrapping;
 
 use io::constants::*;
+use io::graphics::Drawable;
 use cpu::constants::MemAddr;
+use cpu::constants::CpuState;
+use cpu::COLOR_DEPTH;
 use cpu::*;
-
 
 use disasm;
 
-/// Returns maybe a memory address given the coordinates of the memory visualization
-pub fn screen_coord_to_mem_addr(x: i32, y: i32) -> Option<MemAddr> {
-    let x_scaled = x as i32;
-    let y_scaled = y as i32;
-    // FIXME this check is not correct
-    if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
-        Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
-    } else {
-        None
+/// State for the memory visualization system
+pub struct MemVisState {
+    pub mem_val_display_enabled: bool,
+    pub texture: sdl2::render::Texture,
+}
+
+impl MemVisState {
+    pub fn new(texture: sdl2::render::Texture) -> MemVisState {
+        MemVisState {
+            mem_val_display_enabled: true,
+            texture: texture,
+        }
+    }
+
+    /// Returns maybe a memory address given the coordinates of the memory visualization
+    pub fn screen_coord_to_mem_addr(&self, point: Point) -> Option<MemAddr> {
+        let x_scaled = point.x() as i32;
+        let y_scaled = point.y() as i32;
+        // FIXME this check is not correct
+        if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
+            Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
+        } else {
+            None
+        }
     }
 }
 
+impl Drawable for MemVisState {
+    fn get_initial_size(&self) -> (u32, u32) {
+        (MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32)
+    }
+    
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
+        // draw_memory_access(renderer, cpu);
+        // // FIXME make this take immutable cpu arg
+        // draw_memory_events(renderer, cpu);
+        let dst_rect = Rect::new(0,
+                                 0,
+                                 MEM_DISP_WIDTH as u32,
+                                 MEM_DISP_HEIGHT as u32);
+        
+        if let &mut Some(ref mut logger) = &mut cpu.event_logger {
+            let depth = COLOR_DEPTH;
+            let memvis_pitch = MEM_DISP_WIDTH as usize * depth;
+
+            // Draw memory values just by copying them
+            self.texture.set_blend_mode(sdl2::render::BlendMode::None);
+            self.texture.update(None, &logger.values[..], memvis_pitch).unwrap();
+            renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            // Blend access type on top of values
+            self.texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            self.texture.update(None, &logger.access_flags[..], memvis_pitch).unwrap();
+            renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
+
+            // FIXME This copy is here to please the Borrow Checker
+            // God and ideally needs to be removed.
+            let mut copy = [0; EVENT_LOGGER_TEXTURE_SIZE];
+            copy[..].clone_from_slice(&logger.access_times[..]);
+
+            // Create Surface from values stored in logger
+            let mut surface = Surface::from_data(&mut copy,
+                                                 MEM_DISP_WIDTH as u32,
+                                                 MEM_DISP_HEIGHT as u32,
+                                                 memvis_pitch as u32,
+                                                 txt_format).unwrap();
+            
+            // This determines how fast access fades (actual speed
+            // will depend on the frame rate).
+            const ACCESS_FADE_ALPHA: u8 = 40;
+            
+            // Create texture with alpha to do fading effect
+            let mut blend = Surface::new(MEM_DISP_WIDTH as u32,
+                                         MEM_DISP_HEIGHT as u32,
+                                         txt_format).unwrap();
+            blend.fill_rect(None, Color::RGBA(0, 0, 0, ACCESS_FADE_ALPHA)).unwrap();
+
+            // Default blend mode works, whatever it is.
+            // blend.set_blend_mode(sdl2::render::BlendMode::Blend);
+            // surface.set_blend_mode(sdl2::render::BlendMode::Add);
+            
+            // Do the actual fading effect
+            blend.blit(None, &mut surface, None).unwrap();
+
+            // Store faded values back into logger
+            // NOTE sizes of textures differ from EVENT_LOGGER_TEXTURE_SIZE
+            // FIXME there must be a better way to do this without copying
+            surface.with_lock(|pixels| {
+                    logger.access_times[0..pixels.len()].clone_from_slice(&pixels[0..pixels.len()])
+            });
+
+            // Add access_time texture to make recent accesses brigher
+            let mut blend_texture = renderer.create_texture_from_surface(surface).unwrap();
+            blend_texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            renderer.copy(&blend_texture, None, Some(dst_rect)).unwrap();
+            
+            // self.texture.set_blend_mode(sdl2::render::BlendMode::Add);
+            // self.texture.update(None, &logger.access_times[..], memvis_pitch).unwrap();
+            // renderer.copy(&self.texture, None, Some(dst_rect)).unwrap();
+
+            // Reset blend mode to make other operations faster
+            renderer.set_blend_mode(sdl2::render::BlendMode::None);
+        }
+
+        // Draw jumps
+        draw_memory_events(renderer, cpu);
+
+        // TODO Draw instant pc, again
+    }
+    
+    /// Handle mouse click at pos. Prints some info about clicked
+    /// address or jumps to it.
+    fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu) {
+        match button {
+            MouseButton::Left => {
+                if let Some(pc) = self.screen_coord_to_mem_addr(position) {
+                    print_address_info(pc, cpu);
+                }
+            },
+            MouseButton::Right => {
+                if let Some(pc) = self.screen_coord_to_mem_addr(position) {
+                    info!("Jumping to ${:04X}", pc);
+                    cpu.pc = pc;
+                    if cpu.state != CpuState::Normal {
+                        info!("CPU state was '{:?}', forcing run.", cpu.state);
+                        cpu.state = CpuState::Normal;
+                    }
+                }
+            },
+            _ => (),
+        }
+    }
+}
+
+
+
+/// Returns point on screen where pixel representing address is drawn.
 #[inline]
 fn addr_to_point(addr: u16) -> Point {
     let x = (addr as i32) % MEM_DISP_WIDTH;
@@ -30,6 +163,8 @@ fn addr_to_point(addr: u16) -> Point {
     Point::new(x as i32, y as i32)
 }
 
+
+/// Clamp i16 value to 0-255 range.
 #[inline]
 fn clamp_color(v: i16) -> u8 {
     if v < 0 {
@@ -41,15 +176,18 @@ fn clamp_color(v: i16) -> u8 {
     }
 }
 
-// FIXME this is just lazy code
+
+/// Simple saturating color addition.
 #[inline]
 fn mix_color(r1: u8, g1: u8, b1: u8, r2: u8, g2: u8, b2: u8) -> (u8, u8, u8) {
+    // FIXME this is just lazy code
     (clamp_color(r1 as i16 + r2 as i16),
      clamp_color(g1 as i16 + g2 as i16),
      clamp_color(b1 as i16 + b2 as i16))
 }
 
 
+/// Use u8 value to scale other one.
 // FIXME this is just lazy code
 #[inline]
 fn scale_col(scale: u8, color: u8) -> u8 {
@@ -57,6 +195,8 @@ fn scale_col(scale: u8, color: u8) -> u8 {
 }
 
 
+/// Draw all memory values represented by pixels. Width is determined
+/// by `MEM_DISP_WIDTH`.
 pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {
     let mut x = 0;
     let mut y = 0;
@@ -92,7 +232,10 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 }
 
 
+/// Draw memory values represented by pixels with colors showing types
+/// of access (r/w/x).
 pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) {
+    // TODO replace this function with parts of MemVisState::draw()
     let mut x = 0;
     let mut y = 0;
 
@@ -102,30 +245,49 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     };
 
 
-    for (addr, &p) in event_logger.access_flags.iter().enumerate() {
+    for &p in event_logger.values.iter() {
 
         use sdl2::pixels::*;
 
-        let v = gameboy.mem[addr];
+        // let value = gameboy.mem[addr];
+        let value = p;
 
         // let color = Color::RGB(
         //     clamp_color(v * ((p & 0x2) >> 1) as i16 + v>>2),
         //     clamp_color(v * ((p & 0x1) >> 0) as i16 + v>>2),
         //     clamp_color(v * ((p & 0x4) >> 2) as i16 + v>>2));
-
-
+        
         let color = if p == 0 {
-            Color::RGB(v, v, v)
+            // Was not accessed
+            Color::RGB(value, value, value)
         } else {
-            let b = 32;
-            let v = (v >> 2) as i16;
-            let s = v + b;
-            Color::RGB(clamp_color(s * ((p & 0x2) >> 1) as i16),
-                       clamp_color(s * (p & 0x1) as i16),
-                       clamp_color(255 * ((p & 0x4) >> 2) as i16))
+            // FIXME The color is determined by value in memory, we
+            // want to fade max color somewhat (to use bright colors
+            // by other stuff), but also show at least something
+            // instead of black.
+            //
+            // It will not overflow normally because input value is
+            // 8bit, and "base" is added to 16bit value, and then the
+            // value "clamped" so you get "saturating addition(?)"
+            let base = 32;
+            let value = (value >> 2) as i16;
+            let scale = value + base;
+            Color::RGB(clamp_color(scale * ((p & FLAG_W) >> 1) as i16),
+                       clamp_color(scale * (p & FLAG_R) as i16),
+                       clamp_color(255 * ((p & FLAG_X) >> 2) as i16))
         };
-
         renderer.set_draw_color(color);
+
+        // let r = event_logger.access_flags[(addr * 4)];
+        // let g = event_logger.access_flags[(addr * 4) + 1];
+        // let b = event_logger.access_flags[(addr * 4) + 2];
+
+        // renderer.set_draw_color(
+        //     if r == 0 && g == 0 && b == 0 {
+        //         Color::RGB(p,p,p)
+        //     } else {
+        //         Color::RGB(r,g,b)
+        //     });
 
 
         let point = Point::new(x, y);
@@ -150,30 +312,35 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
 }
 
 
-// Event visualization
+/// Draw all `CpuEvents` that fade depending on current cpu time. When
+/// age of event is more that `FADE_DELAY`, event is removed.
 pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut Cpu) {
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
     // But event logging itself is extremely slow
 
+    renderer.set_blend_mode(sdl2::render::BlendMode::Add);
+    
     let mut event_logger = match gameboy.event_logger {
         Some(ref mut logger) => logger,
         None => return,
     };
 
+    // Remove events that are too old
     while !event_logger.events_deq.is_empty() {
         let timestamp = event_logger.events_deq.front().unwrap().timestamp;
-        if (gameboy.cycles - timestamp) >= FADE_DELAY {
+        if (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
             event_logger.events_deq.pop_front();
         } else {
             break;
         }
     }
 
+    // Draw current events with color determined by age
     for entry in &event_logger.events_deq {
         let timestamp = entry.timestamp;
         let event = &entry.event;
         {
-            let time_diff = gameboy.cycles - timestamp;
+            let time_diff = (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0;
             if time_diff < FADE_DELAY {
                 let time_norm = 1.0 - (time_diff as f32) / (FADE_DELAY as f32);
                 let colval = (time_norm * 255.0) as u8;
@@ -206,7 +373,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
                         }
                     }
                     CpuEvent::Jump { from: src, to: dst } => {
-                        renderer.set_draw_color(Color::RGB(colval, colval, 0));
+                        renderer.set_draw_color(Color::RGBA(200, 200, 0, colval));
                         let src_point = addr_to_point(src);
                         let dst_point = addr_to_point(dst);
                         // Horizontal lines are drawn with scaling but diagonal
@@ -230,22 +397,22 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
             }
         }
     }
+    renderer.set_blend_mode(sdl2::render::BlendMode::None);
 }
 
-pub fn memvis_handle_click(gameboy: &Cpu, x: i32, y: i32) {
-    if let Some(pc) = screen_coord_to_mem_addr(x, y) {
-        let pc = pc as usize;
-        let mem = gameboy.mem;
-        let b1 = mem[pc + 1];
-        let b2 = mem[pc + 2];
-        let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
-        let nn = byte_to_u16(b1, b2);
-        println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
-                 pc,
-                 mnem,
-                 mem[pc],
-                 b1,
-                 b2,
-                 nn);
-    }
+fn print_address_info(pc: MemAddr, cpu: &Cpu) {
+    let pc = pc as usize;
+    let mem = cpu.mem;
+    let b1 = mem[pc + 1];
+    let b2 = mem[pc + 2];
+    let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
+    let nn = byte_to_u16(b1, b2);
+    println!("${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",
+             pc,
+             mnem,
+             mem[pc],
+             b1,
+             b2,
+             nn);
+
 }
