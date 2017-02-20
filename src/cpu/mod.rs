@@ -758,7 +758,7 @@ impl Cpu {
     fn dma(&mut self) {
         let addr = (self.mem[0xFF46] as MemAddr) << 8;
         
-        for i in 0..0x9A { //number of values to be copied
+        for i in 0..0xA0 { //number of values to be copied
             let val = self.mem[(addr + i) as usize];
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
         }
@@ -1681,9 +1681,7 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let old_pc = self.pc;
-        let hl = self.hl();
-        let n = self.get_mem(hl);
-        let new_pc = add_u16_i8(old_pc, n as i8);
+        let new_pc = self.hl();
 
         if let Some(ref mut logger) = self.event_logger {
             logger.log_jump(self.cycles, old_pc, new_pc);
