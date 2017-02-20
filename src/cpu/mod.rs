@@ -1589,12 +1589,12 @@ impl Cpu {
                        old_bit0 == 1);
     }
 
+    /// Rotate n right through Carry flag.
     fn rr(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
-        let old_flags = ((self.f & CL) >> 4) & 0xF;
+        let old_flags = (self.f & CL) << 3;
 
-        //todo: wat
         let new_val = (reg_val >> 1) | old_flags;
         self.set_register(reg, new_val);
 
