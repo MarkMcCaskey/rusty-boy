@@ -1762,8 +1762,9 @@ impl Cpu {
 
     fn rst(&mut self, n: u8) {
         let old_pc = self.pc;
-        
-        self.push_onto_stack(old_pc);
+
+        // Should store PC post-increment for RET from handler to work
+        self.push_onto_stack(old_pc.wrapping_add(1));
 
         self.pc = n as u16;
     }
