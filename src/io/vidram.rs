@@ -30,7 +30,7 @@ impl Drawable for VidRamBGDisplay {
 
         let tile_patterns_offset = match *bg_select {
             TileDataSelect::Auto => {
-                if cpu.lcdc_bg_tile_map() {
+                if cpu.lcdc_bg_win_tile_data() {
                     TILE_PATTERN_TABLE_1_ORIGIN
                 } else {
                     TILE_PATTERN_TABLE_2_ORIGIN
