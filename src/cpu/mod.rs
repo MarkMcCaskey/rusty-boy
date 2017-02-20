@@ -1144,7 +1144,10 @@ impl Cpu {
 
     fn ldnnsp(&mut self, b1: u8, b2: u8) {
         let old_sp = self.sp;
-        self.set_mem((((b2 as u16) << 8) | (b1 as u16)), old_sp as byte);
+        let addr = byte_to_u16(b1, b2);
+        // TODO function to write word (16 bit) to memory
+        self.set_mem(addr, old_sp as byte & 0xFFu8);
+        self.set_mem(addr.wrapping_add(1), ((old_sp >> 8) as byte & 0xFFu8) as byte);
     }
 
     // fn pushnn(&mut self, nn: CpuRegister16) {
