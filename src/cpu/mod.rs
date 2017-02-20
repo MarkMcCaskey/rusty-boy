@@ -856,7 +856,8 @@ impl Cpu {
 
     fn set_af(&mut self, v:u16) {
         self.a = ((v >> 8) & 0xFF) as byte;
-        self.f = (v & 0xFF) as byte;
+        // lower 4 bits are always zero
+        self.f = (v & 0xF0) as byte;
     }
 
     fn hl(&self) -> u16 {
