@@ -1,19 +1,32 @@
+//! Everything for making sound play
 use sdl2;
 use sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
 
-pub struct SquareWave {
+/// Contains information for a single channel of audio
+///
+/// Envelopes and sweeps should be implemented as traits to allow this to
+/// remain generic
+pub struct Wave {
+    /// The amount by which the `phase` is changed at each callback
     pub phase_inc: f32,
+
+    /// The "current" value of the wave
     phase: f32,
+
+    /// Multiplier for wave between 0 and 1 (functions as volume (0 is off))
     volume: f32,
+
+    /// TODO: document this
     pub wave_duty: f32,
+
+    /// A flag indicating the direction the phase will be changed
     pub add: bool,
 }
 
-impl AudioCallback for SquareWave {
+impl AudioCallback for Wave {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
-        // Generate a square wave
         for x in out.iter_mut() {
 
             *x = match self.phase {
@@ -29,7 +42,9 @@ impl AudioCallback for SquareWave {
     }
 }
 
-pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<SquareWave> {
+/// Creates a device from a context
+/// May have to be changed to allow each GB channel to have its own `Wave`
+pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<Wave> {
     // set up audio
     let audio_subsystem = sdl_context.audio().unwrap();
 
@@ -44,7 +59,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<SquareWave> {
             println!("{:?}", spec);
 
             // initialize the audio callback
-            SquareWave {
+            Wave {
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
                 volume: 0.01,

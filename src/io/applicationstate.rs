@@ -1,4 +1,7 @@
 //! The wrapper around the information needed to meaningfully run this program
+//!
+//! NOTE: in the process of further abstracting IO logic with this --
+//! expect things to break
 
 use std;
 
@@ -30,7 +33,7 @@ use std::num::Wrapping;
 pub struct ApplicationState {
     pub gameboy: cpu::Cpu,
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
-    sound_system: AudioDevice<SquareWave>,
+    sound_system: AudioDevice<Wave>,
     renderer: render::Renderer<'static>,
     cycle_count: u64,
     prev_time: u64,
@@ -175,6 +178,8 @@ impl ApplicationState {
 
 
 
+    /// Handles both controller input and keyboard/mouse debug input
+    /// NOTE: does not handle input for ncurses debugger
     pub fn handle_events(&mut self) {
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
