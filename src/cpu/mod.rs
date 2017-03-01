@@ -162,7 +162,7 @@ pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
 #[inline]
 pub fn add_u16_i8(word: u16, sbyte: i8) -> u16 {
     //((word as i16) + ((sbyte as i8) as i16)) as u16
-    (Wrapping(word as u16) + Wrapping(sbyte as u16)).0 as u16
+    (Wrapping(word as i32) + Wrapping(sbyte as i32)).0 as u16
 }
 
 /// The CPU itself.
@@ -1193,11 +1193,11 @@ impl Cpu {
           }) as i32
     }
 
-    fn reg_or_const(&mut self, reg: CpuRegister) -> i16 {
+    fn reg_or_const(&mut self, reg: CpuRegister) -> i8 {
         if let Some(r) = self.access_register(reg) {
-            r as i16
+            r as i8 
         } else if let CpuRegister::Num(v) = reg {
-            v as i16
+            v as i8
         } else {unreachable!()}
     }
 
@@ -1209,57 +1209,55 @@ impl Cpu {
     }
     
     fn add(&mut self, reg: CpuRegister) {
-        let old_a = self.a as i16;
+        let old_a = self.a as i8;
         let old_b = self.reg_or_const(reg);
 
-        let new_a = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) + (b as i16)) as byte;
+        let new_a = old_a.wrapping_add(old_b);
+        self.a = new_a as byte;
 
-        self.a = new_a;
-
-        self.set_flags(new_a == 0u8,
+        self.set_flags(new_a == 0,
                        false,
-                       ((old_a % 16) + (old_b % 16)) > 15,
-                       (old_a + old_b) > byte::max_value() as i16);
+                       ((old_a & 0xF) + (old_b & 0xF)) & 0x10 == 0x10,
+                       (((old_a as u8) as u16) + ((old_b as u8) as u16)) & 0x100 == 0x100);
     }
 
     fn adc(&mut self, reg: CpuRegister) {
-        let reg_val = self.reg_or_const(reg);
-        let cf: byte = (self.f & HL) >> 5;
+        let old_a = self.a as i8;
+        let old_b = self.reg_or_const(reg);
+        let cf = (((self.f & CL) >> 4) & 1) as i8;
 
-        let new_a: byte = ((cf as i16) + (self.a as i16)) as byte;
-        //TODO: verify negatives don't cause problems
-        let carry3_a = ((self.a as u16) & 0xFu16) + ((reg_val as u16) & 0xFu16) + (cf as u16);
-        let carry7_a = ((self.a as u16) & 0xFF) + ((reg_val as u16) & 0xFF) + (cf as u16);
+        let new_a = old_a.wrapping_add(old_b).wrapping_add(cf);
+        self.a = new_a as byte;
 
-        self.a = new_a;
-
-        self.set_flags(new_a == 0u8,
+        self.set_flags(new_a == 0,
                        false,
-                       carry3_a > 0xF,
-                       carry7_a > 0xFF);
+                       ((old_a & 0xF) + (old_b & 0xF) + cf) & 0x10 == 0x10,
+                       (((old_a as u8) as u16) + ((old_b as u8) as u16) + (cf as u16)) & 0x100 == 0x100);
     }
 
     fn sub(&mut self, reg: CpuRegister) {
-        let old_a = self.a as i16;
-        let old_b = self.reg_or_const(reg);
-        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) - (b as i16)) as byte;
-
+        let old_a = self.a as i8;
+        let old_b = self.reg_or_const(reg) as i8;
+        let new_a = old_a.wrapping_sub(old_b) as u8; 
         self.a = new_a;
+
         self.set_flags(new_a == 0u8,
                        true,
-                       (old_a & 0xF) >= (old_b & 0xF),
-                       old_b <= old_a as i16);
+                       ((old_a & 0xF) as u8) >= ((old_b & 0xF) as u8),
+//                       (old_a & 0xF) >= (old_b & 0xF),
+//                       (old_a as i16) - (old_b as i16)
+                       old_b <= old_a);
     }
 
     fn sbc(&mut self, reg: CpuRegister) {
-        let old_a = self.a as i16;
+        let old_a = self.a as i8;
         let old_b = self.reg_or_const(reg);
-        let old_c = (old_a - old_b) as byte;
+        let old_c = old_a.wrapping_sub(old_b) as byte;
         let cf: byte = (self.f & HL) >> 5;
         self.sub(reg);
 
         //NOTE: find out whether this should be self.a - cf
-        let new_a: i16 = (self.a as i16) - (cf as i16); //overflow?
+        let new_a = self.a.wrapping_sub(cf); //overflow?
         self.a = new_a as byte;
         self.set_flags((new_a as byte) == 0u8,
                        true,
@@ -1302,10 +1300,12 @@ impl Cpu {
         let reg4bit = regval & 0xF;
             
         self.sub(reg);
+        let hcf = (self.f & HL) == HL;
         self.a = old_a;
         self.set_flags(old_a == regval,
                        true,
-                       !(reg4bit > a4bit),
+                       !hcf,
+                  //     !(reg4bit > a4bit),
                        (old_a as i8) < (regval as i8));
     }
 
@@ -1453,7 +1453,8 @@ impl Cpu {
         self.set_flags(new_a == 0u8,
                        old_nflag,
                        false,
-                       0x99 < reduced_a); //NOTE: weird documentation, unclear value
+                       lowest_bits != lowest_digit || highest_bits != highest_digit);
+                       //0x99 < reduced_a); //NOTE: weird documentation, unclear value
     }
 
     fn cpl(&mut self) {
@@ -1549,11 +1550,11 @@ impl Cpu {
     }
 
     fn rlc(&mut self, reg: CpuRegister) {
-        let reg_val = self.access_register(reg).expect("invalid register") as u8;
+        let reg_val = self.access_register(reg).expect("invalid register");
         let old_carry = ((self.f & CL) as u8) >> 4;
         let old_bit7 = (reg_val >> 7) & 1;
 
-        let new_reg = ((reg_val << 1) & 0xFEu8) | old_carry;
+        let new_reg = ((reg_val << 1) & 0xFEu8) | old_bit7;// | old_carry;
         self.set_register(reg, new_reg as byte);
 
         self.set_flags(new_reg == 0u8,
@@ -1618,7 +1619,8 @@ impl Cpu {
     fn sra(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
-        self.set_register(reg, reg_val >> 1);
+        let old_bit7 = reg_val & 0x80;
+        self.set_register(reg, (reg_val >> 1) | old_bit7);
 
         self.set_flags((reg_val >> 1) == 0u8,
                        false,
@@ -1685,18 +1687,18 @@ impl Cpu {
     //TODO: Double check (HL) HL thing
     fn jphl(&mut self) {
         let old_pc = self.pc;
-        let new_pc = self.hl();
+        let new_pc = self.hl().wrapping_sub(1);
 
         if let Some(ref mut logger) = self.event_logger {
             logger.log_jump(self.cycles, old_pc, new_pc);
         }
 
-        self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
+        self.pc = new_pc;
     }
 
     fn jrn(&mut self, n: i8) {
         let old_pc = self.pc;
-        let new_pc = add_u16_i8(old_pc, n);
+        let new_pc = add_u16_i8(old_pc, n);//.wrapping_sub(2);
         if let Some(ref mut logger) = self.event_logger {
             logger.log_jump(self.cycles, old_pc, new_pc);
         }
@@ -1712,17 +1714,11 @@ impl Cpu {
                 Cc::NC => (!(self.f >> 4)) & 1,
                 Cc::C  => (self.f >> 4) & 1,
             } {
-                let old_pc = self.pc;
-                let new_pc = add_u16_i8(old_pc, n);
-                if let Some(ref mut logger) = self.event_logger {
-                    logger.log_jump(self.cycles, old_pc, new_pc);
-                }
-                self.pc = new_pc;
+                self.jrn(n);
                 true
             } else { false }
     }
 
-    //TODO: Verify if SP should be decremented first
     fn callnn(&mut self, nn: u16) {
         let old_pc = self.pc;
         self.push_onto_stack(old_pc + 3);
@@ -1766,8 +1762,9 @@ impl Cpu {
         // Should store PC post-increment for RET from handler to work
         self.push_onto_stack(old_pc.wrapping_add(1));
 
-        self.pc = n as u16;
-    }
+        // (TW) TODO: verify this is okay
+        self.pc = (n as u16).wrapping_sub(1);
+    } 
 
     fn pop_from_stack(&mut self) -> u16 {
         let mut sp_idx = Wrapping(self.sp as MemAddr);
@@ -1802,12 +1799,7 @@ impl Cpu {
     }
 
     fn reti(&mut self) {
-        let old_pc = self.pc;
-        let new_pc = self.pop_from_stack();
-        if let Some(ref mut logger) = self.event_logger {
-            logger.log_jump(self.cycles, old_pc, new_pc);
-        }
-        self.pc = (Wrapping(new_pc) - Wrapping(1)).0;
+        self.ret();
         self.ei();
     }
 
@@ -2270,7 +2262,6 @@ impl Cpu {
 
                     7 => {
                         self.rst(8*y);
-                        self.pc = (Wrapping(self.pc) - Wrapping(1)).0; // or should not be inc later
                         inst_time = 16;
                     },
                         

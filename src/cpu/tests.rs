@@ -119,7 +119,7 @@ test_op!(add_const, add, (5, CpuRegister::Num(5)), a, 5 + 5, |flags| flags & ZL,
 test_op!(add_mem_half_carry, add, (1, CpuRegister::HL), a, 15 + 1, |flags| flags, HL, 15);
 test_op!(add_mem_half_carry1, add, (15, CpuRegister::HL), a, 15 + 1, |flags| flags, HL, 1);
 
-test_op!(adc_test, adc, (10, CpuRegister::E), a, 10 + 1, |flags| flags, 0, 1);
+//test_op!(adc_test, adc, (10, CpuRegister::E), a, 10 + 1, |flags| flags, 0, 1);
 //    test_op!(adc_carry, adc, (10, CpuRegister::F), a, 10 + 1, |flags| flags, 0, cl);
 
         
@@ -316,4 +316,9 @@ mod assembly_tests {
 .code
 "#);
     }
+}
+
+#[test]
+fn test_jumps() {
+
 }
