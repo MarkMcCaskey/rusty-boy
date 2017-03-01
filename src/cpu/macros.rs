@@ -95,16 +95,17 @@ TODO: fix Rust macro system to allow this or update interpolate_idents
 macro_rules! button {
     ($press_button:ident, $unpress_button:ident, $location:expr) => {
         pub fn $press_button(&mut self) {
-            let old_val = self.mem[0xFF00] as u8;
-            self.mem[0xFF00] = (old_val | $location) as byte;
+            let old_val = self.input_state;
+            self.input_state = (old_val & (!$location)) as byte;
             if self.state == CpuState::Stop {
                 self.state = CpuState::Normal;
             }
+            self.set_input_interrupt_bit();
         }
         
         pub fn $unpress_button(&mut self) {
-            let old_val = self.mem[0xFF00] as u8;
-            self.mem[0xFF00] = (old_val & (!$location)) as byte;
+            let old_val = self.input_state;
+            self.input_state = (old_val | $location) as byte;
         }
     }
 }
