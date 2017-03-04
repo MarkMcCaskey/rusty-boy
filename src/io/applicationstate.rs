@@ -230,28 +230,54 @@ impl ApplicationState {
                     info!("Program exiting!");
                     std::process::exit(0);
                 }
-                Event::KeyDown { keycode: Some(keycode), .. } => {
-                    match keycode {
-                        Keycode::Escape => {
-                            info!("Program exiting!");
-                            std::process::exit(0);
-                        }
-                        Keycode::F3 => self.gameboy.toggle_logger(),
-                        Keycode::R => {
-                            // Reset/reload emu
-                            // TODO Keep previous visualization settings
-                            self.gameboy.reset();
-                            let gbcopy = self.initial_gameboy_state.clone();
-                            self.gameboy = gbcopy;
-                            self.gameboy.reinit_logger();
-
-                            // // This way makes it possible to edit rom
-                            // // with external editor and see changes
-                            // // instantly.
-                            // gameboy = Cpu::new();
+                Event::KeyDown { keycode: Some(keycode), repeat, .. } => {
+                    if !repeat {
+                        match keycode {
+                            Keycode::Escape => {
+                                info!("Program exiting!");
+                                std::process::exit(0);
+                            }
+                            Keycode::F3 => self.gameboy.toggle_logger(),
+                            Keycode::R => {
+                                // Reset/reload emu
+                                // TODO Keep previous visualization settings
+                                self.gameboy.reset();
+                                let gbcopy = self.initial_gameboy_state.clone();
+                                self.gameboy = gbcopy;
+                                self.gameboy.reinit_logger();
+                                
+                                // // This way makes it possible to edit rom
+                                // // with external editor and see changes
+                                // // instantly.
+                                // gameboy = Cpu::new();
                             // gameboy.load_rom(rom_file);
+                            }
+                            Keycode::A => { self.gameboy.press_a() },
+                            Keycode::S => { self.gameboy.press_b() },
+                            Keycode::D => { self.gameboy.press_select() },
+                            Keycode::F => { self.gameboy.press_start() },
+                            Keycode::Up => { self.gameboy.press_up() },
+                            Keycode::Down => { self.gameboy.press_down() },
+                            Keycode::Left => { self.gameboy.press_left() },
+                            Keycode::Right => { self.gameboy.press_right() },
+                            _ => (),
                         }
-                        _ => (),
+                    }
+                }
+                Event::KeyUp { keycode: Some(keycode), repeat, .. } => {
+                    if !repeat {
+                        match keycode {
+                            Keycode::A => { self.gameboy.unpress_a() },
+                            Keycode::S => { self.gameboy.unpress_b() },
+                            Keycode::D => { self.gameboy.unpress_select() },
+                            Keycode::F => { self.gameboy.unpress_start() },
+                            Keycode::Up => { self.gameboy.unpress_up() },
+                            Keycode::Down => { self.gameboy.unpress_down() },
+                            Keycode::Left => { self.gameboy.unpress_left() },
+                            Keycode::Right => { self.gameboy.unpress_right() },
+
+                            _ => (),
+                        }
                     }
                 }
                 Event::MouseButtonDown { x, y, mouse_btn, .. } => {

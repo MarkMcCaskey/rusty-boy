@@ -180,11 +180,16 @@ pub struct Cpu {
     h:   byte,
     l:   byte,
     sp:  MemAddr,
+    // Interrupt Master Enable flag (aka "Interrupt Flip-Flop")
+    ime: bool,
     pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
 
     /// Whether or not the CPU is running, waiting for input, or stopped
     pub state: CpuState,
+
+    // State of all buttons (low is pressed)
+    input_state: u8,
 
     /// Log of events, used in `MemVis`
     pub event_logger: Option<DeqCpuEventLogger>,
@@ -205,9 +210,12 @@ impl Clone for Cpu {
                               h: self.h,
                               l: self.l,
                               sp: self.sp,
+                              ime: self.ime,
                               pc: self.pc,
                               mem: [0; MEM_ARRAY_SIZE],
                               state: self.state,
+                              input_state: self.input_state,
+
                               event_logger: self.event_logger.clone(),
                               cycles: self.cycles};
 
@@ -232,9 +240,12 @@ impl Cpu {
             h:   0,
             l:   0,
             sp:  0xFFFE,
+            ime: true, // TODO verify initial
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
             state: CpuState::Normal,
+            input_state: 0xFF,
+
             event_logger: Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
         };
@@ -552,11 +563,11 @@ impl Cpu {
     unset_interrupt_bit!(unset_serial_io_interrupt_bit, 0x8);
     unset_interrupt_bit!(unset_input_interrupt_bit, 0x10);
 
-    get_interrupt!(get_vblank_interrupt, 0x1);
-    get_interrupt!(get_lcdc_interrupt, 0x2);
-    get_interrupt!(get_timer_interrupt, 0x4);
-    get_interrupt!(get_serial_io_interrupt, 0x8);
-    get_interrupt!(get_input_interrupt, 0x10);
+    get_interrupt!(get_vblank_interrupt_bit, 0x1);
+    get_interrupt!(get_lcdc_interrupt_bit, 0x2);
+    get_interrupt!(get_timer_interrupt_bit, 0x4);
+    get_interrupt!(get_serial_io_interrupt_bit, 0x8);
+    get_interrupt!(get_input_interrupt_bit, 0x10);
 
 
     /*
@@ -587,7 +598,8 @@ impl Cpu {
     set_interrupt_enabled!(set_timer_interrupt_enabled, 0x4);
     set_interrupt_enabled!(set_serial_io_interrupt_enabled, 0x8);
     set_interrupt_enabled!(set_input_interrupt_enabled, 0x10);
-    set_interrupt_enabled!(set_interrupts_enabled, 0x1F);
+    // Pretty sure this is wrong
+    // set_interrupt_enabled!(set_interrupts_enabled, 0x1F);
 
     unset_interrupt_enabled!(unset_vblank_interrupt_enabled, 0x1);
     unset_interrupt_enabled!(unset_lcdc_interrupt_enabled, 0x2);
@@ -601,8 +613,13 @@ impl Cpu {
     get_interrupt_enabled!(get_timer_interrupt_enabled, 0x4);
     get_interrupt_enabled!(get_serial_io_interrupt_enabled, 0x8);
     get_interrupt_enabled!(get_input_interrupt_enabled, 0x10);
-    get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
-
+    // Pretty sure this is wrong
+    // get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
+    
+    fn get_interrupts_enabled(&self) -> bool {
+        self.ime
+    }
+    
     set_stat!(set_coincidence_interrupt, 0x40);
     unset_stat!(unset_coincidence_interrupt, 0x40);
     get_stat!(get_coincidence_interrupt, 0x40);
@@ -843,11 +860,11 @@ impl Cpu {
 
 
     fn enable_interrupts(&mut self) {
-        self.set_mem(0xFFFF, 0x1F); //verify value to be written here
+        self.ime = true;
     }
 
     fn disable_interrupts(&mut self) {
-        self.set_mem(0xFFFF, 0); //verify value to be written here
+        self.ime = false;
     }
 
     fn af(&self) -> u16 {
@@ -976,7 +993,16 @@ impl Cpu {
                     self.mem[ad]                     = value;
                     self.mem[ad ^ (0xE000 - 0xC000)] = value;
                 },
-
+            0xFF00 => {
+                // (P1) Joypad Info
+                if value & 0x10 == 0x10 {
+                    // P14 is set to low
+                    self.mem[0xFF00] = value | (self.input_state >> 4);
+                } else if value & 0x20 == 0x20 {
+                    // P15 is set to low
+                    self.mem[0xFF00] = value | (self.input_state & 0x0F);
+                }
+            }
             0xFF04 => self.mem[0xFF04] = 0,
             // TODO: Check whether vblank should be turned off on
             // writes to 0xFF44
@@ -1828,7 +1854,7 @@ impl Cpu {
         }
         
         //Then handle interrupts
-        if self.get_vblank_interrupt_enabled() && self.get_vblank_interrupt() {
+        if self.get_vblank_interrupt_enabled() && self.get_vblank_interrupt_bit() {
             //handle vblank interrupt
             trace!("INT: handle vblank interrupt");
             let old_pc = self.pc;
@@ -1839,7 +1865,7 @@ impl Cpu {
 
             self.pc = VBLANK_INTERRUPT_ADDRESS;
         }
-        else if self.get_lcdc_interrupt_enabled() && self.get_lcdc_interrupt() {
+        else if self.get_lcdc_interrupt_enabled() && self.get_lcdc_interrupt_bit() {
             //handle lcdc interrupt
             trace!("INT: handle lcdc interrupt");
             let old_pc = self.pc;
@@ -1850,7 +1876,7 @@ impl Cpu {
             
             self.pc = LCDC_INTERRUPT_ADDRESS;
         }
-        else if self.get_timer_interrupt_enabled() && self.get_timer_interrupt() {
+        else if self.get_timer_interrupt_enabled() && self.get_timer_interrupt_bit() {
             //handle timer interrupt
             trace!("INT: handle timer interrupt");
             let old_pc = self.pc;
@@ -1861,7 +1887,7 @@ impl Cpu {
 
             self.pc = TIMER_OVERFLOW_INTERRUPT_ADDRESS;
         }
-        else if self.get_serial_io_interrupt_enabled() && self.get_serial_io_interrupt() {
+        else if self.get_serial_io_interrupt_enabled() && self.get_serial_io_interrupt_bit() {
             //handle serial interrupt
             trace!("INT: handle serial inturrupt");
             let old_pc = self.pc;
@@ -1872,8 +1898,16 @@ impl Cpu {
 
             self.pc = SERIAL_TRANSFER_INTERRUPT_ADDRESS;
         }
-        else if self.get_input_interrupt_enabled() && self.get_input_interrupt(){
-            unimplemented!();
+        else if self.get_input_interrupt_enabled() && self.get_input_interrupt_bit() {
+            debug!("INT: handle input");
+
+            let old_pc = self.pc;
+
+            self.disable_interrupts();
+            self.unset_input_interrupt_bit();
+            self.push_onto_stack(old_pc);
+
+            self.pc = P1013_INTERRUPT_ADDRESS;
         }
  
     }

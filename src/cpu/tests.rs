@@ -262,7 +262,7 @@ fn test_halt() {
     cpu.halt();
     assert_eq!(cpu.state, CpuState::Halt);
 
-    cpu.set_interrupts_enabled();
+    cpu.enable_interrupts();
     cpu.set_vblank_interrupt_enabled();
     cpu.set_vblank();
     cpu.set_vblank_interrupt_bit();
