@@ -1162,10 +1162,11 @@ impl Cpu {
     }
 
     fn ldhlspn(&mut self, n: i8) {
-        let val = add_u16_i8(self.sp, n as i8);
-        self.set_register16(CpuRegister16::HL, val as u16);
-
-        self.set_flags(false, false, false, false); //last two need to be checked; TODO:
+        let old_sp = self.sp;
+        self.addspn(n);
+        let new_sp = self.sp;
+        self.sp = old_sp;
+        self.set_register16(CpuRegister16::HL, new_sp);
     }
 
     fn ldnnsp(&mut self, b1: u8, b2: u8) {
@@ -1228,10 +1229,14 @@ impl Cpu {
     }
 
     fn addspn(&mut self, n: i8) {
-        let new_sp = add_u16_i8(self.sp, (n as i8));
+        let old_sp = self.sp;
+        let new_sp = add_u16_i8(self.sp, n);
         self.sp = new_sp as u16;
 
-        self.set_flags(false, false, false, false); //TODO: review last tw
+        self.set_flags(false,
+                       false,
+                       (((old_sp as i16) & 0xF) + ((n as i16) & 0xF) & 0xF0) != 0,
+                       ((((old_sp as i16) & 0xFF) + ((n as i16) & 0xFF)) & 0xF00) != 0);
     }
     
     fn add(&mut self, reg: CpuRegister) {
@@ -1269,26 +1274,26 @@ impl Cpu {
 
         self.set_flags(new_a == 0u8,
                        true,
-                       ((old_a & 0xF) as u8) >= ((old_b & 0xF) as u8),
+                       (((old_a & 0xF) - (old_b & 0xF)) & 0xF0) != 0,
 //                       (old_a & 0xF) >= (old_b & 0xF),
 //                       (old_a as i16) - (old_b as i16)
-                       old_b <= old_a);
+                       ((((old_a as i16) & 0xFF) - ((old_b as i16) & 0xFF)) & 0xFF00) != 0);
     }
 
     fn sbc(&mut self, reg: CpuRegister) {
         let old_a = self.a as i8;
-        let old_b = self.reg_or_const(reg);
-        let old_c = old_a.wrapping_sub(old_b) as byte;
-        let cf: byte = (self.f & HL) >> 5;
-        self.sub(reg);
+        let old_b = self.reg_or_const(reg) as i8;
+        let cf = ((self.f & CL) >> 4) as i8;
 
-        //NOTE: find out whether this should be self.a - cf
-        let new_a = self.a.wrapping_sub(cf); //overflow?
-        self.a = new_a as byte;
-        self.set_flags((new_a as byte) == 0u8,
+        let new_a = old_a.wrapping_sub(old_b).wrapping_sub(cf) as u8; 
+        self.a = new_a;
+
+        self.set_flags(new_a == 0u8,
                        true,
-                       (old_c & 0xF) >= cf,
-                       cf <= old_c);
+                       (((old_a & 0xF) - ((old_b & 0xF) + cf)) & 0xF0) != 0,
+//                       (old_a & 0xF) >= (old_b & 0xF),
+//                       (old_a as i16) - (old_b as i16)
+                       ((((old_a as i16) & 0xFF) - (((old_b as i16)  & 0xFF) + (cf as i16))) & 0xFF00) != 0);
     }
 
     fn and(&mut self, reg: CpuRegister) {
@@ -1314,25 +1319,8 @@ impl Cpu {
 
     fn cp(&mut self, reg: CpuRegister) {
         let old_a = self.a;
-        let regval =
-            if let CpuRegister::Num(n) = reg { 
-                n
-            } else if let Some(n) = self.access_register(reg) {
-                n
-            } else {unreachable!()};
-        
-
-        let a4bit = old_a & 0xF;
-        let reg4bit = regval & 0xF;
-            
         self.sub(reg);
-        let hcf = (self.f & HL) == HL;
         self.a = old_a;
-        self.set_flags(old_a == regval,
-                       true,
-                       !hcf,
-                  //     !(reg4bit > a4bit),
-                       (old_a as i8) < (regval as i8));
     }
 
     fn inc(&mut self, reg: CpuRegister) {
@@ -1352,16 +1340,16 @@ impl Cpu {
     fn dec(&mut self, reg: CpuRegister) {
         let old_c = (self.f & CL) == CL;
 
-        let reg_val: i16 = (self.access_register(reg)
-                            .expect("invalid register") as i16) & 0xFF;
+        let reg_val = self.access_register(reg)
+                            .expect("invalid register");
 
-        let new_val:byte = (reg_val - 1) as byte;
+        let new_val:byte = reg_val.wrapping_sub(1) as byte;
         self.set_register(reg, new_val);
 
         self.set_flags(
             new_val == 0u8,
             true,
-            (reg_val & 0xF) != 0, //TODO: review 
+            ((reg_val & 0xF).wrapping_sub(1) & 0xF0) != 0,
             old_c);
 
     }
@@ -1538,7 +1526,7 @@ impl Cpu {
 
     fn rla(&mut self) {
         let old_bit7 = (self.a >> 7) & 1;
-        let old_flags = ((self.f & CL) >> 4) & 0xF;
+        let old_flags = ((self.f & CL) >> 4) & 0x1;
         
 
         let new_a = (self.a << 1) | old_flags;
