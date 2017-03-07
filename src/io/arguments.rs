@@ -7,7 +7,7 @@ use clap::{Arg, App, ArgMatches};
 pub fn read_arguments<'input>() -> ArgMatches<'input> {
     App::new("rusty-boy")
         .version("-0.1")
-        .author("Mark McCaskey and friends")
+        .author("Mark McCaskey, spawnedartifact, and friends")
         .about("Kappa")
         .arg(Arg::with_name("game")
             .short("g")
@@ -29,5 +29,10 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
             .long("trace")
             .help("Runs with verbose trace")
             .takes_value(false))
+        .arg(Arg::with_name("visualize")
+             .short("z")
+             .long("visualize")
+             .help("Turns on interactive memory visualization")
+             .takes_value(false))
         .get_matches()
 }
