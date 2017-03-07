@@ -24,7 +24,12 @@ impl Drawable for VidRamBGDisplay {
     
     fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
         // TODO add toggle for this also?
-        let tile_map_offset = TILE_MAP_1_START;
+        // FIXME pretty sure this is swapped, but for some reason works better
+        let tile_map_offset = if cpu.lcdc_bg_tile_map() {
+            TILE_MAP_2_START
+        } else {
+            TILE_MAP_1_START
+        };
         
         let ref bg_select = self.tile_data_select;
 
@@ -44,7 +49,7 @@ impl Drawable for VidRamBGDisplay {
                                tile_map_offset,
                                tile_patterns_offset,
                                0);
-        draw_objects(renderer, cpu, 0, 0);
+        draw_objects(renderer, cpu, cpu.scx() as i32, cpu.scy() as i32);
     }
     
     fn click(&mut self, _: sdl2::mouse::MouseButton, _: Point, _: &mut Cpu) {
@@ -151,7 +156,10 @@ pub fn draw_tile_transparent(renderer: &mut sdl2::render::Renderer,
             // let px_val = px_color*d;
             // renderer.set_draw_color(Color::RGB(px_val, px_val, px_val));
 
-            if true || px_color != 0 {
+            // TODO add toggle for this or remove it
+            const DEBUG_OAM_BG: bool = false;
+            
+            if DEBUG_OAM_BG || px_color != 0 {
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
                 renderer.set_draw_color(px_pal_col);
                 
@@ -284,7 +292,7 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
         let offset = OBJECT_ATTRIBUTE_START + obj_idx * OBJECT_ATTRIBUTE_BLOCK_SIZE;
         let sprite_y: u8 = gameboy.mem[offset as usize];
         let sprite_x: u8 = gameboy.mem[offset as usize + 1];
-        let tile_index: i8 = gameboy.mem[offset as usize + 2] as i8;
+        let tile_index: u8 = gameboy.mem[offset as usize + 2];
         // TODO implement flag handling (priority, flips...)
         let flags: u8 = gameboy.mem[offset as usize + 3];
         if sprite_x == 0 && sprite_y == 0 {
@@ -293,6 +301,9 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
         }
         let screen_x = sprite_x.wrapping_sub(8);
         let screen_y = sprite_y.wrapping_sub(16);
+
+        // This table is fixed for OAM
+        let pattern_table = TILE_PATTERN_TABLE_1_START;
         
         if gameboy.lcdc_sprite_size() {
             // "Tall 8x16 sprites" mode
@@ -300,22 +311,23 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
             let tile_16 = tile_index & !1;
             draw_tile_transparent(renderer,
                                   gameboy,
-                                  TILE_PATTERN_TABLE_2_START,
-                                  add_u16_i8(128u16, tile_16), // index is signed 8bit
+                                  pattern_table,
+                                  tile_16 as u16,
                                   screen_offset_x + screen_x as i32,
                                   screen_offset_y + screen_y as i32);
+            // Draw second sprite below the first one
             draw_tile_transparent(renderer,
                                   gameboy,
-                                  TILE_PATTERN_TABLE_2_START,
-                                  add_u16_i8(128u16, (tile_16 + 1)), // index is signed 8bit
+                                  pattern_table,
+                                  tile_16 as u16 + 1,
                                   screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y as i32);
+                                  screen_offset_y + screen_y.wrapping_add(8) as i32);
         } else {
             // 8x8 sprites mode
             draw_tile_transparent(renderer,
                                   gameboy,
-                                  TILE_PATTERN_TABLE_2_START,
-                                  add_u16_i8(128u16, (tile_index as i8)), // index is signed 8bit
+                                  pattern_table,
+                                  tile_index as u16,
                                   screen_offset_x + screen_x as i32,
                                   screen_offset_y + screen_y as i32);
 
