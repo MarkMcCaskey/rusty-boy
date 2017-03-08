@@ -1518,7 +1518,7 @@ impl Cpu {
         let new_a = (self.a << 1) | old_bit7;
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
+        self.set_flags(false,
                        false,
                        false,
                        old_bit7 == 1);
@@ -1532,7 +1532,7 @@ impl Cpu {
         let new_a = (self.a << 1) | old_flags;
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
+        self.set_flags(false,
                        false,
                        false,
                        old_bit7 == 1);       
@@ -1544,7 +1544,7 @@ impl Cpu {
         let new_a = ((self.a >> 1) & 0x7F) | (old_bit0 << 7);
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
+        self.set_flags(false,
                        false,
                        false,
                        old_bit0 == 1);
@@ -1557,7 +1557,7 @@ impl Cpu {
         let new_a = ((self.a >> 1) & 0x7F) | (old_flags << 7);
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
+        self.set_flags(false,
                        false,
                        false,
                        old_bit0 == 1);
