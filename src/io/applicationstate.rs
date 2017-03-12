@@ -186,16 +186,38 @@ impl ApplicationState {
 
             match event {
                 Event::ControllerAxisMotion { axis, value: val, .. } => {
-                    let dead_zone = 10000;
-                    if val > dead_zone || val < -dead_zone {
-                        debug!("Axis {:?} moved to {}", axis, val);
-                        //                   match axis {
-                        // controller::Axis::LeftX =>,
-                        // controller::Axis::LeftY =>,
-                        // _ => (),
-                        // }
-                        //
+                    let deadzone = 10000;
+                    debug!("Axis {:?} moved to {}", axis, val);
+                    match axis {
+                        controller::Axis::LeftX if deadzone < (val as i32).abs() => {
+                            if val < 0 {
+                                self.gameboy.press_left();
+                                self.gameboy.unpress_right();
+                            } else {
+                                self.gameboy.press_right();
+                                self.gameboy.unpress_left();
+                            };
+                        },
+                        controller::Axis::LeftX => {
+                            self.gameboy.unpress_left();
+                            self.gameboy.unpress_right();
+                        },
+                        controller::Axis::LeftY if deadzone < (val as i32).abs() => {
+                            if val < 0 {
+                                self.gameboy.press_up();
+                                self.gameboy.unpress_down();
+                            } else {
+                                self.gameboy.press_down();
+                                self.gameboy.unpress_up();
+                            }
+                        },
+                        controller::Axis::LeftY => {
+                            self.gameboy.unpress_up();
+                            self.gameboy.unpress_down();
+                        },
+                        _ => {},
                     }
+                        
                 }
                 Event::ControllerButtonDown { button, .. } => {
                     debug!("Button {:?} down", button);
