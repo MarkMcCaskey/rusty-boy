@@ -1453,48 +1453,34 @@ impl Cpu {
 
 
     fn daa(&mut self) {
-        let old_a = self.a;
+        let nf = self.f & NLV == NLV;
+        let hf = self.f & HL == HL;
+        let cf = self.f & CL == CL;
 
-        let (high,low) = (old_a & 0xF0, old_a & 0x0F);
-        let n_flag = self.f & NLV == NLV;
-        let c_flag = self.f & CL == CL;
-        let h_flag = self.f & HL == HL;
-
-        // adjust A
-        let (was_carry, new_a) =
-            //subtraction adjust
-            if n_flag {
-                let adjust_num =
-                    match (h_flag, c_flag) {
-                        (false, false) => 0x00,
-                        (false, true)  => 0xA0,
-                        (true,  false) => 0xFA,
-                        (true,  true)  => 0x9A,
-                    };
-
-                (c_flag, (((old_a as u16) + adjust_num)) as u8)
-            } else { // addition adjust
-                let new_low =
-                    if low > 9 || h_flag { (low + 6) & 0xF } else {low};
-
-                // 16bit (to allow 'overflow') representation of the
-                // upper nibble with lower overflow accounted for
-                let inter_high = (high as u16) + (if new_low != low {0x10} else {0});
-                
-                let (high_carry, new_high) =
-                // if invalid upper digit (after lower overflow is accounted for)
-                    if inter_high + (new_low as u16) > 0x99 || c_flag{
-                        (true, ((high + 0x60) & 0xF0) as u8)
-                    } else {(false, (inter_high & 0xF0) as u8)};
-
-                (high_carry, new_high | new_low)
-            };
-
-        self.a = new_a;
+        let mut new_cf = cf;
+        
+        if !nf {
+            if cf || self.a > 0x99 {
+                self.a = self.a.wrapping_add(0x60);
+                new_cf = true;
+            }
+            if hf || (self.a & 0xF) > 0x9 {
+                self.a = self.a.wrapping_add(0x06);
+            }
+        } else {
+            if cf {
+                self.a = self.a.wrapping_sub(0x60);
+            }
+            if hf {
+                self.a = self.a.wrapping_sub(0x06);
+            }
+        }
+        
+        let new_a = self.a;
         self.set_flags(new_a == 0,
-                       n_flag,
-                       h_flag,
-                       was_carry);
+                       nf, // unchanged
+                       false,
+                       new_cf);
     }
 
     fn cpl(&mut self) {
