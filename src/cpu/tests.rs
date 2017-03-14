@@ -389,5 +389,13 @@ fn test_daa() {
     cpu.daa();
     assert_eq!(cpu.a, 0x12);
     assert_eq!(cpu.f & CL, CL);
+
+    println!("10");
+    cpu.a = 0x0;
+    cpu.add(CpuRegister::Num(0x0));
+    cpu.daa();
+    assert_eq!(cpu.a, 0x0);
+    assert_eq!(cpu.f & ZL, ZL);
+    assert_eq!(cpu.f & CL, 0);
 }
 

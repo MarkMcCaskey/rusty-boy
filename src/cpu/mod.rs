@@ -586,7 +586,6 @@ impl Cpu {
     get_sound_on!(get_sound4, 0x8);
     get_sound_on!(get_sound_all, 0x80);
 
-
     unset_sound_on!(unset_sound1, 0x1u8);
     unset_sound_on!(unset_sound2, 0x2u8);
     unset_sound_on!(unset_sound3, 0x4u8);
@@ -2329,6 +2328,10 @@ impl Cpu {
 
         for i in 0..0x8000 {
             self.mem[i] = rom_buffer[i] as byte;
+        }
+
+        if self.mem[0x147] != 0 {
+            panic!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
         self.reinit_logger();
