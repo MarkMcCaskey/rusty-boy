@@ -1,6 +1,6 @@
 customize zone (m-x find-variable zone-programs) Kappa
 
-* TODO CPU[66%]
+* TODO CPU[83%]
 ** DONE Dispatch
 *** DONE Prefixed
 *** DONE Unprefixed
@@ -9,7 +9,7 @@ customize zone (m-x find-variable zone-programs) Kappa
     doc says it should
 ** TODO Interrupts
 *** TODO Throw
-*** TODO Handle
+*** DONE Handle
 ** DONE Opcodes[100%]
    (Note review serial IO)
 *** DONE Loads
@@ -20,8 +20,8 @@ customize zone (m-x find-variable zone-programs) Kappa
 **** DONE 8bit
 **** DONE 16bit
 *** DONE Control flow
-** TODO Tests!
-*** TODO opcodes
+** DONE Tests!
+*** DONE opcodes
 ** DONE Split CPU into multiple files
 ** DONE Special Registers!![100%]
 *** DONE Sound
@@ -87,7 +87,8 @@ customize zone (m-x find-variable zone-programs) Kappa
 **** TODO Values
      Search memory (possibly through time if persistence is done) to
      report information about the manner in which the ROM is executing
-* TODO Improve code quality[66%]
+* DONE Improve code quality[100%]
 ** DONE Fix all warnings
 ** DONE Type annotate literals
-** TODO abstract logic in main
+** DONE abstract logic in main
+   

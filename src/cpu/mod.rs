@@ -586,7 +586,6 @@ impl Cpu {
     get_sound_on!(get_sound4, 0x8);
     get_sound_on!(get_sound_all, 0x80);
 
-
     unset_sound_on!(unset_sound1, 0x1u8);
     unset_sound_on!(unset_sound2, 0x2u8);
     unset_sound_on!(unset_sound3, 0x4u8);
@@ -1453,22 +1452,34 @@ impl Cpu {
 
 
     fn daa(&mut self) {
-        let reduced_a = (self.a as u16) & 0xFF;
+        let nf = self.f & NLV == NLV;
+        let hf = self.f & HL == HL;
+        let cf = self.f & CL == CL;
 
-        let lowest_bits = reduced_a & 0xF;
-
-        let lowest_digit = if lowest_bits > 9 {(lowest_bits + 6) & 0xF} else {lowest_bits};
-        let highest_bits = ((reduced_a & 0xF0) + (if lowest_digit == lowest_bits {0} else {0x10})) & 0xF0;
-        let highest_digit = if highest_bits > 0x90 {(highest_bits + 0x60) & 0xF0} else {highest_bits & 0xF0};
-
-        let new_a: byte = (highest_digit | lowest_digit) as byte;
-        self.a = new_a;
-        let old_nflag = (self.f & NLV) == NLV;
-        self.set_flags(new_a == 0u8,
-                       old_nflag,
+        let mut new_cf = cf;
+        
+        if !nf {
+            if cf || self.a > 0x99 {
+                self.a = self.a.wrapping_add(0x60);
+                new_cf = true;
+            }
+            if hf || (self.a & 0xF) > 0x9 {
+                self.a = self.a.wrapping_add(0x06);
+            }
+        } else {
+            if cf {
+                self.a = self.a.wrapping_sub(0x60);
+            }
+            if hf {
+                self.a = self.a.wrapping_sub(0x06);
+            }
+        }
+        
+        let new_a = self.a;
+        self.set_flags(new_a == 0,
+                       nf, // unchanged
                        false,
-                       lowest_bits != lowest_digit || highest_bits != highest_digit);
-                       //0x99 < reduced_a); //NOTE: weird documentation, unclear value
+                       new_cf);
     }
 
     fn cpl(&mut self) {
@@ -2317,6 +2328,10 @@ impl Cpu {
 
         for i in 0..0x8000 {
             self.mem[i] = rom_buffer[i] as byte;
+        }
+
+        if self.mem[0x147] != 0 {
+            panic!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
         self.reinit_logger();

@@ -11,7 +11,7 @@ pub struct Wave {
     pub phase_inc: f32,
 
     /// The "current" value of the wave
-    phase: f32,
+    pub phase: f32,
 
     /// Multiplier for wave between 0 and 1 (functions as volume (0 is off))
     volume: f32,
@@ -30,7 +30,7 @@ impl AudioCallback for Wave {
         for x in out.iter_mut() {
 
             *x = match self.phase {
-                v @ 0.0...1.0 if v <= self.wave_duty => v.sin() * self.volume,
+                v @ 0.0...1.0 if v <= self.wave_duty => v * self.volume,
                 _ => -self.volume,
             };
             self.phase = if self.add {
@@ -62,7 +62,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<Wave> {
             Wave {
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                volume: 0.01,
+                volume: 0.025,
                 wave_duty: 0.25,
                 add: true,
             }

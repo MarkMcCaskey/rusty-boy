@@ -52,7 +52,7 @@ pub struct Debugger {
 }
 
 impl Debugger {
-    pub fn new(cpu: &mut Cpu) -> Debugger {
+    pub fn new(cpu: &Cpu) -> Debugger {
         use ncurses::*;
 
         let mut max_x = 0;
@@ -146,6 +146,11 @@ impl Debugger {
                 }
             }
 
+            KEY_END => {
+                self.pause();
+                cpu.state = CpuState::Halt;
+            }
+
             // Enter (on linux)
             0xA => {
                 if self.input_buffer.is_empty() {
@@ -164,7 +169,7 @@ impl Debugger {
 
                 #[cfg(not(feature = "debugger"))]
                 let parseret = Err("Compile with --features=debugger to turn on the debugger"
-                    .to_string());
+                                       .to_string());
 
                 let parseval = match parseret {
                     Ok(v) => self.dispatch_debugger_action(cpu, v),
@@ -235,6 +240,10 @@ impl Debugger {
     }
 
     fn draw_asm(&mut self, cpu: &mut Cpu) {
+        let mut x = 0;
+        let mut y = 0;
+        getmaxyx(self.asm_win, &mut y, &mut x);
+
         let cur_pc = cpu.pc;
         let ar_max = self.dissassembled_rom.len() - 1;
         let idx = binsearch_inst(&self.dissassembled_rom, cur_pc, 0, ar_max as usize)
@@ -256,7 +265,7 @@ impl Debugger {
             self.draw_instruction(8, cur_instref);
             wattroff(self.asm_win, COLOR_PAIR(1));
 
-            for i in 9..17 {
+            for i in 9..((y - 1) as u16) {
                 let (cur_inst, _) = self.dissassembled_rom[(idx + (i - 8)) as usize].clone();
                 let cur_instref = cur_inst.as_ref();
                 self.draw_instruction(i as i32, cur_instref);
@@ -265,7 +274,7 @@ impl Debugger {
             // not enough instructions before
             let (cur_inst, _) = self.dissassembled_rom[idx as usize].clone();
             let cur_instref = cur_inst.as_ref();
-            start_color();			/* Start color 			*/
+            start_color(); /* Start color 			*/
             init_pair(1, COLOR_RED, COLOR_BLACK);
 
             // highlight current inst
@@ -273,7 +282,7 @@ impl Debugger {
             self.draw_instruction(1, cur_instref);
             wattroff(self.asm_win, COLOR_PAIR(1));
 
-            for i in 1..16 {
+            for i in 1..((y - 1) as u16) {
                 let (cur_inst, _) = self.dissassembled_rom[(idx + i) as usize].clone();
                 let cur_instref = cur_inst.as_ref();
                 self.draw_instruction((i + 1) as i32, cur_instref);
@@ -281,8 +290,6 @@ impl Debugger {
             }
         }
 
-
-        //        self.dissassembled_rom;
 
     }
 
@@ -296,7 +303,10 @@ impl Debugger {
         let mut x = 0;
         let mut y = 0;
         getmaxyx(self.reg_win, &mut y, &mut x);
-        let watchpoints: Vec<u16> = self.watchpoints.iter().cloned().collect();
+        let watchpoints: Vec<u16> = self.watchpoints
+            .iter()
+            .cloned()
+            .collect();
 
 
         for i in WATCHPOINT_Y_OFFSET..(WATCHPOINT_Y_OFFSET + (self.watchpoints.len() as i32)) {
@@ -305,7 +315,7 @@ impl Debugger {
                     format!("({:X}): {:X}",
                             watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
                             cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize])
-                        .as_ref());
+                            .as_ref());
         }
 
     }
@@ -315,9 +325,8 @@ impl Debugger {
         wprintw(self.reg_win,
                 format!("{:4}: 0x{:02X}",
                         name,
-                        cpu.access_register(reg)
-                            .expect("invalid register"))
-                    .as_ref());
+                        cpu.access_register(reg).expect("invalid register"))
+                        .as_ref());
     }
 
     fn draw_register16(&mut self, cpu: &mut Cpu, y_loc: i32, name: &str, reg: CpuRegister16) {
@@ -348,9 +357,7 @@ impl Debugger {
         // Stack starts at 0xFFFE
         let cur_stack_ptr = 0xFFFE - effective_stack_frames;
 
-        for (i, addr) in (cur_stack_ptr..0xFFFF)
-            .filter(|&n| n % 2 == 0)
-            .enumerate() {
+        for (i, addr) in (cur_stack_ptr..0xFFFF).filter(|&n| n % 2 == 0).enumerate() {
             // i+1 because enumerate starts at 0
             wmove(self.reg_win, (i as i32) + 1, STACK_X_POS_OFFSET);
             wprintw(self.reg_win,
@@ -358,7 +365,7 @@ impl Debugger {
                             addr,
                             cpu.mem[(addr + 1) as usize],
                             cpu.mem[addr as usize])
-                        .as_ref());
+                            .as_ref());
         }
     }
 
@@ -399,6 +406,7 @@ impl Debugger {
             }
             DebuggerAction::Run => {
                 self.debugger_state = DebuggerState::Running;
+                cpu.state = CpuState::Normal;
                 "Running...".to_string()
             }
             DebuggerAction::Step => {
