@@ -741,11 +741,9 @@ impl Cpu {
         self.mem[0xFF44] = v as byte;
         // interrupt should only be thrown on the rising edge (when ly
         // turns to 144)
-        if v == 144 {
-            //TODO: verify that this should only be done if the interrupt is enabled
-            if self.get_interrupts_enabled() && self.get_vblank_interrupt_enabled() {
-                self.set_vblank_interrupt_bit();
-            }
+        //TODO: verify that this should only be done if the interrupt is enabled
+        if v == 144 && self.get_interrupts_enabled() && self.get_vblank_interrupt_enabled() {
+            self.set_vblank_interrupt_bit();
         }
         //LY check is done any time LY is updated
         self.lyc_compare();

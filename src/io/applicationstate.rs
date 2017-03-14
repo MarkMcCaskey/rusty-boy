@@ -310,7 +310,7 @@ impl ApplicationState {
                     let click_point = self.display_coords_to_ui_point(x, y);
 
                     // Find clicked widget
-                    for widget in self.widgets.iter_mut() {
+                    for widget in &mut self.widgets {
                         if widget.rect.contains(click_point) {
                             widget.click(mouse_btn, click_point, &mut self.gameboy);
                             break;
@@ -412,10 +412,9 @@ impl ApplicationState {
             sound_system.wave_duty = self.gameboy.channel1_wave_pattern_duty();
 
             let channel1_freq = 1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32);
-            let old_phase_inc = sound_system.phase_inc;
             let old_phase = sound_system.phase;
             sound_system.phase_inc =
-                (old_phase * ((2 << (self.gameboy.channel1_sweep_shift())) as f32));
+                old_phase * ((2 << (self.gameboy.channel1_sweep_shift())) as f32);
             sound_system.phase = channel1_freq;
 //                (1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32));
             sound_system.add = self.gameboy.channel1_sweep_increase();
@@ -437,7 +436,7 @@ impl ApplicationState {
             self.renderer.clear();
 
             // Draw all widgets
-            for ref mut widget in self.widgets.iter_mut() {
+            for ref mut widget in &mut self.widgets {
                 widget.draw(&mut self.renderer, &mut self.gameboy);
             }
 
@@ -450,7 +449,7 @@ impl ApplicationState {
             let record_screen = false;
             if record_screen {
                 save_screenshot(&self.renderer,
-                                format!("screen{:010}.bmp", self.screenshot_frame_num.0));
+                                format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
                 self.screenshot_frame_num += Wrapping(1);
             }
 
