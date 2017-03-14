@@ -543,8 +543,9 @@ impl Cpu {
         self.mem[0xFF05] =
             if old_val.wrapping_add(1) == 0 {
                 // on overflow...
-                if self.get_interrupts_enabled() {
-                    self.set_timer_interrupt_bit();
+                self.set_timer_interrupt_bit();
+                if self.state == CpuState::Halt {
+                    self.state = CpuState::Normal;
                 }
                 new_val
             } else {old_val.wrapping_add(1)};
