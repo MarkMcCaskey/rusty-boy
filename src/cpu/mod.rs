@@ -2331,7 +2331,7 @@ impl Cpu {
         }
 
         if self.mem[0x147] != 0 {
-            panic!("Cartridge type {:X} is not supported!", self.mem[0x147]);
+            error!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
         self.reinit_logger();
