@@ -586,7 +586,6 @@ impl Cpu {
     get_sound_on!(get_sound4, 0x8);
     get_sound_on!(get_sound_all, 0x80);
 
-
     unset_sound_on!(unset_sound1, 0x1u8);
     unset_sound_on!(unset_sound2, 0x2u8);
     unset_sound_on!(unset_sound3, 0x4u8);
@@ -1461,7 +1460,7 @@ impl Cpu {
         let h_flag = self.f & HL == HL;
 
         // adjust A
-        let (was_carry, new_a) =
+        let (was_carry, new_a, half_carry) =
             //subtraction adjust
             if n_flag {
                 let adjust_num =
@@ -1472,7 +1471,7 @@ impl Cpu {
                         (true,  true)  => 0x9A,
                     };
 
-                (c_flag, (((old_a as u16) + adjust_num)) as u8)
+                (c_flag, (((old_a as u16) + adjust_num)) as u8, low < 6 && h_flag)
             } else { // addition adjust
                 let new_low =
                     if low > 9 || h_flag { (low + 6) & 0xF } else {low};
@@ -1483,17 +1482,17 @@ impl Cpu {
                 
                 let (high_carry, new_high) =
                 // if invalid upper digit (after lower overflow is accounted for)
-                    if inter_high + (new_low as u16) > 0x99 || c_flag{
+                    if inter_high + (new_low as u16) > 0x99 || c_flag {
                         (true, ((high + 0x60) & 0xF0) as u8)
                     } else {(false, (inter_high & 0xF0) as u8)};
 
-                (high_carry, new_high | new_low)
+                (high_carry, new_high | new_low, low > 9)
             };
 
         self.a = new_a;
         self.set_flags(new_a == 0,
                        n_flag,
-                       h_flag,
+                       half_carry, //this value is undefined
                        was_carry);
     }
 
@@ -2343,6 +2342,10 @@ impl Cpu {
 
         for i in 0..0x8000 {
             self.mem[i] = rom_buffer[i] as byte;
+        }
+
+        if self.mem[0x147] != 0 {
+            panic!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
         self.reinit_logger();
