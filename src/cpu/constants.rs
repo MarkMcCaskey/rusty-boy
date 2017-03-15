@@ -95,8 +95,8 @@ pub enum Cc {
 
 /// The type of ROM
 /// Located in the ROM itself at addr (TODO: this)
-#[derive(Debug, PartialEq)]
-enum CartridgeType {
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum CartridgeType {
     /// The only ROM type being targeted for version 0.1.0
     RomOnly = 0,
     RomMBC1 = 1,
@@ -122,6 +122,42 @@ enum CartridgeType {
     BandaiTAMA5 = 0xFD,
     HudsonHuC3 = 0xFE,
     HudsonHuC1 = 0xFF,
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum MBCType {
+    MBC1_16_8,
+    MBC1_4_32,
+}
+
+pub fn to_cartridge_type(v: u8) -> Option<CartridgeType> {
+    match v {
+        0 => Some(CartridgeType::RomOnly),
+        1 => Some(CartridgeType::RomMBC1),
+        2 => Some(CartridgeType::RomMBC1Ram),
+        3 => Some(CartridgeType::RomMBC1RamBatt),
+        5 => Some(CartridgeType::RomMBC2),
+        6 => Some(CartridgeType::RomMBC2Batt),
+        8 => Some(CartridgeType::RomRam),
+        9 => Some(CartridgeType::RomRamBatt),
+        0xB => Some(CartridgeType::RomMMM01),
+        0xC => Some(CartridgeType::RomMMM01SRam),
+        0xD => Some(CartridgeType::RomMMM01SRamBatt),
+        0x10 => Some(CartridgeType::RomMBC3TimerRamBatt),
+        0x11 => Some(CartridgeType::RomMBC3),
+        0x12 => Some(CartridgeType::RomMBC3Ram),
+        0x13 => Some(CartridgeType::RomMBC3RamBatt),
+        0x19 => Some(CartridgeType::RomMBC5),
+        0x1A => Some(CartridgeType::RomMBC5Ram),
+        0x1B => Some(CartridgeType::RomMBC5RamBatt),
+        0x1D => Some(CartridgeType::RomMBC5RumbleSRam),
+        0x1E => Some(CartridgeType::RomMBC5RumbleSRamBatt),
+        0x1F => Some(CartridgeType::PocketCamera),
+        0xFD => Some(CartridgeType::BandaiTAMA5),
+        0xFE => Some(CartridgeType::HudsonHuC3),
+        0xFF => Some(CartridgeType::HudsonHuC1),
+        _ => None,
+    }
 }
 
 /// Turns a number into a `CC` code

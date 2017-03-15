@@ -185,6 +185,12 @@ pub struct Cpu {
     pub pc:  MemAddr,
     pub mem: [byte; MEM_ARRAY_SIZE],
 
+    cartridge_type: Option<CartridgeType>,
+    /// Used to determine "which kind of MBC1 it is"
+    mbc_type: Option<MBCType>,
+
+    memory_banks: Vec<[byte; 0x4000]>,
+
     /// Whether or not the CPU is running, waiting for input, or stopped
     pub state: CpuState,
 
@@ -214,6 +220,9 @@ impl Clone for Cpu {
                               ime: self.ime,
                               pc: self.pc,
                               mem: [0; MEM_ARRAY_SIZE],
+                              cartridge_type: None,
+                              mbc_type: None,
+                              memory_banks: vec![],
                               state: self.state,
                               input_state: self.input_state,
 
@@ -245,6 +254,9 @@ impl Cpu {
             ime: true, // TODO verify initial
             pc:  0,
             mem: [0; MEM_ARRAY_SIZE],
+            cartridge_type: None,
+            mbc_type: None,
+            memory_banks: vec![],
             state: CpuState::Normal,
             input_state: 0xFF,
 
@@ -1012,17 +1024,42 @@ impl Cpu {
 
         let address = address as usize;
 
-        match address {
-            //TODO: Verify triple dot includes final value
-            v @ DISPLAY_RAM_START ... DISPLAY_RAM_END => {
-                // If in OAM and Display ram are both in use
-                if self.mem[STAT_ADDR] & 3 == 3 {
-                    error!("CPU cannot access address {} at this time", v);
-                } else {
-                    self.mem[v] = value as byte;
-                }
-            },
-            v @ OAM_START ... OAM_END => {
+        if let Some(cart_type) = self.cartridge_type {
+            match address {
+                0...0x7FFF if cart_type == CartridgeType::RomOnly
+                    || cart_type == CartridgeType::RomRam
+                    || cart_type == CartridgeType::RomRamBatt => {
+                        error!("Cannot write to ROM address {:X}", address);
+                    },
+                // NOTE: assuming this can only be set once
+                0x6000...0x7FFF if cart_type == CartridgeType::RomMBC1
+                    || cart_type == CartridgeType::RomMBC1Ram
+                    || cart_type == CartridgeType::RomMBC1RamBatt
+                    && self.mbc_type.is_none() => {
+                        let mbc_type = value & 1;
+                        if mbc_type == 1 {
+                            self.mbc_type = Some(MBCType::MBC1_4_32);
+                            debug!("Setting MBC1 type to 4-32");
+                        } else {
+                            self.mbc_type = Some(MBCType::MBC1_16_8);
+                            debug!("Setting MBC1 type to 16-8");
+                        }
+                    },
+                0x2000...0x3FFF if cart_type == CartridgeType::RomMBC1
+                    || cart_type == CartridgeType::RomMBC1Ram
+                    || cart_type == CartridgeType::RomMBC1RamBatt => {
+                        self.load_bank(value & 0x1F);
+                    },
+
+                v @ DISPLAY_RAM_START ... DISPLAY_RAM_END => {
+                    // If in OAM and Display ram are both in use
+                    if self.mem[STAT_ADDR] & 3 == 3 {
+                        error!("CPU cannot access address {} at this time", v);
+                    } else {
+                        self.mem[v] = value as byte;
+                    }
+                },
+                v @ OAM_START ... OAM_END => {
                 //if OAM is in use
                 match self.mem[STAT_ADDR] & 3 {
                     0b10 | 0b11 => {
@@ -1077,6 +1114,7 @@ impl Cpu {
                 self.dma();
             }
             n => self.mem[n] = value,
+            }
         }
     }
 
@@ -1111,6 +1149,33 @@ impl Cpu {
         } 
     }
 
+
+    fn load_bank(&mut self, bank_num: u8) {
+        if let Some(cart_type) = self.cartridge_type {
+            match cart_type {
+                CartridgeType::RomMBC1 |
+                CartridgeType::RomMBC1Ram |
+                CartridgeType::RomMBC1RamBatt => {
+                    let bn = if (bank_num & 0x1F) == 0 {1} else {bank_num & 0x1F} as usize;
+
+                    if self.memory_banks.len() <= (bn - 1) {
+                        error!("Tried to swap in memory bank {}, but only {} memory banks exist",
+                               bn - 1, self.memory_banks.len() - 1);
+                    } else {
+                        for i in 0x4000..0x8000 {
+                            self.mem[i] = self.memory_banks[bn - 1][i - 0x4000];
+                        }
+                    }
+                }
+                otherwise => {
+                    error!("No support/invalid request to swap in bank {} of cartridge type {:?}",
+                           bank_num, otherwise);
+                }
+            }        
+        } else { //could not find cartridge type
+            error!("No cartridge type specified! Cannot switch banks");
+        }
+    }
 
     fn ldnnn(&mut self, nn: CpuRegister, n: u8) {
         self.set_register(nn, n as byte);
@@ -2388,17 +2453,51 @@ impl Cpu {
 
         rom.read(&mut rom_buffer).unwrap();
 
+        if let Some(cart_type) = to_cartridge_type(rom_buffer[0x147]) {
+            self.reinit_logger();
 
-        for i in 0..0x8000 {
-            self.mem[i] = rom_buffer[i] as byte;
+            match cart_type {
+                //TODO: verify this
+                CartridgeType::RomOnly |
+                CartridgeType::RomRam |
+                CartridgeType::RomRamBatt => {
+                    for i in 0..0x8000 {
+                        self.mem[i] = rom_buffer[i] as byte;
+                    }
+                }
+                CartridgeType::RomMBC1 |
+                CartridgeType::RomMBC1Ram |
+                CartridgeType::RomMBC1RamBatt => {
+                    // For MBC1, defaults to loading ROM bank 0 
+                    for i in 0..0x4000 {
+                        self.mem[i] = rom_buffer[i] as byte;
+                    }
+
+                    let mut mem_bank = [0u8; 0x4000];
+                    // and rom bank 1 into their respective places
+                    for i in 0x4000..0x8000 {
+                        self.mem[i] = rom_buffer[i] as byte;
+                        mem_bank[i - 0x4000] = rom_buffer[i] as byte;
+                    }
+                    self.memory_banks.push(mem_bank);
+
+                    //NOTE: possible bug here because temp buffer (mem_bank) is not cleared
+                    while if let Ok(n) = rom.read(&mut rom_buffer) {n > 0} else {false} {
+                        for i in 0..0x4000 {
+                            mem_bank[i] = rom_buffer[i] as byte;
+                        }
+                        self.memory_banks.push(mem_bank);
+                    }
+                }
+                otherwise => {
+                    error!("Cartridge type {:?} is not supported!", cart_type);
+                }
+                
+            }
+        self.cartridge_type = Some(cart_type);
+        } else { // to_cartridge_type failed
+            error!("Could not find a cartridge type!");
         }
-
-        self.reinit_logger();
-
-        if self.mem[0x147] != 0 {
-            error!("Cartridge type {:X} is not supported!", self.mem[0x147]);
-        }
-
     }
 }
 
