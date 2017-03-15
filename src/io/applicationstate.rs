@@ -40,6 +40,7 @@ pub struct ApplicationState {
     debugger: Option<Debugger>,
     prev_hsync_cycles: u64,
     clock_cycles: u64,
+    div_timer: u64,
     initial_gameboy_state: cpu::Cpu,
     logger_handle: Option<log4rs::Handle>, // storing to keep alive
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
@@ -162,6 +163,7 @@ impl ApplicationState {
             debugger: debugger,
             prev_hsync_cycles: 0,
             clock_cycles: 0,
+            div_timer: 0,
             initial_gameboy_state: gbcopy,
             logger_handle: handle,
             controller: controller,
@@ -341,27 +343,38 @@ impl ApplicationState {
         let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
             self.gameboy.dispatch_opcode() as u64
         } else {
-            4 // FIXME think about what to return here or refactor code around this
+            10 // FIXME think about what to return here or refactor code around this
         };
 
         self.cycle_count += current_op_time;
         self.clock_cycles += current_op_time;
         let timer_khz = self.gameboy.timer_frequency();
         let time_in_ms_per_cycle = (1000.0 / ((timer_khz as f64) * 1000.0)) as u64;
-        self.clock_cycles += self.cycle_count;
+        //self.clock_cycles += self.cycle_count;
+
+        self.div_timer += current_op_time;
 
         // TODO: remove prev_time
         let prev_time = self.prev_time;
         let ticks = self.cycle_count - prev_time;
 
+        let clock_speed = 4.19 * 1000.0 * 1000.0;
         let time_in_cpu_cycle_per_cycle =
-            ((time_in_ms_per_cycle as f64) / (1.0 / (4.19 * 1000.0 * 1000.0))) as u64;
+            ((time_in_ms_per_cycle as f64) * clock_speed) as u64;
+
+        let time_in_cpu_cycle_per_div_inc = (clock_speed * (1.0 / (DIV_TIMER_STEPS_PER_SECOND as f64))) as u64;
+
+        if self.div_timer >= time_in_cpu_cycle_per_div_inc {
+            self.gameboy.inc_div();
+            self.div_timer -= time_in_cpu_cycle_per_div_inc;
+        }
+
 
         if self.clock_cycles >= time_in_cpu_cycle_per_cycle {
             //           std::thread::sleep_ms(16);
             // trace!("Incrementing the timer!");
             self.gameboy.timer_cycle();
-            self.clock_cycles = 0;
+            self.clock_cycles -= time_in_cpu_cycle_per_cycle;
         }
 
         let fake_display_hsync = true;

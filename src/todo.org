@@ -1,14 +1,14 @@
 customize zone (m-x find-variable zone-programs) Kappa
 
-* TODO CPU[83%]
+* TODO CPU[100%]
 ** DONE Dispatch
 *** DONE Prefixed
 *** DONE Unprefixed
 *** KNOWNCAUSE DMA 
     Currently it's 'instanteous', should take 140ns or whatever the
     doc says it should
-** TODO Interrupts
-*** TODO Throw
+** DONE Interrupts
+*** DONE Throw
 *** DONE Handle
 ** DONE Opcodes[100%]
    (Note review serial IO)
