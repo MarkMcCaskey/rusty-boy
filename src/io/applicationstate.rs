@@ -74,25 +74,25 @@ impl ApplicationState {
                                                             }))
             .unwrap();
 
+        
+        // Set up debugging or command-line logging
+        let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
+            info!("Running in debug mode");
+            (true, None)
+        } else {
+            let handle = log4rs::init_config(config).unwrap();
+            (false, Some(handle))
+        };
+
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
-
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
 
-
-        // Set up debugging or command-line logging
-        let (debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
-            info!("Running in debug mode");
-            (Some(Debugger::new(&gameboy)), None)
-//            (None, None)
-        } else {
-            let handle = log4rs::init_config(config).unwrap();
-            (None, Some(handle))
-        };
-
-
-
+        //delay debugger so loading rom can be logged if need be
+        let debugger = if should_debugger { Some(Debugger::new(&gameboy)) }
+        else {None};
+        
         let sdl_context = sdl2::init().unwrap();
         let device = setup_audio(&sdl_context);
         let controller = setup_controller_subsystem(&sdl_context);

@@ -2393,11 +2393,12 @@ impl Cpu {
             self.mem[i] = rom_buffer[i] as byte;
         }
 
+        self.reinit_logger();
+
         if self.mem[0x147] != 0 {
             error!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
-        self.reinit_logger();
     }
 }
 
