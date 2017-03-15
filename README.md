@@ -23,6 +23,9 @@ Memory visualization inspired by [ICU64 / Frodo Redpill v0.1](https://icu64.blog
 First install `libsdl2-dev`.  If you're new to Rust, install `rustup`
 to install `rustc` and `cargo`.
 
+You may need to install ncurses libraries to compile this project.
+TODO: test and update this
+
 Then just run:
 
 ```
@@ -31,6 +34,24 @@ cargo install
 ```
 
 and you should be up and running.
+
+## Running
+
+To run, run the following command:
+```
+cargo run --release -- /path/to/rom
+```
+
+To run with the TUI debugger, run:
+```
+cargo run --release --features=debugger -- /path/to/rom -d
+```
+
+To run with the assembler and debugger, run:
+```
+cargo run --release --features="debugger asm" -- /path/to/rom -d
+```
+
 
 ## Version 0.1 milestone
 - [ ] cpu

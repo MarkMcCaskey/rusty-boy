@@ -8,7 +8,7 @@ use sdl2::rect::{Rect, Point};
 use cpu::Cpu;
 
 /// Saves the current screen to file
-pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {
+pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: &str) {
     let window = renderer.window().unwrap();
     let (w, h) = window.size();
     let format = window.window_pixel_format();
@@ -18,7 +18,7 @@ pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: String) {
     let masks = format.into_masks().unwrap();
     let surface = sdl2::surface::Surface::from_data_pixelmasks(slices, w, h, pitch, masks).unwrap();
 
-    match surface.save_bmp(filename.clone()) {
+    match surface.save_bmp(filename) {
         Ok(_) => (),
         Err(_) => error!("Could not save screenshot to {}", filename),
     }
@@ -79,7 +79,7 @@ impl PositionedFrame {
 
         let view_rect = r;
         let clip_rect = r;
-        
+
         renderer.set_clip_rect(Some(clip_rect));
         renderer.set_viewport(Some(view_rect));
     }
@@ -105,14 +105,14 @@ impl Drawable for PositionedFrame {
     fn get_initial_size(&self) -> (u32, u32) {
         self.vis.get_initial_size()
     }
-    
+
     fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
         self.before_draw(renderer);
         // draw_frame_bounds(self, renderer); // Use to debug clipping
         self.vis.draw(renderer, cpu);
         self.after_draw(renderer);
     }
-    
+
     fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu) {
         let rel_point = position - self.rect.top_left();
         debug!("Clicked at relative {:?} with {:?}", rel_point, button);
@@ -124,7 +124,7 @@ impl Drawable for PositionedFrame {
 pub fn draw_frame_bounds(frame: &PositionedFrame, renderer: &mut sdl2::render::Renderer) {
     renderer.set_draw_color(Color::RGB(0, 0, 0));
     renderer.fill_rect(Rect::new(0, 0, frame.rect.width(), frame.rect.height())).unwrap();
-    
+
     renderer.set_draw_color(Color::RGB(255, 0, 255));
     renderer.fill_rect(frame.rect).unwrap();
     renderer.set_draw_color(Color::RGB(0, 0, 0));

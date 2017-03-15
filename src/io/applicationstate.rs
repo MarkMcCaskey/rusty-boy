@@ -40,6 +40,7 @@ pub struct ApplicationState {
     debugger: Option<Debugger>,
     prev_hsync_cycles: u64,
     clock_cycles: u64,
+    div_timer: u64,
     initial_gameboy_state: cpu::Cpu,
     logger_handle: Option<log4rs::Handle>, // storing to keep alive
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
@@ -162,6 +163,7 @@ impl ApplicationState {
             debugger: debugger,
             prev_hsync_cycles: 0,
             clock_cycles: 0,
+            div_timer: 0,
             initial_gameboy_state: gbcopy,
             logger_handle: handle,
             controller: controller,
@@ -310,7 +312,7 @@ impl ApplicationState {
                     let click_point = self.display_coords_to_ui_point(x, y);
 
                     // Find clicked widget
-                    for widget in self.widgets.iter_mut() {
+                    for widget in &mut self.widgets {
                         if widget.rect.contains(click_point) {
                             widget.click(mouse_btn, click_point, &mut self.gameboy);
                             break;
@@ -341,27 +343,38 @@ impl ApplicationState {
         let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
             self.gameboy.dispatch_opcode() as u64
         } else {
-            4 // FIXME think about what to return here or refactor code around this
+            10 // FIXME think about what to return here or refactor code around this
         };
 
         self.cycle_count += current_op_time;
         self.clock_cycles += current_op_time;
         let timer_khz = self.gameboy.timer_frequency();
         let time_in_ms_per_cycle = (1000.0 / ((timer_khz as f64) * 1000.0)) as u64;
-        self.clock_cycles += self.cycle_count;
+        //self.clock_cycles += self.cycle_count;
+
+        self.div_timer += current_op_time;
 
         // TODO: remove prev_time
         let prev_time = self.prev_time;
         let ticks = self.cycle_count - prev_time;
 
+        let clock_speed = 4.19 * 1000.0 * 1000.0;
         let time_in_cpu_cycle_per_cycle =
-            ((time_in_ms_per_cycle as f64) / (1.0 / (4.19 * 1000.0 * 1000.0))) as u64;
+            ((time_in_ms_per_cycle as f64) * clock_speed) as u64;
+
+        let time_in_cpu_cycle_per_div_inc = (clock_speed * (1.0 / (DIV_TIMER_STEPS_PER_SECOND as f64))) as u64;
+
+        if self.div_timer >= time_in_cpu_cycle_per_div_inc {
+            self.gameboy.inc_div();
+            self.div_timer -= time_in_cpu_cycle_per_div_inc;
+        }
+
 
         if self.clock_cycles >= time_in_cpu_cycle_per_cycle {
             //           std::thread::sleep_ms(16);
             // trace!("Incrementing the timer!");
             self.gameboy.timer_cycle();
-            self.clock_cycles = 0;
+            self.clock_cycles -= time_in_cpu_cycle_per_cycle;
         }
 
         let fake_display_hsync = true;
@@ -412,10 +425,9 @@ impl ApplicationState {
             sound_system.wave_duty = self.gameboy.channel1_wave_pattern_duty();
 
             let channel1_freq = 1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32);
-            let old_phase_inc = sound_system.phase_inc;
             let old_phase = sound_system.phase;
             sound_system.phase_inc =
-                (old_phase * ((2 << (self.gameboy.channel1_sweep_shift())) as f32));
+                old_phase * ((2 << (self.gameboy.channel1_sweep_shift())) as f32);
             sound_system.phase = channel1_freq;
 //                (1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32));
             sound_system.add = self.gameboy.channel1_sweep_increase();
@@ -437,7 +449,7 @@ impl ApplicationState {
             self.renderer.clear();
 
             // Draw all widgets
-            for ref mut widget in self.widgets.iter_mut() {
+            for ref mut widget in &mut self.widgets {
                 widget.draw(&mut self.renderer, &mut self.gameboy);
             }
 
@@ -450,7 +462,7 @@ impl ApplicationState {
             let record_screen = false;
             if record_screen {
                 save_screenshot(&self.renderer,
-                                format!("screen{:010}.bmp", self.screenshot_frame_num.0));
+                                format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
                 self.screenshot_frame_num += Wrapping(1);
             }
 

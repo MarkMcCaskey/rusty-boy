@@ -196,6 +196,7 @@ pub struct Cpu {
 
     /// TODO: document this
     pub cycles: CycleCount,
+    interrupt_next_inst: bool,
 }
 
 /// Used for save-states and reverting to old CPU on resets
@@ -217,7 +218,8 @@ impl Clone for Cpu {
                               input_state: self.input_state,
 
                               event_logger: self.event_logger.clone(),
-                              cycles: self.cycles};
+                              cycles: self.cycles,
+                              interrupt_next_inst: false};
 
         for i in 0..MEM_ARRAY_SIZE {
             new_cpu.mem[i] = self.mem[i];
@@ -248,6 +250,7 @@ impl Cpu {
 
             event_logger: Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
+            interrupt_next_inst: false,
         };
         /// The reset state is the default state of the CPU
         new_cpu.reset();
@@ -334,9 +337,9 @@ impl Cpu {
     ///
     /// This needs to be called 16384 (~16779 on SGB) times a second
     /// 
-    fn inc_div(&mut self) {
-        let old_val: MemAddr = (self.mem[0xFF04] as MemAddr) & 0xFF;
-        self.mem[0xFF04] = (old_val + 1) as byte;
+    pub fn inc_div(&mut self) {
+        let old_val = self.mem[0xFF04];
+        self.mem[0xFF04] = old_val.wrapping_add(1);
     }
 
     /// The speed at which the timer runs, settable by the program by
@@ -543,8 +546,9 @@ impl Cpu {
         self.mem[0xFF05] =
             if old_val.wrapping_add(1) == 0 {
                 // on overflow...
-                if self.get_interrupts_enabled() {
-                    self.set_timer_interrupt_bit();
+                self.set_timer_interrupt_bit();
+                if self.state == CpuState::Halt {
+                    self.state = CpuState::Normal;
                 }
                 new_val
             } else {old_val.wrapping_add(1)};
@@ -586,11 +590,44 @@ impl Cpu {
     get_sound_on!(get_sound4, 0x8);
     get_sound_on!(get_sound_all, 0x80);
 
-    unset_sound_on!(unset_sound1, 0x1u8);
-    unset_sound_on!(unset_sound2, 0x2u8);
-    unset_sound_on!(unset_sound3, 0x4u8);
-    unset_sound_on!(unset_sound4, 0x8u8);
-    unset_sound_on!(unset_sound_all, 0x80u8);
+    unset_sound_on!(unset_sound1_, 0x1u8);
+    unset_sound_on!(unset_sound2_, 0x2u8);
+    unset_sound_on!(unset_sound3_, 0x4u8);
+    unset_sound_on!(unset_sound4_, 0x8u8);
+    unset_sound_on!(unset_sound_all_, 0x80u8);
+
+    /// FIXME: 0xFF26's lower 4 bits should be protected in set_mem
+    pub fn unset_sound1(&mut self) {
+        self.mem[0xFF26] &= !(1);
+        // on reset, clear value at 
+        self.mem[0xFF13] = 0;
+    }
+
+    pub fn unset_sound2(&mut self) {
+        self.mem[0xFF26] &= !(2);
+        // on reset, clear value at 
+//        self.mem[0xFF13] = 0;
+    }
+
+    pub fn unset_sound3(&mut self) {
+        self.mem[0xFF26] &= !(4);
+        // on reset, clear value at 
+        //self.mem[0xFF13] = 0;
+    }
+
+    pub fn unset_sound4(&mut self) {
+        self.mem[0xFF26] &= !(8);
+        // on reset, clear value at 
+        //self.mem[0xFF13] = 0;
+    }
+
+    pub fn unset_sound_all(&mut self) {
+        self.unset_sound1();
+        self.unset_sound2();
+        self.unset_sound3();
+        self.unset_sound4();
+        self.mem[0xFF26] &= !(0x80);
+    }
 
     set_interrupt_enabled!(set_vblank_interrupt_enabled, 0x1);
     set_interrupt_enabled!(set_lcdc_interrupt_enabled, 0x2);
@@ -740,11 +777,9 @@ impl Cpu {
         self.mem[0xFF44] = v as byte;
         // interrupt should only be thrown on the rising edge (when ly
         // turns to 144)
-        if v == 144 {
-            //TODO: verify that this should only be done if the interrupt is enabled
-            if self.get_interrupts_enabled() && self.get_vblank_interrupt_enabled() {
-                self.set_vblank_interrupt_bit();
-            }
+        //TODO: verify that this should only be done if the interrupt is enabled
+        if v == 144 && self.get_interrupts_enabled() && self.get_vblank_interrupt_enabled() {
+            self.set_vblank_interrupt_bit();
         }
         //LY check is done any time LY is updated
         self.lyc_compare();
@@ -860,6 +895,14 @@ impl Cpu {
 
     fn enable_interrupts(&mut self) {
         self.ime = true;
+    }
+
+    /// Disables interrupts if the `interrupt_next_inst` flag is on
+    fn maybe_disable_interrupts(&mut self) {
+        if self.interrupt_next_inst {
+            self.disable_interrupts();
+            self.interrupt_next_inst = false;
+        }
     }
 
     fn disable_interrupts(&mut self) {
@@ -1005,6 +1048,23 @@ impl Cpu {
             0xFF04 => self.mem[0xFF04] = 0,
             // TODO: Check whether vblank should be turned off on
             // writes to 0xFF44
+
+            // Sound
+            // NR52
+            0xFF26 => {
+                // NOTE: This currently ignores writes to any bit but the highest
+                // This is probably incorrect behavior
+                // The lowest 4 bits are documented as being read-only status bits
+                // but it's implied that they can be written to, just that it will not affect
+                // the logic.  Fixing this and emulating it completely will require keeping track
+                // of sound in a different place than NR 52
+                if (value >> 7) & 1 == 0 {
+                    self.unset_sound_all();
+                } else if (value >> 7) & 1 == 1 {
+                    self.set_sound_all();
+                }
+                
+            }
             0xFF44 => self.mem[0xFF44] = 0,
             0xFF45 => {
                 //LY check is done every time LY or LYC value is updated
@@ -1516,7 +1576,7 @@ impl Cpu {
     }
 
     fn di(&mut self) {
-        self.disable_interrupts();
+        self.interrupt_next_inst = true;
     }
 
     fn ei(&mut self) {
@@ -1931,19 +1991,13 @@ impl Cpu {
         self.handle_interrupts();
         
         let mut inst_time = 4;
-        let (first_byte, second_byte, third_byte, _) //TODO: verify no 32bit instructions
+        let (first_byte, second_byte, third_byte, _)
             = self.read_instruction();
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte        & 0x7;
 
-        {
-            let cur_pc = self.pc;
-            if let Some(ref mut logger) = self.event_logger {
-                logger.log_exec(self.cycles, cur_pc);
-            }
-        }
-
+        
         //First check if CPU is in a running state
         if self.state == CpuState::Halt {
             //TODO: Needs extra handling with interupts
@@ -1951,6 +2005,13 @@ impl Cpu {
         } else if self.state == CpuState::Stop {
             return inst_time; //unsure of this
         } //otherwise it's in normal state:
+
+        {
+            let cur_pc = self.pc;
+            if let Some(ref mut logger) = self.event_logger {
+                logger.log_exec(self.cycles, cur_pc);
+            }
+        }
 
         trace!("REG: A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} Z:{} N:{} H:{} C:{} (SP):{:02X}{:02X} (HL):{:02X}",
                self.a, self.b, self.c, self.d, self.e, self.h, self.l, self.sp,
@@ -2307,6 +2368,7 @@ impl Cpu {
         self.inc_pc();
 
         self.cycles = (Wrapping(self.cycles) + Wrapping(inst_time as u64)).0;
+        self.maybe_disable_interrupts();
         
         inst_time
     }
@@ -2331,7 +2393,7 @@ impl Cpu {
         }
 
         if self.mem[0x147] != 0 {
-            panic!("Cartridge type {:X} is not supported!", self.mem[0x147]);
+            error!("Cartridge type {:X} is not supported!", self.mem[0x147]);
         }
 
         self.reinit_logger();

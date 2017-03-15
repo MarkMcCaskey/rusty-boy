@@ -15,10 +15,13 @@ pub const MEM_DISP_HEIGHT: i32 = 0xFFFF / MEM_DISP_WIDTH + 1; // TODO check this
 pub const CYCLES_PER_HSYNC: u64 = 114; // FIXME this is probably wrong
 
 pub const CPU_CYCLES_PER_SECOND: u64 = 4194304;
+pub const DIV_TIMER_STEPS_PER_SECOND: u64 = 16384;
+//NOTE: THIS PROBABLY INCORRECT
 pub const TIMER_STEPS_PER_SECOND: u64 = 16384;
 pub const VERT_SYNC_RATE: f32 = 59.73;
 pub const CPU_CYCLES_PER_VBLANK: u64 = ((CPU_CYCLES_PER_SECOND as f32) / VERT_SYNC_RATE) as u64;
-pub const CPU_CYCLES_PER_TIME_STEP: u64 = ((CPU_CYCLES_PER_SECOND as f32) / (TIMER_STEPS_PER_SECOND as f32)) as u64;
+pub const CPU_CYCLES_PER_TIME_STEP: u64 =
+    ((CPU_CYCLES_PER_SECOND as f32) / (TIMER_STEPS_PER_SECOND as f32)) as u64;
 
 // How long stuff stays on screen
 // TODO: Should depend on num of cpu cycles and frame delay
@@ -84,4 +87,3 @@ pub const NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 
 pub const OBJECT_ATTRIBUTE_START: u16 = 0xFE00;
 pub const OBJECT_ATTRIBUTE_END: u16 = 0xFE9F;
 pub const OBJECT_ATTRIBUTE_BLOCK_SIZE: u16 = 4;
-

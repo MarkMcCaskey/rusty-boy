@@ -320,8 +320,11 @@ pub fn binsearch_inst(vec: &Vec<(String, u16)>,
     if end < begin {
         return None;
     } else if end - begin <= 10 {
-        for x in begin..(end + 1) {
-            let (_, b) = vec[x];
+        for (x, &(_, b)) in vec.iter()
+                .enumerate()
+                .take((end + 1))
+                .skip(begin) {
+            //            let (_, b) = vec[x];
             if b == desired_pc {
                 return Some(x);
             }
@@ -367,10 +370,10 @@ fn main() {
         .author("spawnedartifact")
         .about("GB z80 disassembler")
         .arg(Arg::with_name("game")
-            .index(1)
-            .value_name("FILE")
-            .help("Specifies ROM to disassemble")
-            .takes_value(true))
+                 .index(1)
+                 .value_name("FILE")
+                 .help("Specifies ROM to disassemble")
+                 .takes_value(true))
         .get_matches();
 
 
