@@ -344,12 +344,13 @@ impl Cpu {
 
     /// The speed at which the timer runs, settable by the program by
     /// writing to 0xFF07
-    pub fn timer_frequency(&self) -> u16 {
+    pub fn timer_frequency_hz(&self) -> u16 {
+        // NOTE these values differ for SGB
         match self.mem[0xFF07] & 0x3 {
-            0 => 4,
-            1 => 262,
-            2 => 65,
-            3 => 16,
+            0 => 4096,
+            1 => 262144,
+            2 => 65536,
+            3 => 16384,
             _ => unreachable!("The impossible happened!"),
         }
     }
