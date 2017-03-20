@@ -5,12 +5,14 @@
 #[macro_use] mod macros;
 mod tests;
 pub mod constants;
+pub mod cartridge;
 
 use std::collections::VecDeque;
 use std::num::Wrapping;
 
 use disasm::*;
 use self::constants::*;
+use self::cartridge::*;
 
 pub trait CpuEventLogger {
     fn new(mem: Option<&[u8]>) -> Self;
@@ -191,6 +193,9 @@ pub struct Cpu {
 
     memory_banks: Vec<[byte; 0x4000]>,
 
+    /// Whether or not the RAM (included in some carts is writable)
+    ram_writable: bool,
+
     /// Whether or not the CPU is running, waiting for input, or stopped
     pub state: CpuState,
 
@@ -223,6 +228,7 @@ impl Clone for Cpu {
                               cartridge_type: None,
                               mbc_type: None,
                               memory_banks: vec![],
+                              ram_writable: false,
                               state: self.state,
                               input_state: self.input_state,
 
@@ -257,6 +263,7 @@ impl Cpu {
             cartridge_type: None,
             mbc_type: None,
             memory_banks: vec![],
+            ram_writable: false,
             state: CpuState::Normal,
             input_state: 0xFF,
 
@@ -284,6 +291,7 @@ impl Cpu {
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
+        self.ram_writable = false;
         // if let Some(ref mut el) = self.event_logger {
         //     el.events_deq.clear();
         // }
@@ -1026,6 +1034,14 @@ impl Cpu {
 
         if let Some(cart_type) = self.cartridge_type {
             match address {
+                0...0x1FFF if cart_type == CartridgeType::RomRam
+                    || cart_type == CartridgeType::RomRamBatt
+                    || cart_type == CartridgeType::RomMBC1Ram
+                    || cart_type == CartridgeType::RomMBC1RamBatt => {
+                        self.ram_writable = (value & 0xF) == 0b1010;
+                        debug!("Setting RAM to {}",
+                               if self.ram_writable {"on"} else {"off"});
+                    },
                 0...0x7FFF if cart_type == CartridgeType::RomOnly
                     || cart_type == CartridgeType::RomRam
                     || cart_type == CartridgeType::RomRamBatt => {
@@ -2498,6 +2514,16 @@ impl Cpu {
         } else { // to_cartridge_type failed
             error!("Could not find a cartridge type!");
         }
+
+        debug!("Cart loaded with {} ram banks",
+               match self.mem[0x149] {
+                   0 => 0,
+                   1 => 1,
+                   2 => 1,
+                   3 => 4,
+                   4 => 16,
+                   _ => {error!("Undefined value at 0x149 in ROM"); -1},
+               });
     }
 }
 
