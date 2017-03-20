@@ -1,11 +1,13 @@
 use ncurses::*;
 // use std::collections::HashMap;
 use super::language::*;
-use super::dbglanguage;
 use cpu::*;
 use cpu::constants::*;
 use super::super::disasm::*;
 use std::collections::BTreeSet;
+
+#[cfg(feature = "debugger")]
+use super::dbglanguage;
 
 const WIN_Y_DIV: i32 = 5;
 const WIN_Y_ADJ: i32 = 2;
@@ -397,6 +399,7 @@ impl Debugger {
                 format!("{:2}: 0x{:04X}", "PC", cpu.pc).as_ref());
     }
 
+    #[cfg(feature = "debugger")]
     fn dispatch_debugger_action(&mut self, cpu: &mut Cpu, da: DebuggerAction) -> String {
         match da {
             DebuggerAction::Echo { str: s } => s,

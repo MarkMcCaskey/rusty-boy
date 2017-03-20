@@ -6,17 +6,28 @@ A Gameboy emulator and related tools in Rust (with possible rendering also in C)
 Making this live on twitch.tv/maoeurk
 
 
-*Note*: This is under active development and is currently not in a
-usable state.  See the bottom of this page for information about 
-progress toward the first milestone.
+*Note*: This is under active development and is currently not in the
+most usable state.
 
 Feel free to submit issues and pull requests.
 
 ## About
 
-Project done for fun and learning about Rust and complexity management.
+Project done for fun and learning about Rust and project management.
+
+This project includes a simple assembler, disassembler,
+interpretation-based emulator, an ncurses debugger, and a suite of
+memory visualizations.
 
 Memory visualization inspired by [ICU64 / Frodo Redpill v0.1](https://icu64.blogspot.com/2009/09/first-public-release-of-icu64frodo.html)
+
+Prerelease image of memory visualization of Tetris.
+![tetris v0.1.0](images/tetris.0.1.0.png)
+
+Game, _Popup_, running with the ncurses debugger.
+![popup debugger v0.1.0](images/popup-debugger.0.1.0.png)
+
+
 
 ## Building
 
@@ -51,23 +62,3 @@ To run with the assembler and debugger, run:
 ```
 cargo run --release --features="debugger asm" -- /path/to/rom -d
 ```
-
-
-## Version 0.1 milestone
-- [ ] cpu
-  - [x] opcodes
-  - [x] dispatch
-  - [ ] interrupts
-  - [x] special registers
-- [ ] graphics
-  - [ ] background
-  - [ ] sprites
-  - [ ] window
-- [x] controller input
-- [ ] working sound
-- [x] interactive debugger
-  - [x] user interface
-  - [x] breakpoints, watch points
-  - [x] Basic usability (history, error handling)
-  - [x] parsing of proper debug "language"
-- [ ] run ROM-only game correctly

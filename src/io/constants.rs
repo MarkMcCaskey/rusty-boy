@@ -16,12 +16,10 @@ pub const CYCLES_PER_HSYNC: u64 = 114; // FIXME this is probably wrong
 
 pub const CPU_CYCLES_PER_SECOND: u64 = 4194304;
 pub const DIV_TIMER_STEPS_PER_SECOND: u64 = 16384;
-//NOTE: THIS PROBABLY INCORRECT
-pub const TIMER_STEPS_PER_SECOND: u64 = 16384;
 pub const VERT_SYNC_RATE: f32 = 59.73;
 pub const CPU_CYCLES_PER_VBLANK: u64 = ((CPU_CYCLES_PER_SECOND as f32) / VERT_SYNC_RATE) as u64;
-pub const CPU_CYCLES_PER_TIME_STEP: u64 =
-    ((CPU_CYCLES_PER_SECOND as f32) / (TIMER_STEPS_PER_SECOND as f32)) as u64;
+pub const CPU_CYCLES_PER_DIVIDER_STEP: u64 =
+    ((CPU_CYCLES_PER_SECOND as f32) / (DIV_TIMER_STEPS_PER_SECOND as f32)) as u64;
 
 // How long stuff stays on screen
 // TODO: Should depend on num of cpu cycles and frame delay

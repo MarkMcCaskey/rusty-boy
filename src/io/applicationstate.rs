@@ -38,9 +38,14 @@ pub struct ApplicationState {
     cycle_count: u64,
     prev_time: u64,
     debugger: Option<Debugger>,
+    /// counts cycles for hsync updates
     prev_hsync_cycles: u64,
-    clock_cycles: u64,
-    div_timer: u64,
+    /// counts cycles since last timer update
+    timer_cycles: u64,
+    /// counts cycles since last divider register update
+    div_timer_cycles: u64,
+    /// counts cycles since last sound update
+    sound_cycles: u64,
     initial_gameboy_state: cpu::Cpu,
     logger_handle: Option<log4rs::Handle>, // storing to keep alive
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
@@ -69,25 +74,25 @@ impl ApplicationState {
                                                             }))
             .unwrap();
 
+        
+        // Set up debugging or command-line logging
+        let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
+            info!("Running in debug mode");
+            (true, None)
+        } else {
+            let handle = log4rs::init_config(config).unwrap();
+            (false, Some(handle))
+        };
+
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
-
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
 
-
-        // Set up debugging or command-line logging
-        let (debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
-            info!("Running in debug mode");
-            (Some(Debugger::new(&gameboy)), None)
-//            (None, None)
-        } else {
-            let handle = log4rs::init_config(config).unwrap();
-            (None, Some(handle))
-        };
-
-
-
+        //delay debugger so loading rom can be logged if need be
+        let debugger = if should_debugger { Some(Debugger::new(&gameboy)) }
+        else {None};
+        
         let sdl_context = sdl2::init().unwrap();
         let device = setup_audio(&sdl_context);
         let controller = setup_controller_subsystem(&sdl_context);
@@ -160,10 +165,12 @@ impl ApplicationState {
             renderer: renderer,
             cycle_count: 0,
             prev_time: 0,
+            // FIXME sound_cycles is probably wrong or not needed
+            sound_cycles: 0,
             debugger: debugger,
             prev_hsync_cycles: 0,
-            clock_cycles: 0,
-            div_timer: 0,
+            timer_cycles: 0,
+            div_timer_cycles: 0,
             initial_gameboy_state: gbcopy,
             logger_handle: handle,
             controller: controller,
@@ -347,36 +354,26 @@ impl ApplicationState {
         };
 
         self.cycle_count += current_op_time;
-        self.clock_cycles += current_op_time;
-        let timer_khz = self.gameboy.timer_frequency();
-        let time_in_ms_per_cycle = (1000.0 / ((timer_khz as f64) * 1000.0)) as u64;
-        //self.clock_cycles += self.cycle_count;
 
-        self.div_timer += current_op_time;
-
-        // TODO: remove prev_time
-        let prev_time = self.prev_time;
-        let ticks = self.cycle_count - prev_time;
-
-        let clock_speed = 4.19 * 1000.0 * 1000.0;
-        let time_in_cpu_cycle_per_cycle =
-            ((time_in_ms_per_cycle as f64) * clock_speed) as u64;
-
-        let time_in_cpu_cycle_per_div_inc = (clock_speed * (1.0 / (DIV_TIMER_STEPS_PER_SECOND as f64))) as u64;
-
-        if self.div_timer >= time_in_cpu_cycle_per_div_inc {
+        // FF04 (DIV) Divider Register stepping
+        self.div_timer_cycles += current_op_time;
+        if self.div_timer_cycles >= CPU_CYCLES_PER_DIVIDER_STEP {
             self.gameboy.inc_div();
-            self.div_timer -= time_in_cpu_cycle_per_div_inc;
+            self.div_timer_cycles -= CPU_CYCLES_PER_DIVIDER_STEP;
         }
 
-
-        if self.clock_cycles >= time_in_cpu_cycle_per_cycle {
+        // FF05 (TIMA) Timer counter stepping
+        self.timer_cycles += current_op_time;
+        let timer_hz = self.gameboy.timer_frequency_hz();
+        let cpu_cycles_per_timer_counter_step = (CPU_CYCLES_PER_SECOND as f64 / ((timer_hz as f64))) as u64;
+        if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
             //           std::thread::sleep_ms(16);
             // trace!("Incrementing the timer!");
             self.gameboy.timer_cycle();
-            self.clock_cycles -= time_in_cpu_cycle_per_cycle;
+            self.timer_cycles -= cpu_cycles_per_timer_counter_step;
         }
 
+        // Faking hsync to get the games running
         let fake_display_hsync = true;
         if fake_display_hsync {
             // update LY respective to cycles spent execing instruction
@@ -413,8 +410,10 @@ impl ApplicationState {
         let sound_upper_limit =
             ((CPU_CYCLES_PER_SECOND as f32) / self.gameboy.channel1_sweep_time()) as u64;
 
-        if ticks >= sound_upper_limit {
-            if self.gameboy.get_sound1() {
+        if self.sound_cycles >= sound_upper_limit {
+            self.sound_cycles -= sound_upper_limit;
+            
+            if self.gameboy.get_sound1() || self.gameboy.get_sound2() {
                 self.sound_system.resume();
             } else {
                 self.sound_system.pause();
@@ -438,7 +437,7 @@ impl ApplicationState {
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
 
-        if ticks >= CPU_CYCLES_PER_VBLANK {
+        if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
             if let Some(ref mut dbg) = self.debugger {
                 dbg.step(&mut self.gameboy);
             }
@@ -465,7 +464,6 @@ impl ApplicationState {
                                 format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
                 self.screenshot_frame_num += Wrapping(1);
             }
-
             self.renderer.present();
         }
     }

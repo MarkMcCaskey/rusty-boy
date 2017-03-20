@@ -46,23 +46,6 @@ fn main() {
 
     // Set up gameboy and app state
     let mut appstate = ApplicationState::new(trace_mode, debug_mode, rom_file);
-/*
-    let mut scale = SCALE;
-
-    // Set up time
-
-    // let timer = sdl_context.timer().unwrap();
-    let mut prev_time = 0;
-
-    let mut cycle_count = 0;
-    let mut clock_cycles = 0;
-    let mut prev_hsync_cycles: u64 = 0;
-
-    // Number of frames saved as screenshots
-    let mut frame_num = Wrapping(0);
-
-    */
-
     loop {
         appstate.handle_events();
         appstate.step();
