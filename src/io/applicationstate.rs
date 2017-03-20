@@ -413,7 +413,7 @@ impl ApplicationState {
         if self.sound_cycles >= sound_upper_limit {
             self.sound_cycles -= sound_upper_limit;
             
-            if self.gameboy.get_sound1() {
+            if self.gameboy.get_sound1() || self.gameboy.get_sound2() {
                 self.sound_system.resume();
             } else {
                 self.sound_system.pause();
@@ -464,7 +464,6 @@ impl ApplicationState {
                                 format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
                 self.screenshot_frame_num += Wrapping(1);
             }
-
             self.renderer.present();
         }
     }

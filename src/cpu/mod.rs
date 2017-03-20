@@ -364,7 +364,7 @@ impl Cpu {
 
     /// The speed at which the timer runs, settable by the program by
     /// writing to 0xFF07
-    pub fn timer_frequency_hz(&self) -> u16 {
+    pub fn timer_frequency_hz(&self) -> u32 {
         // NOTE these values differ for SGB
         match self.mem[0xFF07] & 0x3 {
             0 => 4096,
@@ -1415,10 +1415,10 @@ impl Cpu {
 
         self.set_flags(new_a == 0u8,
                        true,
-                       (((old_a & 0xF) - (old_b & 0xF)) & 0xF0) != 0,
+                       ((((old_a & 0xF) - (old_b & 0xF)) as u8) & 0xF0) != 0,
 //                       (old_a & 0xF) >= (old_b & 0xF),
 //                       (old_a as i16) - (old_b as i16)
-                       ((((old_a as i16) & 0xFF) - ((old_b as i16) & 0xFF)) & 0xFF00) != 0);
+                       (((((old_a as i16) & 0xFF) - ((old_b as i16) & 0xFF)) as u16) & 0xFF00) != 0);
     }
 
     fn sbc(&mut self, reg: CpuRegister) {
@@ -1431,10 +1431,10 @@ impl Cpu {
 
         self.set_flags(new_a == 0u8,
                        true,
-                       (((old_a & 0xF) - ((old_b & 0xF) + cf)) & 0xF0) != 0,
+                       ((((old_a & 0xF) - ((old_b & 0xF) + cf)) as u8) & 0xF0) != 0,
 //                       (old_a & 0xF) >= (old_b & 0xF),
 //                       (old_a as i16) - (old_b as i16)
-                       ((((old_a as i16) & 0xFF) - (((old_b as i16)  & 0xFF) + (cf as i16))) & 0xFF00) != 0);
+                       (((((old_a as i16) & 0xFF) - (((old_b as i16)  & 0xFF) + (cf as i16))) as u16) & 0xFF00) != 0);
     }
 
     fn and(&mut self, reg: CpuRegister) {
@@ -1718,7 +1718,6 @@ impl Cpu {
 
     fn rlc(&mut self, reg: CpuRegister) {
         let reg_val = self.access_register(reg).expect("invalid register");
-        let old_carry = ((self.f & CL) as u8) >> 4;
         let old_bit7 = (reg_val >> 7) & 1;
 
         let new_reg = ((reg_val << 1) & 0xFEu8) | old_bit7;// | old_carry;
@@ -2505,7 +2504,7 @@ impl Cpu {
                         self.memory_banks.push(mem_bank);
                     }
                 }
-                otherwise => {
+                _ => {
                     error!("Cartridge type {:?} is not supported!", cart_type);
                 }
                 
