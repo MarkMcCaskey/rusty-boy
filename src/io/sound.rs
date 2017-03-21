@@ -6,6 +6,7 @@ pub struct GBSound {
     /// The number of samples sent to the sound device every second.
     pub out_freq: f32, // FIXME maybe this is not needed to be stored here?
     pub channel1: SquareWave,
+    pub channel2: SquareWave,
 }
 
 
@@ -51,7 +52,10 @@ impl AudioCallback for GBSound {
 
     fn callback(&mut self, out: &mut [f32]) {
         for x in out.iter_mut() {
+            // FIXME is just adding them is the right way to do it?
+            // Maybe for floats it is?
             *x = self.channel1.generate_sample();
+            *x += self.channel2.generate_sample();
             // TODO mix other channels here
         }
     }
@@ -82,7 +86,15 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<GBSound> {
                 volume: 0.025,
                 wave_duty: 0.25,
                 add: true,
+            },
+            channel2: SquareWave {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.025,
+                wave_duty: 0.25,
+                add: true,
             }
+
         }
     }).unwrap()
 }

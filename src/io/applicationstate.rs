@@ -420,10 +420,14 @@ impl ApplicationState {
             }
 
             let mut sound_system = self.sound_system.lock();
+            // TODO move this to channel.update() or something
             sound_system.channel1.wave_duty = self.gameboy.channel1_wave_pattern_duty();
-
             let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - self.gameboy.channel1_frequency() as f32));
             sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
+
+            //sound_system.channel2.wave_duty = self.gameboy.channel2_wave_pattern_duty();
+            let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - self.gameboy.channel2_frequency() as f32));
+            sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
 
         }
 
