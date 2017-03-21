@@ -55,7 +55,7 @@ impl Drawable for MemVisState {
         // draw_memory_events(renderer, cpu);
         let dst_rect = Rect::new(0, 0, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32);
 
-        if let Some(ref mut logger) = *(&mut cpu.event_logger) {
+        if let Some(ref mut logger) = cpu.event_logger {
             let depth = COLOR_DEPTH;
             let memvis_pitch = MEM_DISP_WIDTH as usize * depth;
 

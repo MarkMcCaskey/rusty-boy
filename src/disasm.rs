@@ -218,9 +218,9 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                             1 => {
                                 // Prefix
                                 prefix();
-                                let x = (second_byte >> 6) & 0b011;
-                                let y = (second_byte >> 3) & 0b111;
-                                let z = (second_byte >> 0) & 0b111;
+                                let (x, y, z) = ((second_byte >> 6) & 0b011,
+                                                 (second_byte >> 3) & 0b111,
+                                                 second_byte & 0b111);
 
                                 // WARNING: a8, d8, d16, etc. are broken here
                                 match x {
@@ -312,7 +312,7 @@ pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16
     ret
 }
 
-pub fn binsearch_inst(vec: &Vec<(String, u16)>,
+pub fn binsearch_inst(vec: &[(String, u16)],
                       desired_pc: u16,
                       begin: usize,
                       end: usize)
@@ -322,7 +322,7 @@ pub fn binsearch_inst(vec: &Vec<(String, u16)>,
     } else if end - begin <= 10 {
         for (x, &(_, b)) in vec.iter()
                 .enumerate()
-                .take((end + 1))
+                .take(end + 1)
                 .skip(begin) {
             //            let (_, b) = vec[x];
             if b == desired_pc {

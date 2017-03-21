@@ -365,7 +365,7 @@ impl ApplicationState {
         // FF05 (TIMA) Timer counter stepping
         self.timer_cycles += current_op_time;
         let timer_hz = self.gameboy.timer_frequency_hz();
-        let cpu_cycles_per_timer_counter_step = (CPU_CYCLES_PER_SECOND as f64 / ((timer_hz as f64))) as u64;
+        let cpu_cycles_per_timer_counter_step = (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
         if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
             //           std::thread::sleep_ms(16);
             // trace!("Incrementing the timer!");

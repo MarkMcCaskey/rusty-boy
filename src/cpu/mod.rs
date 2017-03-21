@@ -1376,7 +1376,7 @@ impl Cpu {
 
         self.set_flags(false,
                        false,
-                       (((old_sp as i16) & 0xF) + ((n as i16) & 0xF) & 0xF0) != 0,
+                       ((((old_sp as i16) & 0xF) + ((n as i16) & 0xF)) & 0xF0) != 0,
                        ((((old_sp as i16) & 0xFF) + ((n as i16) & 0xFF)) & 0xF00) != 0);
     }
     
