@@ -33,7 +33,7 @@ use std::num::Wrapping;
 pub struct ApplicationState {
     pub gameboy: cpu::Cpu,
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
-    sound_system: AudioDevice<Wave>,
+    sound_system: AudioDevice<GBSound>,
     renderer: render::Renderer<'static>,
     cycle_count: u64,
     prev_time: u64,
@@ -419,18 +419,11 @@ impl ApplicationState {
                 self.sound_system.pause();
             }
 
-
             let mut sound_system = self.sound_system.lock();
-            sound_system.wave_duty = self.gameboy.channel1_wave_pattern_duty();
+            sound_system.channel1.wave_duty = self.gameboy.channel1_wave_pattern_duty();
 
-            let channel1_freq = 1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32);
-            let old_phase = sound_system.phase;
-            sound_system.phase_inc =
-                old_phase * ((2 << (self.gameboy.channel1_sweep_shift())) as f32);
-            sound_system.phase = channel1_freq;
-//                (1.0 / (131072.0 / (2048 - self.gameboy.channel1_frequency()) as f32));
-            sound_system.add = self.gameboy.channel1_sweep_increase();
-            //            131072 / (2048 - gb)
+            let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - self.gameboy.channel1_frequency() as f32));
+            sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
 
         }
 

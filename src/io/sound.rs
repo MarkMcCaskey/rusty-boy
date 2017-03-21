@@ -2,11 +2,18 @@
 use sdl2;
 use sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
 
+pub struct GBSound {
+    /// The number of samples sent to the sound device every second.
+    pub out_freq: f32, // FIXME maybe this is not needed to be stored here?
+    pub channel1: SquareWave,
+}
+
+
 /// Contains information for a single channel of audio
 ///
 /// Envelopes and sweeps should be implemented as traits to allow this to
 /// remain generic
-pub struct Wave {
+pub struct SquareWave {
     /// The amount by which the `phase` is changed at each callback
     pub phase_inc: f32,
 
@@ -23,28 +30,36 @@ pub struct Wave {
     pub add: bool,
 }
 
-impl AudioCallback for Wave {
+trait SoundChannel {
+    fn generate_sample(&mut self) -> f32;
+}
+
+impl SoundChannel for SquareWave {
+    fn generate_sample(&mut self) -> f32 {
+        let out = if self.phase <= self.wave_duty {
+            self.volume
+        } else {
+            -self.volume
+        };
+        self.phase = (self.phase + self.phase_inc) % 1.0;
+        out
+    }
+}
+
+impl AudioCallback for GBSound {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
         for x in out.iter_mut() {
-
-            *x = match self.phase {
-                v @ 0.0...1.0 if v <= self.wave_duty => v * self.volume,
-                _ => -self.volume,
-            };
-            self.phase = if self.add {
-                (self.phase + self.phase_inc)
-            } else {
-                (self.phase - self.phase_inc)
-            } % 1.0;
+            *x = self.channel1.generate_sample();
+            // TODO mix other channels here
         }
     }
 }
 
 /// Creates a device from a context
 /// May have to be changed to allow each GB channel to have its own `Wave`
-pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<Wave> {
+pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<GBSound> {
     // set up audio
     let audio_subsystem = sdl_context.audio().unwrap();
 
@@ -55,17 +70,19 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<Wave> {
     };
 
     audio_subsystem.open_playback(None, &desired_spec, |spec| {
-            // Show obtained AudioSpec
-            println!("{:?}", spec);
-
-            // initialize the audio callback
-            Wave {
+        // Show obtained AudioSpec
+        println!("{:?}", spec);
+        
+        // initialize the audio callback
+        GBSound {
+            out_freq: spec.freq as f32,
+            channel1: SquareWave {
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
                 volume: 0.025,
                 wave_duty: 0.25,
                 add: true,
             }
-        })
-        .unwrap()
+        }
+    }).unwrap()
 }
