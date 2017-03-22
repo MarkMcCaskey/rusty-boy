@@ -1,6 +1,21 @@
 use std::ops::{Index, IndexMut};
 use cpu::constants::*;
 
+/// A thing that is like a Cartridge
+pub trait Cartridgey {
+    fn load(rom_file: &str) -> Cartridge;
+
+    fn read_rom_value(&self, index: u16) -> byte;
+
+    fn read_ram_value(&self, index: u16) -> byte {
+        panic!("This cartridge type does not provide RAM")
+    }
+
+    fn write_ram_value(&mut self, index: u16, value: byte) {
+        panic!("This cartridge type does not provide RAM")
+    }
+}
+
 /// The things that are constant between all types of cartridges
 /// This also includes things like video ram
 /// Thus this struct is best understood as dealing with any and all things
@@ -9,19 +24,63 @@ use cpu::constants::*;
 /// TODO: memory locking during certain periods (i.e. the rest of the virtual
 /// memory system...)
 pub struct Cartridge {
-    /// top 16kb
     memory_bank0: [byte; 0x4000],
     cart_sub: CartridgeSubType,
-    /// 8kb video ram
-    video_ram: [byte; 0x2000],
-    /// 8kb internal ram
-    internal_ram: [byte; 0x2000],
-    /// sprite attribute memory
-    oam: [byte; 0xA0],
+}
 
-    /// 0xFF80-0xFFFF
-    internal_ram2: [byte; 0x80],
-    interrupt_flag: byte,
+impl Cartridgey for Cartridge {
+    fn load(file_path: &str) -> Cartridge {
+        use std::fs::File;
+        use std::io::Read;
+
+        let mut rom = File::open(file_path).expect("Could not open rom file");
+        let mut rom_buffer: [u8; 0x4000] = [0u8; 0x4000];
+
+        rom.read(&mut rom_buffer).unwrap();
+
+        if let Some(cart_type) = to_cartridge_type(rom_buffer[0x147]) {
+
+            match cart_type {
+                //TODO: verify this
+                CartridgeType::RomOnly |
+                CartridgeType::RomRam |
+                CartridgeType::RomRamBatt => {
+                    let mut rom_buffer2: [u8; 0x4000] = [0u8; 0x4000];
+                    rom.read(&mut rom_buffer2).unwrap();
+
+                    Cartridge {
+                        memory_bank0: rom_buffer,
+                        cart_sub: CartridgeSubType::ROM_only { memory_bank1: rom_buffer2 },
+                    }
+
+                }
+                _ => {
+                    panic!("Cartridge type {:?} is not supported!", cart_type);
+                }
+
+            }
+        } else {
+            // to_cartridge_type failed
+            panic!("Could not find a cartridge type!");
+        }
+
+        /*        debug!("Cart loaded with {} ram banks",
+               match self.mem[0x149] {
+                   0 => 0,
+                   1 => 1,
+                   2 => 1,
+                   3 => 4,
+                   4 => 16,
+                   _ => {
+            error!("Undefined value at 0x149 in ROM");
+            -1
+        }
+               });*/
+    }
+
+    fn read_rom_value(&self, index: u16) -> byte {
+        unimplemented!()
+    }
 }
 
 pub enum CartridgeSubType {
@@ -42,6 +101,7 @@ pub enum CartridgeSubType {
         //top two bits (21 & 22?) used for selecting RAM in 4_32 mode
         mem_bank_selector: u32,
     },
+    Dummy,
 }
 
 pub enum MBC1_type {
@@ -85,7 +145,7 @@ impl Index<u16> for Cartridge {
             // switchable RAM bank
             0xA000...0xBFFF => unimplemented!(),
             //internal ram
-            0xC000...0xDFFF => &self.internal_ram[(ind - 0xC000) as usize],
+            /*0xC000...0xDFFF => &self.internal_ram[(ind - 0xC000) as usize],
             //echo of internal ram
             0xE000...0xFDFF => &self.internal_ram[(ind - 0xE000) as usize],
             // OAM
@@ -101,7 +161,7 @@ impl Index<u16> for Cartridge {
             0xFFFF => {
                 //TODO:
                 &self.interrupt_flag
-            }
+            }*/
             _ => {
                 panic!("Address 0x{:X} cannot be read from", ind);
             }
@@ -110,7 +170,51 @@ impl Index<u16> for Cartridge {
 }
 
 impl Cartridge {
-    pub fn index_set(&mut self, ind: u16, val: u8) {
+    pub fn reset(&mut self) {
+        unimplemented!();
+        /*self.mem[0xFF05] = 0x00;
+        self.mem[0xFF06] = 0x00;
+        self.mem[0xFF07] = 0x00;
+        self.mem[0xFF10] = 0x80;
+        self.mem[0xFF11] = 0xBF;
+        self.mem[0xFF12] = 0xF3;
+        self.mem[0xFF14] = 0xBF;
+        self.mem[0xFF16] = 0x3F;
+        self.mem[0xFF17] = 0x00;
+        self.mem[0xFF19] = 0xBF;
+        self.mem[0xFF1A] = 0x7F;
+        self.mem[0xFF1B] = 0xFF;
+        self.mem[0xFF1C] = 0x9F;
+        self.mem[0xFF1E] = 0xBF;
+        self.mem[0xFF20] = 0xFF;
+        self.mem[0xFF21] = 0x00;
+        self.mem[0xFF22] = 0x00;
+        self.mem[0xFF23] = 0xBF;
+        self.mem[0xFF24] = 0x77;
+        self.mem[0xFF25] = 0xF3;
+        self.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
+        self.mem[0xFF40] = 0x91;
+        self.mem[0xFF42] = 0x00;
+        self.mem[0xFF43] = 0x00;
+        self.mem[0xFF45] = 0x00;
+        self.mem[0xFF47] = 0xFC;
+        self.mem[0xFF48] = 0xFF;
+        self.mem[0xFF49] = 0xFF;
+        self.mem[0xFF4A] = 0x00;
+        self.mem[0xFF4B] = 0x00;
+        self.mem[0xFFFF] = 0x00;
+        */
+    }
+
+    pub fn new() -> Cartridge {
+        Cartridge {
+            memory_bank0: [0u8; 0x4000],
+            cart_sub: CartridgeSubType::Dummy,
+        }
+    }
+
+
+    /*    pub fn index_set(&mut self, ind: u16, val: u8) {
         match self.cart_sub {
             CartridgeSubType::ROM_only { memory_bank1: membank1 } => {
                 match ind as usize {
@@ -160,4 +264,5 @@ impl Cartridge {
             _ => unimplemented!(),
         }
     }
+    */
 }

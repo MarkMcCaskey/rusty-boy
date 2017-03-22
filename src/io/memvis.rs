@@ -199,7 +199,9 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     let mut x = 0;
     let mut y = 0;
 
-    for &p in gameboy.mem.iter() {
+    unimplemented!()
+
+    /*for &p in gameboy.mem.iter() {
 
         use sdl2::pixels::*;
 
@@ -227,6 +229,7 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     let pc = gameboy.pc;
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     renderer.draw_point(addr_to_point(pc)).unwrap();
+    */
 }
 
 
@@ -403,7 +406,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
 
 fn print_address_info(pc: MemAddr, cpu: &Cpu) {
     let pc = pc as usize;
-    let mem = cpu.mem;
+    let mem = cpu.mem.clone();
     let b1 = mem[pc + 1];
     let b2 = mem[pc + 2];
     let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);

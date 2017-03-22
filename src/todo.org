@@ -92,3 +92,13 @@ customize zone (m-x find-variable zone-programs) Kappa
 ** DONE Type annotate literals
 ** DONE abstract logic in main
    
+* TODO Refactor
+** TODO CPU
+*** TODO Cartridge
+**** TODO Memory visualization
+**** TODO Special registers
+**** TODO Normal registers
+** TODO IO
+*** TODO Sound
+*** TODO Drawing
+*** TODO Related tools

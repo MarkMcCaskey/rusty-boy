@@ -6,6 +6,7 @@
 mod tests;
 pub mod constants;
 pub mod cartridge;
+pub mod memory;
 
 use std::collections::VecDeque;
 use std::num::Wrapping;
@@ -13,6 +14,7 @@ use std::num::Wrapping;
 use disasm::*;
 use self::constants::*;
 use self::cartridge::*;
+use self::memory::*;
 
 pub trait CpuEventLogger {
     fn new(mem: Option<&[u8]>) -> Self;
@@ -185,16 +187,9 @@ pub struct Cpu {
     // Interrupt Master Enable flag (aka "Interrupt Flip-Flop")
     ime: bool,
     pub pc:  MemAddr,
-    pub mem: [byte; MEM_ARRAY_SIZE],
 
-    cartridge_type: Option<CartridgeType>,
-    /// Used to determine "which kind of MBC1 it is"
-    mbc_type: Option<MBCType>,
-
-    memory_banks: Vec<[byte; 0x4000]>,
-
-    /// Whether or not the RAM (included in some carts is writable)
-    ram_writable: bool,
+    /// Handles all memory read/writes
+    pub mem: Memory,
 
     /// Whether or not the CPU is running, waiting for input, or stopped
     pub state: CpuState,
@@ -224,11 +219,7 @@ impl Clone for Cpu {
                               sp: self.sp,
                               ime: self.ime,
                               pc: self.pc,
-                              mem: [0; MEM_ARRAY_SIZE],
-                              cartridge_type: None,
-                              mbc_type: None,
-                              memory_banks: vec![],
-                              ram_writable: false,
+                              mem: self.mem.clone(),
                               state: self.state,
                               input_state: self.input_state,
 
@@ -259,18 +250,15 @@ impl Cpu {
             sp:  0xFFFE,
             ime: true, // TODO verify initial
             pc:  0,
-            mem: [0; MEM_ARRAY_SIZE],
-            cartridge_type: None,
-            mbc_type: None,
-            memory_banks: vec![],
-            ram_writable: false,
+            mem: Memory::new(),
             state: CpuState::Normal,
             input_state: 0xFF,
 
-            event_logger: Some(DeqCpuEventLogger::new(None)),
+            event_logger: None, //Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
             interrupt_next_inst: false,
         };
+        panic!("ayyy lmao");
         /// The reset state is the default state of the CPU
         new_cpu.reset();
 
@@ -291,52 +279,21 @@ impl Cpu {
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
-        self.ram_writable = false;
         // if let Some(ref mut el) = self.event_logger {
         //     el.events_deq.clear();
         // }
         info!("reset");
-        self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
+        self.event_logger = None;//Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
 
         //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
         self.set_de(0x00D8);
         self.set_hl(0x014D);
-        self.mem[0xFF05] = 0x00;
-        self.mem[0xFF06] = 0x00;
-        self.mem[0xFF07] = 0x00;
-        self.mem[0xFF10] = 0x80;
-        self.mem[0xFF11] = 0xBF;
-        self.mem[0xFF12] = 0xF3;
-        self.mem[0xFF14] = 0xBF;
-        self.mem[0xFF16] = 0x3F;
-        self.mem[0xFF17] = 0x00;
-        self.mem[0xFF19] = 0xBF;
-        self.mem[0xFF1A] = 0x7F;
-        self.mem[0xFF1B] = 0xFF;
-        self.mem[0xFF1C] = 0x9F;
-        self.mem[0xFF1E] = 0xBF;
-        self.mem[0xFF20] = 0xFF;
-        self.mem[0xFF21] = 0x00;
-        self.mem[0xFF22] = 0x00;
-        self.mem[0xFF23] = 0xBF;
-        self.mem[0xFF24] = 0x77;
-        self.mem[0xFF25] = 0xF3;
-        self.mem[0xFF26] = 0xF1; //F1 for GB // TODOA:
-        self.mem[0xFF40] = 0x91;
-        self.mem[0xFF42] = 0x00;
-        self.mem[0xFF43] = 0x00;
-        self.mem[0xFF45] = 0x00;
-        self.mem[0xFF47] = 0xFC;
-        self.mem[0xFF48] = 0xFF;
-        self.mem[0xFF49] = 0xFF;
-        self.mem[0xFF4A] = 0x00;
-        self.mem[0xFF4B] = 0x00;
-        self.mem[0xFFFF] = 0x00;
     }
 
     pub fn reinit_logger(&mut self) {
-        self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
+        unimplemented!()
+    //    self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
     }
     
     pub fn toggle_logger(&mut self) {
@@ -376,7 +333,7 @@ impl Cpu {
     }
 
     pub fn get_bg_tiles(&self) -> Vec<byte> {
-        let mut ret = vec![];
+        /*let mut ret = vec![];
         for &i in self.mem[0x8800..0x9800].iter() {
             ret.push(((i as byte) >> 6) & 0x3u8);
             ret.push(((i as byte) >> 4) & 0x3u8);
@@ -384,7 +341,8 @@ impl Cpu {
             ret.push( (i as byte)       & 0x3u8);
         }
 
-        ret
+        ret*/
+        unimplemented!()
     }
 
     ///gets the next pixel value to be drawn to the screen and updates
@@ -1026,6 +984,7 @@ impl Cpu {
         It is read at 8192Hz, one bit at a time if external clock is used.
         See documentation and read carefully before implementing this.
          */
+        /*
         if let Some(ref mut logger) = self.event_logger {
             logger.log_write(self.cycles, address, value);
         }
@@ -1132,6 +1091,8 @@ impl Cpu {
             n => self.mem[n] = value,
             }
         }
+        */
+        unimplemented!()
     }
 
     pub fn access_register(&self, reg: CpuRegister) -> Option<byte> {
@@ -1167,6 +1128,8 @@ impl Cpu {
 
 
     fn load_bank(&mut self, bank_num: u8) {
+        unimplemented!()
+        /*
         if let Some(cart_type) = self.cartridge_type {
             match cart_type {
                 CartridgeType::RomMBC1 |
@@ -1191,6 +1154,7 @@ impl Cpu {
         } else { //could not find cartridge type
             error!("No cartridge type specified! Cannot switch banks");
         }
+            */
     }
 
     fn ldnnn(&mut self, nn: CpuRegister, n: u8) {
@@ -2460,6 +2424,9 @@ impl Cpu {
     }
 
     pub fn load_rom(&mut self, file_path: &str) {
+        self.mem.load(file_path);
+        //unimplemented!()
+            /*
         use std::fs::File;
         use std::io::Read;
 
@@ -2523,7 +2490,9 @@ impl Cpu {
                    4 => 16,
                    _ => {error!("Undefined value at 0x149 in ROM"); -1},
                });
+            */
     }
+           
 }
 
 
