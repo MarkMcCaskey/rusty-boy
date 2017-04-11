@@ -93,13 +93,15 @@ impl Cartridgey for Cartridge {
                });*/
     }
 
+    #[allow(unused_variables)]
     fn read_rom_value(&self, index: u16) -> byte {
-        3
+        unimplemented!()
         //        *self.index(index)
     }
-    fn read_ram_value(&self, index: u16) -> byte {
 
-        4
+    #[allow(unused_variables)]
+    fn read_ram_value(&self, index: u16) -> byte {
+        unimplemented!()
         //*self.index(index)
         //panic!("This cartridge type does not provide RAM")
     }
@@ -223,14 +225,14 @@ impl Index<u16> for Cartridge {
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::SixteenEight,
                                                   memory_banks: ref mb,
-                                                  ram_active: ra,
-                                                  mem_bank_selector: index }) => {
+                                                  mem_bank_selector: index,
+                                                  .. }) => {
                         &mb[((ind - 0x4000) as usize) + ((index * 0x4000) as usize)]
                     }
-                    Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,
+                    Some(CartridgeSubType::Mbc1 { /*memory_model: Mbc1Type::FourThirtytwo,
                                                   memory_banks: ref mb,
                                                   ram_active: ra,
-                                                  mem_bank_selector: index }) => {
+                                                  mem_bank_selector: index*/ .. }) => {
                         panic!("Indexing {:X}", ind)
                     }
 
