@@ -84,11 +84,13 @@ impl ApplicationState {
             (false, Some(handle))
         };
 
+
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
-        panic!("made a new gameboy");
+        //panic!("made a new gameboy");
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
+
 
         //delay debugger so loading rom can be logged if need be
         let debugger = if should_debugger {
@@ -104,12 +106,14 @@ impl ApplicationState {
         // Set up graphics and window
         trace!("Opening window");
         let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window(gameboy.get_game_name().as_str(),
-                                            RB_SCREEN_WIDTH,
-                                            RB_SCREEN_HEIGHT)
-            .position_centered()
-            .build()
-            .unwrap();
+        let window = match video_subsystem.window(gameboy.get_game_name().as_str(),
+                                     RB_SCREEN_WIDTH,
+                                     RB_SCREEN_HEIGHT)
+                  .position_centered()
+                  .build() {
+            Ok(v) => v,
+            Err(e) => panic!("Fatal error: {}", e),
+        };
 
         let renderer = window.renderer()
             .accelerated()
@@ -133,6 +137,7 @@ impl ApplicationState {
                 vis: Box::new(vis),
             }
         };
+
 
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
@@ -348,7 +353,6 @@ impl ApplicationState {
     /// Runs the game application forward one "unit of time"
     /// TODO: elaborate
     pub fn step(&mut self) {
-
         // handle_events(&mut sdl_context, &mut gameboy);
 
         let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
@@ -391,6 +395,7 @@ impl ApplicationState {
                 self.prev_hsync_cycles += CYCLES_PER_HSYNC;
             }
         }
+
 
         // Gameboy screen is 256x256
         // only 160x144 are displayed at a time

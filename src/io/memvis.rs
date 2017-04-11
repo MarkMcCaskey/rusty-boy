@@ -199,9 +199,8 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     let mut x = 0;
     let mut y = 0;
 
-    unimplemented!()
-
-    /*for &p in gameboy.mem.iter() {
+    for i in 0..0xFFFF {
+        let p = gameboy.mem[i];
 
         use sdl2::pixels::*;
 
@@ -229,7 +228,7 @@ pub fn draw_memory_values(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     let pc = gameboy.pc;
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     renderer.draw_point(addr_to_point(pc)).unwrap();
-    */
+
 }
 
 

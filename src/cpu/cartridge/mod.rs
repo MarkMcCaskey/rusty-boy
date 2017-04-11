@@ -1,16 +1,19 @@
 use std::ops::{Index, IndexMut};
 use cpu::constants::*;
 
+
 /// A thing that is like a Cartridge
 pub trait Cartridgey {
     fn load(rom_file: &str) -> Cartridge;
 
     fn read_rom_value(&self, index: u16) -> byte;
 
+    #[allow(unused_variables)]
     fn read_ram_value(&self, index: u16) -> byte {
         panic!("This cartridge type does not provide RAM")
     }
 
+    #[allow(unused_variables)]
     fn write_ram_value(&mut self, index: u16, value: byte) {
         panic!("This cartridge type does not provide RAM")
     }
@@ -25,8 +28,9 @@ pub trait Cartridgey {
 /// memory system...)
 pub struct Cartridge {
     memory_bank0: [byte; 0x4000],
-    cart_sub: CartridgeSubType,
+    cart_sub: Option<CartridgeSubType>,
 }
+
 
 impl Cartridgey for Cartridge {
     fn load(file_path: &str) -> Cartridge {
@@ -36,7 +40,12 @@ impl Cartridgey for Cartridge {
         let mut rom = File::open(file_path).expect("Could not open rom file");
         let mut rom_buffer: [u8; 0x4000] = [0u8; 0x4000];
 
-        rom.read(&mut rom_buffer).unwrap();
+        match rom.read_exact(&mut rom_buffer) {
+            Ok(_) => (),
+            Err(e) => error!("Could not read from ROM: {:?}", e),
+        }
+
+        info!("RAM bank value: {:X}", rom_buffer[0x149]);
 
         if let Some(cart_type) = to_cartridge_type(rom_buffer[0x147]) {
 
@@ -46,11 +55,17 @@ impl Cartridgey for Cartridge {
                 CartridgeType::RomRam |
                 CartridgeType::RomRamBatt => {
                     let mut rom_buffer2: [u8; 0x4000] = [0u8; 0x4000];
-                    rom.read(&mut rom_buffer2).unwrap();
+                    match rom.read_exact(&mut rom_buffer2) {
+                        Ok(_) => (),
+                        Err(e) => error!("Could not read from ROM bank: {:?}", e),
+                    }
 
                     Cartridge {
                         memory_bank0: rom_buffer,
-                        cart_sub: CartridgeSubType::ROM_only { memory_bank1: rom_buffer2 },
+                        cart_sub: Some(CartridgeSubType::RomOnly {
+                                           memory_bank1: rom_buffer2,
+                                           ram_bank: [0u8; 0x2000],
+                                       }),
                     }
 
                 }
@@ -79,13 +94,28 @@ impl Cartridgey for Cartridge {
     }
 
     fn read_rom_value(&self, index: u16) -> byte {
-        unimplemented!()
+        3
+        //        *self.index(index)
+    }
+    fn read_ram_value(&self, index: u16) -> byte {
+
+        4
+        //*self.index(index)
+        //panic!("This cartridge type does not provide RAM")
+    }
+
+    fn write_ram_value(&mut self, index: u16, value: byte) {
+        self[index] = value;
+        //panic!("This cartridge type does not provide RAM")
     }
 }
 
 pub enum CartridgeSubType {
-    ROM_only { memory_bank1: [byte; 0x4000] },
-    MBC1 {
+    RomOnly {
+        memory_bank1: [byte; 0x4000],
+        ram_bank: [byte; 0x2000],
+    },
+    Mbc1 {
         /*
         MBC1 has two modes:
           * 16mbit ROM (with 128 banks), 8KB RAM (1 bank)
@@ -95,21 +125,86 @@ pub enum CartridgeSubType {
         //addressing 16mbit = 2MB, (1kb = 10) (8kb = 13) (16kb = 14)
         //(2mb = 21)
         //21bits to index fully, because first 0x4000 address are sep
-        memory_model: MBC1_type,
-        memory_banks: [byte; (2 << 13) + (2 << 21) - 0x4000],
+        memory_model: Mbc1Type,
+        memory_banks: [byte; 0x4000], //(2 << 13) + (2 << 21) - 0x4000],
         ram_active: bool,
         //top two bits (21 & 22?) used for selecting RAM in 4_32 mode
         mem_bank_selector: u32,
     },
-    Dummy,
 }
 
-pub enum MBC1_type {
-    sixteen_eight,
-    four_thirtytwo,
+pub enum Mbc1Type {
+    SixteenEight,
+    FourThirtytwo,
 }
 
-const ref_zero: u8 = 0;
+const REF_ZERO: &'static u8 = &0;
+
+//for reading and writing
+impl IndexMut<u16> for Cartridge {
+    fn index_mut(&mut self, ind: u16) -> &mut byte {
+        trace!("indexmut: {:X}", ind);
+        match ind {
+            0x0000...0x3FFF => &mut self.memory_bank0[ind as usize],
+            0x4000...0x7FFF => {
+                match self.cart_sub {
+                    Some(CartridgeSubType::RomOnly { memory_bank1: ref mut membank1, .. }) => {
+                        &mut membank1[(ind - 0x4000) as usize]
+                    }
+                    Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::SixteenEight,
+                                             memory_banks: ref mut mb,
+                                             mem_bank_selector: index,
+                                             .. }) => {
+                        &mut mb[((ind - 0x4000) as usize) + ((index * 0x4000) as usize)]
+                    }
+                    Some(CartridgeSubType::Mbc1 { .. /*memory_model: Mbc1Type::FourThirtytwo,
+                                             memory_banks: ref mb,
+                                             //ram_active: ra,
+                                             mem_bank_selector: index*/ }) => unimplemented!(),
+
+                    _ => unimplemented!(),
+                }
+            }
+            // Video RAM:
+            0x8000...0x9FFF => {
+                //TODO: block needs to handle if reads should be blocked
+                panic!("At access video ram");
+            }
+            // switchable RAM bank
+            0xA000...0xBFFF => {
+                match self.cart_sub {
+                    Some(CartridgeSubType::RomOnly { ram_bank: ref mut rambank, .. }) => {
+                        //error!("Writing to 0x{:X} does not do anything on a ROM only cartridge",
+                        //      ind);
+                        &mut rambank[(ind - 0xA000) as usize]
+                    }
+                    _ => panic!("at switchable ram bank"),
+                }
+            }
+            //internal ram
+            /*0xC000...0xDFFF => &self.internal_ram[(ind - 0xC000) as usize],
+            //echo of internal ram
+            0xE000...0xFDFF => &self.internal_ram[(ind - 0xE000) as usize],
+            // OAM
+            0xFE00...0xFF9F => &self.oam[(ind - 0xFE00) as usize],
+            // IO ports
+            0xFF00...0xFF4B => {
+                //TODO:
+                unimplemented!()
+            }
+            //more internal RAM
+            0xFF80...0xFFFE => &self.internal_ram2[(ind - 0xFF80) as usize],
+            //interrupt flag
+            0xFFFF => {
+                //TODO:
+                &self.interrupt_flag
+            }*/
+            _ => {
+                panic!("Address 0x{:X} cannot be read from", ind);
+            }
+        }
+    }
+}
 
 //for reading
 impl Index<u16> for Cartridge {
@@ -117,33 +212,45 @@ impl Index<u16> for Cartridge {
 
     fn index<'a>(&'a self, ind: u16) -> &'a byte {
         match ind {
-            0x0000...0x3FFF => &self.memory_bank0[ind as usize],
+            0x0000...0x3FFF => {
+                trace!("In the right place {:X}", self.memory_bank0.len());
+                &(self.memory_bank0[ind as usize])
+            }
             0x4000...0x7FFF => {
                 match self.cart_sub {
-                    CartridgeSubType::ROM_only { memory_bank1: ref membank1 } => {
+                    Some(CartridgeSubType::RomOnly { memory_bank1: ref membank1, .. }) => {
                         &membank1[(ind - 0x4000) as usize]
                     }
-                    CartridgeSubType::MBC1 { memory_model: MBC1_type::sixteen_eight,
-                                             memory_banks: ref mb,
-                                             ram_active: ra,
-                                             mem_bank_selector: index } => {
+                    Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::SixteenEight,
+                                                  memory_banks: ref mb,
+                                                  ram_active: ra,
+                                                  mem_bank_selector: index }) => {
                         &mb[((ind - 0x4000) as usize) + ((index * 0x4000) as usize)]
                     }
-                    CartridgeSubType::MBC1 { memory_model: MBC1_type::four_thirtytwo,
-                                             memory_banks: ref mb,
-                                             ram_active: ra,
-                                             mem_bank_selector: index } => unimplemented!(),
+                    Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,
+                                                  memory_banks: ref mb,
+                                                  ram_active: ra,
+                                                  mem_bank_selector: index }) => {
+                        panic!("Indexing {:X}", ind)
+                    }
 
-                    _ => unimplemented!(),
+                    _ => panic!("Indexing {:X}", ind),
                 }
             }
             // Video RAM:
             0x8000...0x9FFF => {
-                //TODO: block reads if reads should be blocked
-                unimplemented!()
+                //TODO: block needs to handle if reads should be blocked
+                panic!("At access video ram");
             }
             // switchable RAM bank
-            0xA000...0xBFFF => unimplemented!(),
+            0xA000...0xBFFF => {
+                match self.cart_sub {
+                    Some(CartridgeSubType::RomOnly { ram_bank: ref rambank, .. }) => {
+                        &rambank[(ind - 0xA000) as usize]
+                    }
+                    _ => panic!("at switchable ram bank"),
+                }
+            }
             //internal ram
             /*0xC000...0xDFFF => &self.internal_ram[(ind - 0xC000) as usize],
             //echo of internal ram
@@ -171,7 +278,7 @@ impl Index<u16> for Cartridge {
 
 impl Cartridge {
     pub fn reset(&mut self) {
-        unimplemented!();
+        panic!("at reset");
         /*self.mem[0xFF05] = 0x00;
         self.mem[0xFF06] = 0x00;
         self.mem[0xFF07] = 0x00;
@@ -209,7 +316,7 @@ impl Cartridge {
     pub fn new() -> Cartridge {
         Cartridge {
             memory_bank0: [0u8; 0x4000],
-            cart_sub: CartridgeSubType::Dummy,
+            cart_sub: None,
         }
     }
 
@@ -265,4 +372,50 @@ impl Cartridge {
         }
     }
     */
+}
+
+impl Default for Cartridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clone for Cartridge {
+    fn clone(&self) -> Cartridge {
+        let mut mem_bank0buf = [0u8; 0x4000];
+        for (i, &mem_val) in self.memory_bank0.iter().enumerate() {
+            mem_bank0buf[i] = mem_val;
+        }
+
+        Cartridge {
+            memory_bank0: mem_bank0buf,
+            cart_sub: self.cart_sub.clone(),
+        }
+    }
+}
+
+
+impl Clone for CartridgeSubType {
+    fn clone(&self) -> CartridgeSubType {
+        match *self {
+            CartridgeSubType::RomOnly { memory_bank1: mem, ram_bank: rambank } => {
+                let mut mem_buf = [0u8; 0x4000];
+                let mut ram_buf = [0u8; 0x2000];
+
+                for (i, &mem_val) in mem.iter().enumerate() {
+                    mem_buf[i] = mem_val;
+                }
+
+                for (i, &ram_val) in rambank.iter().enumerate() {
+                    ram_buf[i] = ram_val;
+                }
+                CartridgeSubType::RomOnly {
+                    memory_bank1: mem_buf,
+                    ram_bank: ram_buf,
+                }
+            }
+            //            CartridgeSubType::Dummy => CartridgeSubType::Dummy,
+            _ => panic!("Cannot clone this cartridge type"),
+        }
+    }
 }
