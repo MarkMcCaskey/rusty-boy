@@ -124,12 +124,6 @@ pub enum CartridgeType {
     HudsonHuC1 = 0xFF,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum MBCType {
-    MBC1_16_8,
-    MBC1_4_32,
-}
-
 pub fn to_cartridge_type(v: u8) -> Option<CartridgeType> {
     match v {
         0 => Some(CartridgeType::RomOnly),

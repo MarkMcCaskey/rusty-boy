@@ -74,7 +74,7 @@ impl ApplicationState {
                                                             }))
             .unwrap();
 
-        
+
         // Set up debugging or command-line logging
         let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
@@ -84,15 +84,21 @@ impl ApplicationState {
             (false, Some(handle))
         };
 
+
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
+        //panic!("made a new gameboy");
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
 
+
         //delay debugger so loading rom can be logged if need be
-        let debugger = if should_debugger { Some(Debugger::new(&gameboy)) }
-        else {None};
-        
+        let debugger = if should_debugger {
+            Some(Debugger::new(&gameboy))
+        } else {
+            None
+        };
+
         let sdl_context = sdl2::init().unwrap();
         let device = setup_audio(&sdl_context);
         let controller = setup_controller_subsystem(&sdl_context);
@@ -100,12 +106,14 @@ impl ApplicationState {
         // Set up graphics and window
         trace!("Opening window");
         let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window(gameboy.get_game_name().as_str(),
-                                            RB_SCREEN_WIDTH,
-                                            RB_SCREEN_HEIGHT)
-            .position_centered()
-            .build()
-            .unwrap();
+        let window = match video_subsystem.window(gameboy.get_game_name().as_str(),
+                                     RB_SCREEN_WIDTH,
+                                     RB_SCREEN_HEIGHT)
+                  .position_centered()
+                  .build() {
+            Ok(v) => v,
+            Err(e) => panic!("Fatal error: {}", e),
+        };
 
         let renderer = window.renderer()
             .accelerated()
@@ -129,6 +137,7 @@ impl ApplicationState {
                 vis: Box::new(vis),
             }
         };
+
 
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
@@ -344,7 +353,6 @@ impl ApplicationState {
     /// Runs the game application forward one "unit of time"
     /// TODO: elaborate
     pub fn step(&mut self) {
-
         // handle_events(&mut sdl_context, &mut gameboy);
 
         let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
@@ -365,7 +373,8 @@ impl ApplicationState {
         // FF05 (TIMA) Timer counter stepping
         self.timer_cycles += current_op_time;
         let timer_hz = self.gameboy.timer_frequency_hz();
-        let cpu_cycles_per_timer_counter_step = (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
+        let cpu_cycles_per_timer_counter_step =
+            (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
         if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
             //           std::thread::sleep_ms(16);
             // trace!("Incrementing the timer!");
@@ -386,6 +395,7 @@ impl ApplicationState {
                 self.prev_hsync_cycles += CYCLES_PER_HSYNC;
             }
         }
+
 
         // Gameboy screen is 256x256
         // only 160x144 are displayed at a time
@@ -412,7 +422,7 @@ impl ApplicationState {
 
         if self.sound_cycles >= sound_upper_limit {
             self.sound_cycles -= sound_upper_limit;
-            
+
             if self.gameboy.get_sound1() || self.gameboy.get_sound2() {
                 self.sound_system.resume();
             } else {
@@ -422,11 +432,13 @@ impl ApplicationState {
             let mut sound_system = self.sound_system.lock();
             // TODO move this to channel.update() or something
             sound_system.channel1.wave_duty = self.gameboy.channel1_wave_pattern_duty();
-            let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - self.gameboy.channel1_frequency() as f32));
+            let channel1_freq = 4194304.0 /
+                                (4.0 * 8.0 * (2048.0 - self.gameboy.channel1_frequency() as f32));
             sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
 
             //sound_system.channel2.wave_duty = self.gameboy.channel2_wave_pattern_duty();
-            let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - self.gameboy.channel2_frequency() as f32));
+            let channel2_freq = 4194304.0 /
+                                (4.0 * 8.0 * (2048.0 - self.gameboy.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
 
         }

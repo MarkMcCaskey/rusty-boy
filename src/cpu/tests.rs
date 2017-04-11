@@ -3,6 +3,7 @@ use super::constants::*;
 #[allow(unused_imports)]
 use cpu::*;
 
+
 macro_rules! test_op {
     ($func:ident, $method:ident, $input:expr, $output_reg:ident,
      $expected_output:expr, $flag_find_value:expr,
@@ -324,7 +325,7 @@ fn test_daa() {
     //! This instruction is very confusing so we need to test it carefully
     let mut cpu = Cpu::new();
     
-    println!("1");
+    println!("1\n");
     cpu.a = 0x11;
     cpu.add(CpuRegister::Num(0x22));
     cpu.daa();
@@ -400,3 +401,11 @@ fn test_daa() {
     assert_eq!(cpu.f & CL, 0);
 }
 
+#[test]
+fn segfault() {
+    use cpu::cartridge::*;
+//    let wat = CartridgeSubType::Dummy;
+    let cart = Cartridge::new();
+    //let mem = Memory::new();
+    //let cpu = Cpu::new();
+}
