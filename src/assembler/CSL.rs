@@ -52,11 +52,11 @@ pub fn resolve_value(v: Value, env: &mut Environment) -> Option<u16> {
     }
 }
 
-pub fn unary_dispatch(inst: Instruction, v: u8) -> (u8, u8) {
+pub fn unary_dispatch(inst: &Instruction, v: u8) -> (u8, u8) {
     (inst.prefix, v)
 }
 
-pub fn binary_dispatch(inst: Instruction, v1: u8, v2: u8) -> (u8, u8, u8) {
+pub fn binary_dispatch(inst: &Instruction, v1: u8, v2: u8) -> (u8, u8, u8) {
     (inst.prefix, v1, v2)
 }
 
