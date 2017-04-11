@@ -294,8 +294,13 @@ impl Cpu {
     }
 
     pub fn reinit_logger(&mut self) {
-        panic!("Cannot start logger!");
-    //    self.event_logger = Some(DeqCpuEventLogger::new(Some(&self.mem[..])));
+        let mut mem_cpy = [0u8; 0xFFFF];
+
+        for i in 0..0xFFFF {
+            mem_cpy[i] = self.mem[i];
+        }
+
+        self.event_logger = Some(DeqCpuEventLogger::new(Some(&mem_cpy[..])));
     }
     
     pub fn toggle_logger(&mut self) {

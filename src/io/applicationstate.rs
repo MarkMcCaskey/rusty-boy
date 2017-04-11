@@ -190,6 +190,26 @@ impl ApplicationState {
         }
     }
 
+    pub fn load_controller_if_none_exist(&mut self) {
+        let (valid_controller, just_unplugged) = if let Some(ref c) = self.controller {
+            if !c.attached() {
+                info!("Controller {} has been unplugged", c.name());
+                (false, true)
+            } else {
+                (true, false)
+            }
+        } else {
+            (false, false)
+        };
+
+        match (valid_controller, just_unplugged) {
+            (true, false) => (),
+            (false, true) => self.controller = None,
+            (false, false) => self.controller = setup_controller_subsystem(&self.sdl_context),
+            _ => unreachable!(),
+        }
+    }
+
     pub fn display_coords_to_ui_point(&self, x: i32, y: i32) -> Point {
         let s_x = (x as f32 / self.ui_scale) as i32;
         let s_y = (y as f32 / self.ui_scale) as i32;
@@ -210,7 +230,7 @@ impl ApplicationState {
             match event {
                 Event::ControllerAxisMotion { axis, value: val, .. } => {
                     let deadzone = 10000;
-                    debug!("Axis {:?} moved to {}", axis, val);
+                    trace!("Axis {:?} moved to {}", axis, val);
                     match axis {
                         controller::Axis::LeftX if deadzone < (val as i32).abs() => {
                             if val < 0 {
@@ -243,7 +263,7 @@ impl ApplicationState {
 
                 }
                 Event::ControllerButtonDown { button, .. } => {
-                    debug!("Button {:?} down", button);
+                    trace!("Button {:?} down", button);
                     match button {
                         controller::Button::A => {
                             self.gameboy.press_a();
@@ -258,7 +278,7 @@ impl ApplicationState {
                 }
 
                 Event::ControllerButtonUp { button, .. } => {
-                    debug!("Button {:?} up", button);
+                    trace!("Button {:?} up", button);
                     match button {
                         controller::Button::A => {
                             self.gameboy.unpress_a();
@@ -351,6 +371,7 @@ impl ApplicationState {
     }
 
     /// Runs the game application forward one "unit of time"
+    /// Attepmts to load a controller if it can find one every time a frame is drawn
     /// TODO: elaborate
     pub fn step(&mut self) {
         // handle_events(&mut sdl_context, &mut gameboy);
@@ -447,6 +468,9 @@ impl ApplicationState {
         // TODO make this variable based on whether it's GB, SGB, etc.
 
         if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
+            // check for controller every time a frame is drawn
+            self.load_controller_if_none_exist();
+
             if let Some(ref mut dbg) = self.debugger {
                 dbg.step(&mut self.gameboy);
             }
