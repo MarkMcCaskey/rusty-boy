@@ -30,6 +30,8 @@ use sdl2::rect::{Point, Rect};
 use std::num::Wrapping;
 
 /// Holds all the data needed to use the emulator in meaningful ways
+#[allow(dead_code)] //suppress pointers to things to keep them alive,
+// could almost certainly be done in a better way
 pub struct ApplicationState {
     pub gameboy: cpu::Cpu,
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
@@ -70,7 +72,7 @@ impl ApplicationState {
             .build(Root::builder().appender("stdout").build(if trace_mode {
                                                                 LogLevelFilter::Trace
                                                             } else {
-                                                                LogLevelFilter::Debug
+                                                                LogLevelFilter::Info
                                                             }))
             .unwrap();
 

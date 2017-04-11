@@ -74,27 +74,27 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<GBSound> {
     };
 
     audio_subsystem.open_playback(None, &desired_spec, |spec| {
-        // Show obtained AudioSpec
-        println!("{:?}", spec);
-        
-        // initialize the audio callback
-        GBSound {
-            out_freq: spec.freq as f32,
-            channel1: SquareWave {
-                phase_inc: 440.0 / spec.freq as f32,
-                phase: 0.0,
-                volume: 0.025,
-                wave_duty: 0.25,
-                add: true,
-            },
-            channel2: SquareWave {
-                phase_inc: 440.0 / spec.freq as f32,
-                phase: 0.0,
-                volume: 0.025,
-                wave_duty: 0.25,
-                add: true,
-            }
+            // Show obtained AudioSpec
+            debug!("{:?}", spec);
 
-        }
-    }).unwrap()
+            // initialize the audio callback
+            GBSound {
+                out_freq: spec.freq as f32,
+                channel1: SquareWave {
+                    phase_inc: 440.0 / spec.freq as f32,
+                    phase: 0.0,
+                    volume: 0.025,
+                    wave_duty: 0.25,
+                    add: true,
+                },
+                channel2: SquareWave {
+                    phase_inc: 440.0 / spec.freq as f32,
+                    phase: 0.0,
+                    volume: 0.025,
+                    wave_duty: 0.25,
+                    add: true,
+                },
+            }
+        })
+        .unwrap()
 }

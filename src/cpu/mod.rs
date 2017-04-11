@@ -277,17 +277,10 @@ impl Cpu {
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
-        // if let Some(ref mut el) = self.event_logger {
-        //     el.events_deq.clear();
-        // }
+
         info!("reset");
         self.mem.reset();
-        //a hack to test this
-   //     let temp_mem = [0]
 
-    //    self.event_logger = Some(DeqCpuEventLogger::new(Some(&temp_mem[..])));
-
-        //boot sequence (maybe do this by running it as a proper rom?)
         self.set_bc(0x0013);
         self.set_de(0x00D8);
         self.set_hl(0x014D);
@@ -310,13 +303,6 @@ impl Cpu {
         }
     }
     
-    // #[inline]
-    // fn log_event(&mut self, event: CpuEvent) {
-    //     if let Some(ref mut logger) = self.event_logger {
-    //         logger.log_event(self.cycles, event);
-    //     };
-    // }
-
     ///FF04 Div
     ///
     /// This needs to be called 16384 (~16779 on SGB) times a second
@@ -1097,36 +1083,6 @@ impl Cpu {
     }
 
 
-    fn load_bank(&mut self, bank_num: u8) {
-        unimplemented!()
-        /*
-        if let Some(cart_type) = self.cartridge_type {
-            match cart_type {
-                CartridgeType::RomMBC1 |
-                CartridgeType::RomMBC1Ram |
-                CartridgeType::RomMBC1RamBatt => {
-                    let bn = if (bank_num & 0x1F) == 0 {1} else {bank_num & 0x1F} as usize;
-
-                    if self.memory_banks.len() <= (bn - 1) {
-                        error!("Tried to swap in memory bank {}, but only {} memory banks exist",
-                               bn - 1, self.memory_banks.len() - 1);
-                    } else {
-                        for i in 0x4000..0x8000 {
-                            self.mem[i] = self.memory_banks[bn - 1][i - 0x4000];
-                        }
-                    }
-                }
-                otherwise => {
-                    error!("No support/invalid request to swap in bank {} of cartridge type {:?}",
-                           bank_num, otherwise);
-                }
-            }        
-        } else { //could not find cartridge type
-            error!("No cartridge type specified! Cannot switch banks");
-        }
-            */
-    }
-
     fn ldnnn(&mut self, nn: CpuRegister, n: u8) {
         self.set_register(nn, n as byte);
     }
@@ -1135,12 +1091,6 @@ impl Cpu {
         let val = self.access_register(r2).expect("Invalid register");
         self.set_register(r1, val);
     }
-
-    // ldr1r2 is probably used instead
-    // fn ldan(&mut self, n: CpuRegister) {
-    //     let val = self.access_register(n).expect("Invalid register");
-    //     self.set_register(CpuRegister::A, val);
-    // }
 
     fn ldan16(&mut self, n: CpuRegister16) {
         let addr = self.access_register16(n);
@@ -1153,12 +1103,6 @@ impl Cpu {
         let val = self.get_mem(byte_to_u16(b1, b2));
         self.set_register(CpuRegister::A, val);
     }
-
-    // ldr1r2() is used instead
-    // fn ldna(&mut self, n: CpuRegister) {
-    //     let val = self.access_register(CpuRegister::A).expect("Invalid register");
-    //     self.set_register(n, val);
-    // }
 
     fn ldna16(&mut self, n: CpuRegister16) {
         let val = self.access_register(CpuRegister::A).expect("Invalid register");
