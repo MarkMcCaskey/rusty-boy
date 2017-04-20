@@ -16,6 +16,7 @@ extern crate log4rs;
 extern crate sdl2;
 extern crate ncurses;
 extern crate rand; //for channel4 noise sound
+extern crate glium;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;
