@@ -89,7 +89,6 @@ impl ApplicationState {
 
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
-        //panic!("made a new gameboy");
         trace!("loading ROM");
         gameboy.load_rom(rom_file_name);
 
@@ -112,10 +111,13 @@ impl ApplicationState {
                                      RB_SCREEN_WIDTH,
                                      RB_SCREEN_HEIGHT)
                   .position_centered()
+                  .opengl()
                   .build() {
             Ok(v) => v,
             Err(e) => panic!("Fatal error: {}", e),
         };
+
+        //video_subsystem.gl_load_library_default();
 
         let renderer = window.renderer()
             .accelerated()

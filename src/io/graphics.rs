@@ -125,11 +125,12 @@ pub fn draw_frame_bounds(frame: &PositionedFrame, renderer: &mut sdl2::render::R
     renderer.set_draw_color(Color::RGB(0, 0, 0));
     renderer.fill_rect(Rect::new(0, 0, frame.rect.width(), frame.rect.height())).unwrap();
 
-    renderer.set_draw_color(Color::RGB(255, 0, 255));
-    renderer.fill_rect(frame.rect).unwrap();
-    renderer.set_draw_color(Color::RGB(0, 0, 0));
     renderer.draw_line(frame.rect.top_left(), frame.rect.bottom_right()).unwrap();
     renderer.draw_line(frame.rect.top_right(), frame.rect.bottom_left()).unwrap();
+
+
+    renderer.set_draw_color(Color::RGB(255, 0, 255));
+    renderer.fill_rect(frame.rect).unwrap();
 
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     let w = frame.rect.width();
