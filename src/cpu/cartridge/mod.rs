@@ -324,6 +324,9 @@ impl Index<u16> for Cartridge {
                                                   .. }) => {
                         &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
                     }
+                    Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
+                        panic!("Ram is not active")
+                    }
                     _ => panic!("at switchable ram bank"),
                 }
             }

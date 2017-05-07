@@ -6,8 +6,8 @@ use cpu::constants::*;
 use super::super::disasm::*;
 use std::collections::BTreeSet;
 
-#[cfg(feature = "debugger")]
-use super::dbglanguage;
+//#[cfg(feature = "debugger")]
+//use super::dbglanguage;
 
 const WIN_Y_DIV: i32 = 5;
 const WIN_Y_ADJ: i32 = 2;
@@ -163,24 +163,22 @@ impl Debugger {
 
                 // do parsing
 
-                #[cfg(feature = "debugger")]
-                let parseret = match dbglanguage::parse_Input(self.input_buffer.as_ref()) {
-                    Ok(v) => Ok(v),
-                    Err(e) => Err(format!("{:?}", e)),
+                let maybe_output = parse_debug_language(self.input_buffer.as_ref());
+
+                let out_string = match maybe_output {
+                    Some(da) => self.dispatch_debugger_action(cpu, da),
+                    None => {
+                        self.dispatch_debugger_action(cpu,
+                                                      DebuggerAction::Echo {
+                                                          str: "Could not parse result".to_string(),
+                                                      })
+                    }
                 };
 
-                #[cfg(not(feature = "debugger"))]
-                let parseret = Err("Compile with --features=debugger to turn on the debugger"
-                                       .to_string());
-
-                let parseval = match parseret {
-                    Ok(v) => self.dispatch_debugger_action(cpu, v),
-                    Err(e) => e,
-                };
 
                 let old_input_string = self.input_buffer.clone();
                 self.output_buffer.push(old_input_string);
-                self.output_buffer.push(parseval);
+                self.output_buffer.push(out_string);
                 self.input_buffer = String::new();
 
                 self.reset_history_location();
@@ -246,10 +244,12 @@ impl Debugger {
         let mut y = 0;
         getmaxyx(self.asm_win, &mut y, &mut x);
 
-        let cur_pc = cpu.pc;
+        let cur_pc = cpu.pc; //
         let ar_max = self.dissassembled_rom.len() - 1;
-        let idx = binsearch_inst(&self.dissassembled_rom, cur_pc, 0, ar_max as usize)
-            .expect(format!("INVALID INSTRUCTION at {}", cpu.pc).as_ref()) as u16;
+        let idx = match binsearch_inst(&self.dissassembled_rom, cur_pc, 0, ar_max as usize) {
+            Some(i) => i as u16,
+            None => 0, //handle case of invalid instruction
+        };
 
         if idx > 7 {
             for i in 0..7 {
@@ -532,6 +532,14 @@ impl Debugger {
         // self.refresh_screen(cpu);
         // }
         //
+    }
+
+    pub fn die(&mut self) {
+        delwin(self.asm_win);
+        delwin(self.reg_win);
+        delwin(self.in_win);
+        refresh();
+        endwin();
     }
 }
 
