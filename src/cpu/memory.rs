@@ -108,7 +108,7 @@ impl Index<usize> for Memory {
 
     fn index(&self, index: usize) -> &byte {
         //TODO: figure out why it's being indexed too high
-        match index {
+        match index % 0x10000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.index(index as u16), //self.cartridge[index as u16],
             0x8000...0x9FFF => &self.video_ram[index - 0x8000],
             0xC000...0xDFFF => &self.internal_ram[index - 0xC000],

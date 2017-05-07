@@ -10,13 +10,14 @@
 // #[cfg_attr(feature = "cargo-clippy", )]
 
 extern crate clap;
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate log;
 extern crate log4rs;
 extern crate sdl2;
 extern crate ncurses;
 extern crate rand; //for channel4 noise sound
-extern crate glium;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
+#[macro_use] extern crate nom;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;

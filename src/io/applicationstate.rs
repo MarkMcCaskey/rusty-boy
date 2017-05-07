@@ -6,6 +6,7 @@
 use std;
 
 use sdl2::*;
+use sdl2::video::GLProfile;
 use sdl2::audio::AudioDevice;
 use sdl2::keyboard::Keycode;
 use log4rs;
@@ -107,6 +108,13 @@ impl ApplicationState {
         // Set up graphics and window
         trace!("Opening window");
         let video_subsystem = sdl_context.video().unwrap();
+
+        let gl_attr = video_subsystem.gl_attr();
+
+        gl_attr.set_context_profile(GLProfile::Core);
+        gl_attr.set_context_flags().debug().set();
+        gl_attr.set_context_version(3, 2);
+
         let window = match video_subsystem.window(gameboy.get_game_name().as_str(),
                                      RB_SCREEN_WIDTH,
                                      RB_SCREEN_HEIGHT)
@@ -293,17 +301,17 @@ impl ApplicationState {
                         _ => (),
                     }
                 }
-                Event::Quit { .. } => {
+                Event::Quit { .. } |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     info!("Program exiting!");
+                    if let Some(ref mut debugger) = self.debugger {
+                        debugger.die();
+                    }
                     std::process::exit(0);
                 }
                 Event::KeyDown { keycode: Some(keycode), repeat, .. } => {
                     if !repeat {
                         match keycode {
-                            Keycode::Escape => {
-                                info!("Program exiting!");
-                                std::process::exit(0);
-                            }
                             Keycode::F3 => self.gameboy.toggle_logger(),
                             Keycode::R => {
                                 // Reset/reload emu
@@ -488,11 +496,6 @@ impl ApplicationState {
             for ref mut widget in &mut self.widgets {
                 widget.draw(&mut self.renderer, &mut self.gameboy);
             }
-
-            //   00111100 1110001 00001000
-            //   01111110 1110001 00010100
-            //   11111111 1110001 00101010
-            //
 
             // TODO add a way to enable/disable this while running
             let record_screen = false;

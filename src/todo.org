@@ -101,4 +101,6 @@ customize zone (m-x find-variable zone-programs) Kappa
 ** TODO IO
 *** TODO Sound
 *** TODO Drawing
+**** TODO optimize!
+**** TODO Sprite flipping
 *** TODO Related tools

@@ -43,7 +43,8 @@ impl SoundChannel for SquareWave {
             -self.volume
         };
         self.phase = (self.phase + self.phase_inc) % 1.0;
-        out
+        // To make it sound slightly nicer
+        out.sin()
     }
 }
 
