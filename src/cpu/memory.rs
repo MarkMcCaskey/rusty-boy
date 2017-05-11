@@ -68,7 +68,10 @@ impl Memory {
     }
 
     pub fn write_ram_value(&mut self, index: u16, value: byte) {
-        self.cartridge.write_ram_value(index, value);
+        match index {
+            0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.write_ram_value(index, value),
+            n => self[index as usize] = value,
+        }
     }
 
     pub fn load(&mut self, input_file: &str) {
