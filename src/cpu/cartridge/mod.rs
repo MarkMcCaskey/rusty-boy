@@ -248,6 +248,12 @@ impl IndexMut<u16> for Cartridge {
                         //      ind);
                         &mut rambank[(ind - 0xA000) as usize]
                     }
+                    Some(CartridgeSubType::Mbc1 { ram_banks: ref mut rb,
+                                                  //ram_active: true,
+                                                  ram_bank_selector: rbs,
+                                                  .. }) => {
+                        &mut rb[rbs as usize][(ind - 0xA000) as usize]
+                    }
                     _ => panic!("at switchable ram bank"),
                 }
             }
@@ -318,15 +324,15 @@ impl Index<u16> for Cartridge {
                     Some(CartridgeSubType::RomOnly { ram_bank: ref rambank, .. }) => {
                         &rambank[(ind - 0xA000) as usize]
                     }
-                    Some(CartridgeSubType::Mbc1 { ram_active: true,
+                    Some(CartridgeSubType::Mbc1 { // ram_active: true,
                                                   ram_banks: ref ram_vec,
                                                   ram_bank_selector: rbs,
                                                   .. }) => {
                         &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
                     }
-                    Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
+                    /*Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
                         panic!("Ram is not active")
-                    }
+                    }*/
                     _ => panic!("at switchable ram bank"),
                 }
             }

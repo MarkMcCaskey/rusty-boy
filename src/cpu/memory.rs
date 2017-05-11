@@ -7,6 +7,7 @@ use std::iter::Iterator;
 
 use cpu::cartridge::*;
 use cpu::constants::*;
+use cpu::memvis::cpumemvis::*;
 
 pub struct Memory {
     cartridge: Box<Cartridge>,
@@ -40,6 +41,8 @@ pub struct Memory {
     interrupt_flag: byte,
 
     iterator_index: u16,
+
+    pub logger: Option<DeqCpuEventLogger>,
 }
 
 impl Default for Memory {
@@ -60,11 +63,37 @@ impl Memory {
             hram: [0u8; 0x80],
             interrupt_flag: 0,
             iterator_index: 0,
+            logger: Some(DeqCpuEventLogger::new(None)),
         }
+    }
+
+    pub fn write_ram_value(&mut self, index: u16, value: byte) {
+        self.cartridge.write_ram_value(index, value);
     }
 
     pub fn load(&mut self, input_file: &str) {
         *self.cartridge = Cartridge::load(input_file);
+    }
+
+    pub fn initialize_logger(&mut self) {
+        let mut mem_buffer: [byte; 0x10000] = [0u8; 0x10000];
+        for index in 0..0xFFFF {
+            mem_buffer[index] = 
+            match index {
+                0x0000...0x7FFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
+                0x8000...0x9FFF => self.video_ram[index - 0x8000],
+                0xC000...0xDFFF => self.internal_ram[index - 0xC000],
+                0xE000...0xFDFF => self.internal_ram[index - 0xE000],
+                0xFE00...0xFE9F => self.oam[index - 0xFE00],
+                0xFEA0...0xFEFF => self.empty[index - 0xFEA0],
+                0xFF00...0xFF7F => self.io_ports[index - 0xFF00],
+                0xFF80...0xFFFE => self.hram[index - 0xFF80],
+                0xFFFF => self.interrupt_flag,
+                _ => 0,
+
+            };
+        }
+        self.logger = Some(DeqCpuEventLogger::new(Some(&mem_buffer[..])));
     }
 
     pub fn reset(&mut self) {
@@ -211,6 +240,7 @@ impl Clone for Memory {
             hram: hram,
             interrupt_flag: self.interrupt_flag,
             iterator_index: self.iterator_index,
+            logger: self.logger.clone(),
         }
     }
 }

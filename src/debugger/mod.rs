@@ -39,5 +39,6 @@ pub mod graphics {
         pub fn step(&mut self, cpu: &mut Cpu) {
             panic!("Compile with --features=debugger to use the debugger")
         }
+        pub fn die(&mut self) {}
     }
 }
