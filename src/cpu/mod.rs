@@ -921,10 +921,10 @@ impl Cpu {
                 self.dma();
             }
             //switchable ram bank
-            i @ 0xA000...0xC000 => {
+            /*i @ 0xA000...0xC000 => {
                 self.mem.write_ram_value(i as u16, value);
-            }
-            n => self.mem[n] = value,
+            }*/
+            n => self.mem.write_ram_value(n as u16, value),
         }
     }
 

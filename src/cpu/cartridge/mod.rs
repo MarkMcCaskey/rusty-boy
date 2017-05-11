@@ -46,8 +46,10 @@ impl Cartridgey for Cartridge {
         }
 
         info!("RAM bank value: {:X}", rom_buffer[0x149]);
+        info!("ROM bank value: {:X}", rom_buffer[0x148]);
 
         if let Some(cart_type) = to_cartridge_type(rom_buffer[0x147]) {
+            info!("Cartridge type: {:?}", cart_type);
 
             match cart_type {
                 //TODO: verify this
@@ -84,6 +86,8 @@ impl Cartridgey for Cartridge {
                         ram_vec.push(ram_buffer);
                     }
 
+                    //DEBUG CODE: FIXME etc.
+                    rom_vec.push(rom_buffer);
                     while let Ok(_) = rom.read_exact(&mut rom_buffer2) {
                         rom_vec.push(rom_buffer2);
                     }
@@ -141,26 +145,52 @@ impl Cartridgey for Cartridge {
         match self.cart_sub {
             Some(CartridgeSubType::Mbc1 { memory_model: ref mut mm,
                                           mem_bank_selector: ref mut mbs,
+                                          ram_bank_selector: ref mut rbs,
                                           ram_active: ref mut ra,
                                           .. }) if index <= 0x7FFF => {
                 match index {
                     //RAM activation
-                    0x0000...0x1FFF => *ra = (index & 0xA) == 0xA,
+                    0x0000...0x1FFF => {
+                        let ram_active = (value & 0xA) == 0xA;
+                        if ram_active {
+                            debug!("MBC1: set RAM to active");
+                        } else {
+                            debug!("MBC1: set RAM to inactive");
+                        }
+
+                        *ra = ram_active;
+                    }
                     // bank select
                     0x2000...0x3FFF => {
-                        *mbs = if (index & 0x1F) == 0 {
+                        let rom_bank = if (value & 0x1F) == 0 {
                             1
                         } else {
-                            (index & 0x1F) as u32
-                        }
+                            (value & 0x1F) as u32
+                        };
+                        debug!("MBC1: Switching to ROM bank {}", rom_bank);
+                        *mbs = rom_bank
                     }
                     // TODO: selecting MSBs of ROM bank in 16/8 mode
-                    0x4000...0x5FFF => unimplemented!(),
+                    0x4000...0x5FFF => {
+                        match *mm {
+                            Mbc1Type::FourThirtytwo => {
+                                debug!("MBC1 4-32: selecting ROM bank {}", value & 0x3);
+                                *rbs = (value & 0x3) as u32;
+                            }
+                            Mbc1Type::SixteenEight => {
+                                //NOTE WARNING:
+                                debug!("MBC1 16-8: Setting two MSBS of ROM bank {}", value & 0x3);
+                                *mbs = (value & 0x3) as u32;
+                            }
+                        }
+                    } 
                     // cartridge memory model select
                     0x6000...0x7FFF => {
                         *mm = if (index & 1) == 1 {
+                            debug!("MBC1: Switching to 4-32 mode");
                             Mbc1Type::FourThirtytwo
                         } else {
+                            debug!("MBC1: Switching to 16-8 mode");
                             Mbc1Type::SixteenEight
                         }
                     }
@@ -288,10 +318,7 @@ impl Index<u16> for Cartridge {
 
     fn index<'a>(&'a self, ind: u16) -> &'a byte {
         match ind {
-            0x0000...0x3FFF => {
-                trace!("In the right place {:X}", self.memory_bank0.len());
-                &(self.memory_bank0[ind as usize])
-            }
+            0x0000...0x3FFF => &(self.memory_bank0[ind as usize]),
             0x4000...0x7FFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly { memory_bank1: ref membank1, .. }) => {
@@ -303,11 +330,12 @@ impl Index<u16> for Cartridge {
                                                   .. }) => {
                         &mb[index as usize][((ind - 0x4000) as usize)]
                     }
-                    Some(CartridgeSubType::Mbc1 { /*memory_model: Mbc1Type::FourThirtytwo,
+                    Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,
                                                   memory_banks: ref mb,
                                                   ram_active: ra,
-                                                  mem_bank_selector: index*/ .. }) => {
-                        panic!("Indexing {:X}", ind)
+                                                  mem_bank_selector: index, .. }) => {
+                        &mb[index as usize][(ind - 0x4000) as usize]
+                        //panic!("Indexing {:X}", ind)
                     }
 
                     _ => panic!("Indexing {:X}", ind),
