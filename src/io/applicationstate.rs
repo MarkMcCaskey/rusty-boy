@@ -474,6 +474,12 @@ impl ApplicationState {
                                 (4.0 * 8.0 * (2048.0 - self.gameboy.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
 
+            let channel3_freq = 4194304.0 /
+                                (4.0 * 8.0 * (2048.0 - self.gameboy.channel3_frequency() as f32));
+            sound_system.channel3.shift_amount = self.gameboy.channel3_shift_amount();
+            sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
+            sound_system.channel3.wave_ram = self.gameboy.channel3_wave_pattern_ram();
+
         }
 
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt

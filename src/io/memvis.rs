@@ -12,8 +12,10 @@ use io::constants::*;
 use io::graphics::Drawable;
 use cpu::constants::MemAddr;
 use cpu::constants::CpuState;
-use cpu::COLOR_DEPTH;
+//use cpu::memvis::cpuCOLOR_DEPTH;
 use cpu::*;
+
+use cpu::memvis::cpumemvis::*;
 
 use disasm;
 
@@ -55,7 +57,7 @@ impl Drawable for MemVisState {
         // draw_memory_events(renderer, cpu);
         let dst_rect = Rect::new(0, 0, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32);
 
-        if let Some(ref mut logger) = cpu.event_logger {
+        if let Some(ref mut logger) = cpu.mem.logger {
             let depth = COLOR_DEPTH;
             let memvis_pitch = MEM_DISP_WIDTH as usize * depth;
 
@@ -239,7 +241,7 @@ pub fn draw_memory_access(renderer: &mut sdl2::render::Renderer, gameboy: &Cpu) 
     let mut x = 0;
     let mut y = 0;
 
-    let event_logger = match gameboy.event_logger {
+    let event_logger = match gameboy.mem.logger {
         Some(ref logger) => logger,
         None => return,
     };
@@ -320,23 +322,31 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
 
     renderer.set_blend_mode(sdl2::render::BlendMode::Add);
 
-    let mut event_logger = match gameboy.event_logger {
-        Some(ref mut logger) => logger,
+    {
+        let mut event_logger = match gameboy.mem.logger {
+            Some(ref mut logger) => logger,
+            None => return,
+        };
+
+        // Remove events that are too old
+        while !event_logger.events_deq.is_empty() {
+            let timestamp = event_logger.events_deq
+                .front()
+                .unwrap()
+                .timestamp;
+            if (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
+                event_logger.events_deq.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    let mut event_logger = match gameboy.mem.logger {
+        Some(ref logger) => logger,
         None => return,
     };
 
-    // Remove events that are too old
-    while !event_logger.events_deq.is_empty() {
-        let timestamp = event_logger.events_deq
-            .front()
-            .unwrap()
-            .timestamp;
-        if (Wrapping(gameboy.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
-            event_logger.events_deq.pop_front();
-        } else {
-            break;
-        }
-    }
 
     // Draw current events with color determined by age
     for entry in &event_logger.events_deq {
