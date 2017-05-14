@@ -130,7 +130,9 @@ pub fn draw_tile_transparent(renderer: &mut sdl2::render::Renderer,
                              mem_offset: u16,
                              tile_idx: u16, // technically when used by GB it's only 8bit
                              screen_offset_x: i32,
-                             screen_offset_y: i32) {
+                             screen_offset_y: i32,
+                             flip_x: bool,
+                             flip_y: bool) {
 
     #[inline]
     fn get_bit(n: u8, offset: u8) -> u8 {
@@ -154,12 +156,16 @@ pub fn draw_tile_transparent(renderer: &mut sdl2::render::Renderer,
             // TODO add toggle for this or remove it
             const DEBUG_OAM_BG: bool = false;
 
+            let realpx = if flip_x { TILE_SIZE_PX - px } else { px } as u8;
+            let realpy = if flip_y { TILE_SIZE_PX - py } else { py } as u8;
+
+
             if DEBUG_OAM_BG || px_color != 0 {
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
                 renderer.set_draw_color(px_pal_col);
 
-                let point = Point::new((screen_offset_x as u8).wrapping_add(px as u8) as i32,
-                                       (screen_offset_y as u8).wrapping_add(py as u8) as i32);
+                let point = Point::new((screen_offset_x as u8).wrapping_add(realpx) as i32,
+                                       (screen_offset_y as u8).wrapping_add(realpy) as i32);
                 renderer.draw_point(point).unwrap();
             }
         }
@@ -289,7 +295,10 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
         let sprite_x: u8 = gameboy.mem[offset as usize + 1];
         let tile_index: u8 = gameboy.mem[offset as usize + 2];
         // TODO implement flag handling (priority, flips...)
-        //let flags: u8 = gameboy.mem[offset as usize + 3];
+        let flags: u8 = gameboy.mem[offset as usize + 3];
+        let x_flip = ((flags >> 5) & 1) == 1;
+        let y_flip = ((flags >> 6) & 1) == 1;
+
         if sprite_x == 0 && sprite_y == 0 {
             // sprite is "hidden"
             continue;
@@ -309,14 +318,18 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
                                   pattern_table,
                                   tile_16 as u16,
                                   screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y as i32);
+                                  screen_offset_y + screen_y as i32,
+                                  x_flip,
+                                  y_flip);
             // Draw second sprite below the first one
             draw_tile_transparent(renderer,
                                   gameboy,
                                   pattern_table,
                                   tile_16 as u16 + 1,
                                   screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y.wrapping_add(8) as i32);
+                                  screen_offset_y + screen_y.wrapping_add(8) as i32,
+                                  x_flip,
+                                  y_flip);
         } else {
             // 8x8 sprites mode
             draw_tile_transparent(renderer,
@@ -324,7 +337,9 @@ pub fn draw_objects(renderer: &mut sdl2::render::Renderer,
                                   pattern_table,
                                   tile_index as u16,
                                   screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y as i32);
+                                  screen_offset_y + screen_y as i32,
+                                  x_flip,
+                                  y_flip);
 
         }
 
