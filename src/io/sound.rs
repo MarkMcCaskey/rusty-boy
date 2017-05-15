@@ -76,15 +76,17 @@ impl SoundChannel for SquareWave {
 
 impl SoundChannel for SquareWaveRam {
     fn generate_sample(&mut self) -> f32 {
-        let out = if self.phase <= ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32){
+        let out = if self.phase <=
+                     ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) {
             self.volume * self.phase
-        } else
-            { 0.0 };
+        } else {
+            0.0
+        };
 
-/*        self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
+        /*        self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
         // To make it sound slightly nicer
-*/
-        
+        */
+
 
         self.phase = (self.phase + self.phase_inc) % 1.0;
 
@@ -100,10 +102,8 @@ impl AudioCallback for GBSound {
         for x in out.iter_mut() {
             // FIXME is just adding them is the right way to do it?
             // Maybe for floats it is?
-            let val = 
-                self.channel1.generate_sample()
-                + self.channel2.generate_sample()
-                + self.channel3.generate_sample();
+            let val = self.channel1.generate_sample() + self.channel2.generate_sample() +
+                      self.channel3.generate_sample();
             *x = val;
             // TODO mix other channels here
         }

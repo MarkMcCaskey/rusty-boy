@@ -104,6 +104,40 @@ impl Cartridgey for Cartridge {
                                        }),
                     }
                 }
+                CartridgeType::RomMBC3 |
+                CartridgeType::RomMBC3Ram |
+                CartridgeType::RomMBC3RamBatt |
+                CartridgeType::RomMBC3TimerRamBatt => {
+                    //COPIED FROM ABOVE
+                    let mut rom_buffer2: [u8; 0x4000] = [0u8; 0x4000];
+
+                    let mut rom_vec: Vec<[byte; 0x4000]> = vec![];
+                    let mut ram_vec: Vec<[byte; 0x2000]> = vec![];
+
+
+                    //TODO: improve this.  This is hacky code for testing...
+                    let ram_buffer: [byte; 0x2000] = [0u8; 0x2000];
+                    for _ in 0..16 {
+                        ram_vec.push(ram_buffer);
+                    }
+
+                    //DEBUG CODE: FIXME etc.
+                    rom_vec.push(rom_buffer);
+                    while let Ok(_) = rom.read_exact(&mut rom_buffer2) {
+                        rom_vec.push(rom_buffer2);
+                    }
+
+                    Cartridge {
+                        memory_bank0: rom_buffer,
+                        cart_sub: Some(CartridgeSubType::Mbc3 {
+                                           memory_banks: rom_vec,
+                                           ram_banks: ram_vec,
+                                           ram_active: false,
+                                           mem_bank_selector: 1, //TODO: verify
+                                           ram_bank_selector: 0,
+                                       }),
+                    }
+                }
                 _ => {
                     panic!("Cartridge type {:?} is not supported!", cart_type);
                 }
@@ -179,7 +213,7 @@ impl Cartridgey for Cartridge {
                             }
                             Mbc1Type::SixteenEight => {
                                 //NOTE WARNING:
-                                debug!("MBC1 16-8: Setting two MSBS of ROM bank {}", value & 0x3);
+                                error!("MBC1 16-8: Setting two MSBS of ROM bank {}", value & 0x3);
                                 *mbs = (value & 0x3) as u32;
                             }
                         }
@@ -197,6 +231,40 @@ impl Cartridgey for Cartridge {
                     _ => unreachable!(),
                 }
             }
+            Some(CartridgeSubType::Mbc3 { mem_bank_selector: ref mut mbs,
+                                          ram_bank_selector: ref mut rbs,
+                                          ram_active: ref mut ra,
+                                          .. }) => {
+                match index {
+                    //RAM activation
+                    0x0000...0x1FFF => {
+                        let ram_active = (value & 0xA) == 0xA;
+                        if ram_active {
+                            debug!("MBC3: set RAM to active");
+                        } else {
+                            debug!("MBC3: set RAM to inactive");
+                        }
+
+                        *ra = ram_active;
+                    }
+                    // bank select
+                    0x2000...0x3FFF => {
+                        let rom_bank = if (value & 0x7F) == 0 {
+                            1
+                        } else {
+                            (value & 0x7F) as u32
+                        };
+                        debug!("MBC3: Switching to ROM bank {}", rom_bank);
+                        *mbs = rom_bank
+                    }
+                    _ => {
+                        debug!("MBC3 likely not fully implemented!: writing 0x{:X} to 0x{:X}",
+                               value,
+                               index)
+                    }
+                }
+            }
+
             Some(CartridgeSubType::RomOnly { .. }) |
             None |
             _ => self[index] = value,
@@ -227,6 +295,14 @@ pub enum CartridgeSubType {
         ram_banks: Vec<[byte; 0x2000]>,
         ram_active: bool,
         //top two bits (21 & 22?) used for selecting RAM in 4_32 mode
+        mem_bank_selector: u32,
+        ram_bank_selector: u32,
+    },
+    Mbc3 {
+        //unclear if this has 16-8/4-32 mode....
+        memory_banks: Vec<[byte; 0x4000]>,
+        ram_banks: Vec<[byte; 0x2000]>,
+        ram_active: bool, //unsure if this is needed
         mem_bank_selector: u32,
         ram_bank_selector: u32,
     },
@@ -332,10 +408,15 @@ impl Index<u16> for Cartridge {
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,
                                                   memory_banks: ref mb,
-                                                  ram_active: ra,
-                                                  mem_bank_selector: index, .. }) => {
+                                                  mem_bank_selector: index,
+                                                  .. }) => {
                         &mb[index as usize][(ind - 0x4000) as usize]
                         //panic!("Indexing {:X}", ind)
+                    }
+                    Some(CartridgeSubType::Mbc3 { memory_banks: ref mb,
+                                                  mem_bank_selector: index,
+                                                  .. }) => {
+                        &mb[index as usize][(ind - 0x4000) as usize]
                     }
 
                     _ => panic!("Indexing {:X}", ind),
@@ -354,6 +435,11 @@ impl Index<u16> for Cartridge {
                     }
                     Some(CartridgeSubType::Mbc1 { // ram_active: true,
                                                   ram_banks: ref ram_vec,
+                                                  ram_bank_selector: rbs,
+                                                  .. }) => {
+                        &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
+                    }
+                    Some(CartridgeSubType::Mbc3 { ram_banks: ref ram_vec,
                                                   ram_bank_selector: rbs,
                                                   .. }) => {
                         &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
@@ -555,6 +641,40 @@ impl Clone for CartridgeSubType {
 
                 CartridgeSubType::Mbc1 {
                     memory_model: *mm,
+                    memory_banks: new_rom_vec,
+                    ram_banks: new_ram_vec,
+                    ram_active: *ra,
+                    mem_bank_selector: *mbs,
+                    ram_bank_selector: *rbs,
+                }
+            }
+            CartridgeSubType::Mbc3 { memory_banks: ref mb,
+                                     ram_banks: ref rb,
+                                     ram_active: ref ra,
+                                     mem_bank_selector: ref mbs,
+                                     ram_bank_selector: ref rbs } => {
+                let mut ram_buf = [0u8; 0x2000];
+                let mut rom_buf = [0u8; 0x4000];
+
+                let mut new_rom_vec: Vec<[byte; 0x4000]> = vec![];
+                let mut new_ram_vec: Vec<[byte; 0x2000]> = vec![];
+
+                for ar in mb.iter() {
+                    for (i, &v) in ar.iter().enumerate() {
+                        rom_buf[i] = v;
+                    }
+                    new_rom_vec.push(rom_buf);
+                }
+
+                for ar in rb.iter() {
+                    for (i, &v) in ar.iter().enumerate() {
+                        ram_buf[i] = v;
+                    }
+                    new_ram_vec.push(ram_buf);
+                }
+
+
+                CartridgeSubType::Mbc3 {
                     memory_banks: new_rom_vec,
                     ram_banks: new_ram_vec,
                     ram_active: *ra,

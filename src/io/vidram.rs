@@ -139,6 +139,8 @@ pub fn draw_tile_transparent(renderer: &mut sdl2::render::Renderer,
         (n >> (7 - offset)) & 1u8
     }
 
+    //  let mut points = [Point::new(0, 0); (TILE_SIZE_PX * TILE_SIZE_PX) as usize];
+
     for px in 0..TILE_SIZE_PX {
         for py in 0..TILE_SIZE_PX {
             let col_byte_off = py * 2;
@@ -164,12 +166,16 @@ pub fn draw_tile_transparent(renderer: &mut sdl2::render::Renderer,
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
                 renderer.set_draw_color(px_pal_col);
 
-                let point = Point::new((screen_offset_x as u8).wrapping_add(realpx) as i32,
-                                       (screen_offset_y as u8).wrapping_add(realpy) as i32);
-                renderer.draw_point(point).unwrap();
+                //let point
+                /*points[(TILE_SIZE_PX * py + px) as usize]*/ //=
+                renderer.draw_point(
+                    Point::new((screen_offset_x as u8).wrapping_add(realpx) as i32,
+                               (screen_offset_y as u8).wrapping_add(realpy) as i32)).unwrap();
             }
         }
     }
+
+
 }
 
 /// This is the dumbest and straightforward code for displaying Tile

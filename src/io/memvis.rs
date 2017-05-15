@@ -342,7 +342,7 @@ pub fn draw_memory_events(renderer: &mut sdl2::render::Renderer, gameboy: &mut C
         }
     }
 
-    let mut event_logger = match gameboy.mem.logger {
+    let event_logger = match gameboy.mem.logger {
         Some(ref logger) => logger,
         None => return,
     };

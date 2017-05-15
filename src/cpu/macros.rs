@@ -51,8 +51,14 @@ macro_rules! make_getter {
 // GB memory to prevent subtle "bug"/non-correct behavior
 
 setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
-setter_unsetter_and_getter!(set_interrupt_bit, unset_interrupt_bit, get_interrupt, 0xFF0F);
-setter_unsetter_and_getter!(set_interrupt_enabled, unset_interrupt_enabled, get_interrupt_enabled, 0xFFFF);
+setter_unsetter_and_getter!(set_interrupt_bit,
+                            unset_interrupt_bit,
+                            get_interrupt,
+                            0xFF0F);
+setter_unsetter_and_getter!(set_interrupt_enabled,
+                            unset_interrupt_enabled,
+                            get_interrupt_enabled,
+                            0xFFFF);
 setter_unsetter_and_getter!(set_stat, unset_stat, get_stat, 0xFF41);
 
 
@@ -61,6 +67,7 @@ setter_unsetter_and_getter!(set_stat, unset_stat, get_stat, 0xFF41);
 /*
 (bit layout is xxyy yzzz) so LSB of y bits is MSB of first nibble
 */
+
 macro_rules! even_odd_dispatch {
     ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
      $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
@@ -109,5 +116,3 @@ macro_rules! button {
         }
     }
 }
-
-
