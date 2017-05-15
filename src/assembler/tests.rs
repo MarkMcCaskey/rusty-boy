@@ -17,57 +17,56 @@ fn parse_instructions() {
 
 #[test]
 fn parse_compare_output() {
-    let insts = asm::parse_Input(
-        r#"
+    let insts = asm::parse_Input(r#"
 .code 
 NOP 
 NOP
 JR NZ, 0x32
 ADD A, C
-RLC C"#).unwrap();
+RLC C"#)
+            .unwrap();
 
-    let inst_output = [0,0,0x20,0x32,0x81,0xCB,0x01];
-    for i in 0..(inst_output.len()){
-        assert_eq!(insts[i],inst_output[i]);
+    let inst_output = [0, 0, 0x20, 0x32, 0x81, 0xCB, 0x01];
+    for i in 0..(inst_output.len()) {
+        assert_eq!(insts[i], inst_output[i]);
     }
 }
 
 #[test]
 fn parse_compare_output1() {
-    let insts = asm::parse_Input(
-        r#"
+    let insts = asm::parse_Input(r#"
 .code 
 NOP 
 NOP
 ADD A, C
-RLC C"#).unwrap();
+RLC C"#)
+            .unwrap();
 
-    let inst_output = [0,0,0x81,0xCB,0x01];
-    for i in 0..(inst_output.len()){
-        assert_eq!(insts[i],inst_output[i]);
+    let inst_output = [0, 0, 0x81, 0xCB, 0x01];
+    for i in 0..(inst_output.len()) {
+        assert_eq!(insts[i], inst_output[i]);
     }
 }
 
 #[test]
 fn parse_compare_output2() {
-    let insts = asm::parse_Input(
-        r#"
+    let insts = asm::parse_Input(r#"
 .code 
 NOP 
 NOP
 JR NZ, 0x32
-RLC C"#).unwrap();
+RLC C"#)
+            .unwrap();
 
-    let inst_output = [0,0,0x20,0x32,0xCB,0x01];
-    for i in 0..(inst_output.len()){
-        assert_eq!(insts[i],inst_output[i]);
+    let inst_output = [0, 0, 0x20, 0x32, 0xCB, 0x01];
+    for i in 0..(inst_output.len()) {
+        assert_eq!(insts[i], inst_output[i]);
     }
 }
 
 #[test]
 fn sum_odd_numbers_under_100() {
-    let insts = asm::parse_Input(
-        r#"
+    let insts = asm::parse_Input(r#"
 .code
 LD B, 0
 
@@ -107,11 +106,11 @@ SET 4, H
 BIT 2, L
 SLA E
 SWAP (HL)
-"#).unwrap();
-    let out_bytes = [0x80, 0x92, 0xC0, 0xE5, 0xF7, 0xFB, 0x2B,
-                     0xCE, 89, 0xCF, 0x2F, 0x3C, 0x38, 0, 0x14,
-                     0x78, 0x4B, 0xCB, 0x0A, 0xCB, 0xC9, 0xCB,
-                     0xE4, 0xCB, 0x55, 0xCB, 0x23, 0xCB, 0x36];
+"#)
+            .unwrap();
+    let out_bytes = [0x80, 0x92, 0xC0, 0xE5, 0xF7, 0xFB, 0x2B, 0xCE, 89, 0xCF, 0x2F, 0x3C, 0x38,
+                     0, 0x14, 0x78, 0x4B, 0xCB, 0x0A, 0xCB, 0xC9, 0xCB, 0xE4, 0xCB, 0x55, 0xCB,
+                     0x23, 0xCB, 0x36];
 
     for i in 0..(out_bytes.len()) {
         println!("{}: {:X}, {:X}", i, insts[i], out_bytes[i]);

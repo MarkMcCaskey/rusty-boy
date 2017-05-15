@@ -29,6 +29,15 @@ use sdl2;
 use sdl2::rect::{Point, Rect};
 
 use std::num::Wrapping;
+use std::path::PathBuf;
+
+
+use app_dirs::*;
+
+const APP_INFO: AppInfo = AppInfo {
+    name: "rusty-boy",
+    author: "Mark McCaskey, SpawnedArtifact, and friends",
+};
 
 /// Holds all the data needed to use the emulator in meaningful ways
 #[allow(dead_code)] //suppress pointers to things to keep them alive,
@@ -56,6 +65,8 @@ pub struct ApplicationState {
     ui_scale: f32,
     ui_offset: Point, // TODO whole interface pan
     widgets: Vec<PositionedFrame>,
+    config_path: Option<PathBuf>,
+    data_path: Option<PathBuf>,
 }
 
 
@@ -70,10 +81,12 @@ impl ApplicationState {
 
         let config = Config::builder()
             .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(Root::builder().appender("stdout").build(if trace_mode {
-                                                                LogLevelFilter::Trace
-                                                            } else {
-                                                                LogLevelFilter::Info
+            .build(Root::builder().appender("stdout").build(match (trace_mode, debug_mode) {
+                                                                (true, _) => LogLevelFilter::Trace,
+                                                                (false, true) => {
+                                                                    LogLevelFilter::Debug
+                                                                }
+                                                                _ => LogLevelFilter::Info,
                                                             }))
             .unwrap();
 
@@ -88,6 +101,8 @@ impl ApplicationState {
         };
 
 
+
+
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
         trace!("loading ROM");
@@ -99,6 +114,28 @@ impl ApplicationState {
             Some(Debugger::new(&gameboy))
         } else {
             None
+        };
+
+        let data_path = match app_root(AppDataType::UserData, &APP_INFO) {
+            Ok(v) => {
+                debug!("Using user data path: {:?}", v);
+                Some(v)
+            }
+            Err(e) => {
+                error!("Could not open a user data path: {}", e);
+                None
+            }
+        };
+
+        let config_path = match app_root(AppDataType::UserConfig, &APP_INFO) {
+            Ok(v) => {
+                debug!("Using user config path: {:?}", v);
+                Some(v)
+            }
+            Err(e) => {
+                error!("Could not open a user config path: {}", e);
+                None
+            }
         };
 
         let sdl_context = sdl2::init().unwrap();
@@ -129,6 +166,7 @@ impl ApplicationState {
 
         let renderer = window.renderer()
             .accelerated()
+            .present_vsync()
             .build()
             .unwrap();
 
@@ -199,6 +237,8 @@ impl ApplicationState {
             ui_scale: SCALE,
             ui_offset: Point::new(0, 0),
             widgets: widgets,
+            config_path: config_path,
+            data_path: data_path,
         }
     }
 
@@ -388,6 +428,7 @@ impl ApplicationState {
     pub fn step(&mut self) {
         // handle_events(&mut sdl_context, &mut gameboy);
 
+
         let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
             self.gameboy.dispatch_opcode() as u64
         } else {
@@ -512,5 +553,6 @@ impl ApplicationState {
             }
             self.renderer.present();
         }
+
     }
 }

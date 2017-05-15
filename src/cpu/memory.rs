@@ -81,8 +81,7 @@ impl Memory {
     pub fn initialize_logger(&mut self) {
         let mut mem_buffer: [byte; 0x10000] = [0u8; 0x10000];
         for index in 0..0xFFFF {
-            mem_buffer[index] = 
-            match index {
+            mem_buffer[index] = match index {
                 0x0000...0x7FFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
                 0x8000...0x9FFF => self.video_ram[index - 0x8000],
                 0xC000...0xDFFF => self.internal_ram[index - 0xC000],

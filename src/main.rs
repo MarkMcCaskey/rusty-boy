@@ -7,17 +7,21 @@
 //! text-based interactive debugger and language, and standard execution.
 //!
 //! Memory visualization inspired by [ICU64 / Frodo Redpill v0.1](https://icu64.blogspot.com/2009/09/first-public-release-of-icu64frodo.html)
-// #[cfg_attr(feature = "cargo-clippy", )]
 
 extern crate clap;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 extern crate log4rs;
 extern crate sdl2;
 extern crate ncurses;
 extern crate rand; //for channel4 noise sound
 extern crate serde;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate nom;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate nom;
+extern crate app_dirs;
+extern crate time;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;
@@ -37,6 +41,7 @@ pub mod io;
 
 use io::applicationstate::*;
 
+
 #[allow(unused_variables)]
 fn main() {
     let arguments = io::arguments::read_arguments();
@@ -48,9 +53,17 @@ fn main() {
 
     // Set up gameboy and app state
     let mut appstate = ApplicationState::new(trace_mode, debug_mode, rom_file);
+
+    /*let mut oldtime = time::PreciseTime::now();
+    let max_time = time::Duration::microseconds(15 * 1000).num_microseconds().unwrap();
+    */
     loop {
+        /* while oldtime.to(time::PreciseTime::now()).num_microseconds().unwrap() < max_time {
+            use std::time::Duration;
+            std::thread::sleep(Duration::from_millis(1));
+        }*/
+        //  oldtime = time::PreciseTime::now();
         appstate.handle_events();
         appstate.step();
     }
 }
-

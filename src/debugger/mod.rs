@@ -2,10 +2,10 @@
 #[cfg(feature = "debugger")]
 mod language;
 #[allow(unknown_lints, useless_attribute, needless_lifetimes, match_same_arms, cyclomatic_complexity, clone_on_copy, type_complexity, dead_code, unused_comparisons, unused_label, absurd_extreme_comparisons)]
-
 #[cfg(feature = "debugger")]
 pub mod graphics;
-#[cfg(feature = "debugger")] mod tests;
+#[cfg(feature = "debugger")]
+mod tests;
 
 
 /*
@@ -26,9 +26,7 @@ mod dbglanguage {
 #[cfg(not(feature = "debugger"))]
 pub mod graphics {
     use cpu::*;
-    pub struct Debugger {
-        
-    }
+    pub struct Debugger {}
 
     #[allow(unused_variables, dead_code)]
     impl Debugger {
