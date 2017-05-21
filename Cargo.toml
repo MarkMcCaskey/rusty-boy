@@ -14,8 +14,8 @@ debugger = []
 development = ["asm", "debugger"]
 
 [dependencies]
-clap = "2.21.2"
-sdl2 = "0.29"
+clap = "2.24"
+sdl2 = "^0.29"
 log = "0.3.7"
 log4rs = "0.6.2"
 ncurses = "5.85.0"

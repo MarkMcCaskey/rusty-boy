@@ -82,12 +82,10 @@ impl ApplicationState {
         let config = Config::builder()
             .appender(Appender::builder().build("stdout", Box::new(stdout)))
             .build(Root::builder().appender("stdout").build(match (trace_mode, debug_mode) {
-                                                                (true, _) => LogLevelFilter::Trace,
-                                                                (false, true) => {
-                                                                    LogLevelFilter::Debug
-                                                                }
-                                                                _ => LogLevelFilter::Info,
-                                                            }))
+                (true, _) => LogLevelFilter::Trace,
+                (false, true) => LogLevelFilter::Debug,
+                _ => LogLevelFilter::Info,
+            }))
             .unwrap();
 
 
@@ -100,21 +98,6 @@ impl ApplicationState {
             (false, Some(handle))
         };
 
-
-
-
-        // Set up gameboy and other state
-        let mut gameboy = cpu::Cpu::new();
-        trace!("loading ROM");
-        gameboy.load_rom(rom_file_name);
-
-
-        //delay debugger so loading rom can be logged if need be
-        let debugger = if should_debugger {
-            Some(Debugger::new(&gameboy))
-        } else {
-            None
-        };
 
         let data_path = match app_root(AppDataType::UserData, &APP_INFO) {
             Ok(v) => {
@@ -138,6 +121,20 @@ impl ApplicationState {
             }
         };
 
+        // Set up gameboy and other state
+        let mut gameboy = cpu::Cpu::new();
+        trace!("loading ROM");
+        gameboy.load_rom(rom_file_name, data_path.clone());
+
+
+        // delay debugger so loading rom can be logged if need be
+        let debugger = if should_debugger {
+            Some(Debugger::new(&gameboy))
+        } else {
+            None
+        };
+
+
         let sdl_context = sdl2::init().unwrap();
         let device = setup_audio(&sdl_context);
         let controller = setup_controller_subsystem(&sdl_context);
@@ -153,16 +150,16 @@ impl ApplicationState {
         gl_attr.set_context_version(3, 2);
 
         let window = match video_subsystem.window(gameboy.get_game_name().as_str(),
-                                     RB_SCREEN_WIDTH,
-                                     RB_SCREEN_HEIGHT)
-                  .position_centered()
-                  .opengl()
-                  .build() {
+                    RB_SCREEN_WIDTH,
+                    RB_SCREEN_HEIGHT)
+            .position_centered()
+            .opengl()
+            .build() {
             Ok(v) => v,
             Err(e) => panic!("Fatal error: {}", e),
         };
 
-        //video_subsystem.gl_load_library_default();
+        // video_subsystem.gl_load_library_default();
 
         let renderer = window.renderer()
             .accelerated()
@@ -274,9 +271,9 @@ impl ApplicationState {
     /// NOTE: does not handle input for ncurses debugger
     pub fn handle_events(&mut self) {
         for event in self.sdl_context
-                .event_pump()
-                .unwrap()
-                .poll_iter() {
+            .event_pump()
+            .unwrap()
+            .poll_iter() {
             use sdl2::event::Event;
 
             match event {
@@ -347,6 +344,7 @@ impl ApplicationState {
                     if let Some(ref mut debugger) = self.debugger {
                         debugger.die();
                     }
+                    self.gameboy.save_ram(self.data_path.clone());
                     std::process::exit(0);
                 }
                 Event::KeyDown { keycode: Some(keycode), repeat, .. } => {
@@ -510,7 +508,7 @@ impl ApplicationState {
                                 (4.0 * 8.0 * (2048.0 - self.gameboy.channel1_frequency() as f32));
             sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
 
-            //sound_system.channel2.wave_duty = self.gameboy.channel2_wave_pattern_duty();
+            // sound_system.channel2.wave_duty = self.gameboy.channel2_wave_pattern_duty();
             let channel2_freq = 4194304.0 /
                                 (4.0 * 8.0 * (2048.0 - self.gameboy.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
