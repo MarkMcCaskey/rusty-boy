@@ -1,4 +1,6 @@
 use std::ops::{Index, IndexMut};
+use std::path::PathBuf;
+
 use cpu::constants::*;
 
 
@@ -272,6 +274,7 @@ impl Cartridgey for Cartridge {
         }
         //panic!("This cartridge type does not provide RAM")
     }
+
 }
 
 pub enum CartridgeSubType {
@@ -476,6 +479,49 @@ impl Index<u16> for Cartridge {
 }
 
 impl Cartridge {
+    pub fn load_ram(&mut self, path: &PathBuf) {
+        use std::io::Read;
+        use std::fs::File;
+
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            _ => return,
+        };
+
+        match self.cart_sub {
+            Some(CartridgeSubType::Mbc1 {ram_banks: ref mut ra, ..}) => {
+                for ref mut b in ra {
+                    file.read_exact(&mut b[..]);
+                }
+            }
+            _ => ()
+        }
+    }
+
+    pub fn save_ram(&self, path: &PathBuf) {
+        use std::io::Write;
+        use std::fs::File;
+
+        let mut file = match File::create(path) {
+            Ok(f) => f,
+            _ => return,
+        };
+
+        match self.cart_sub {
+            Some(CartridgeSubType::Mbc1 {ram_banks: ref ra, ..}) => {
+                for ref b in ra {
+                    match file.write(&b[..]) {
+                        Ok(_) => (),
+                        Err(e) => error!("Error saving ram: {:?}", e),
+                    }
+                }
+            }
+            _ => ()
+        }
+
+        
+    }
+    
     pub fn reset(&mut self) {
         panic!("at reset");
         /*self.mem[0xFF05] = 0x00;

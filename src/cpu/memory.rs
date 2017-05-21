@@ -4,6 +4,7 @@
 
 use std::ops::{Index, IndexMut};
 use std::iter::Iterator;
+use std::path::PathBuf;
 
 use cpu::cartridge::*;
 use cpu::constants::*;
@@ -76,6 +77,24 @@ impl Memory {
 
     pub fn load(&mut self, input_file: &str) {
         *self.cartridge = Cartridge::load(input_file);
+    }
+
+    pub fn load_saved_ram(&mut self, data_path: PathBuf, game_name: &str) {
+        let mut path = data_path.clone();
+
+        path.push(game_name);
+        path.set_extension("savedgame");
+
+        self.cartridge.load_ram(&mut path);
+    }
+
+    pub fn save_ram(&self, data_path: PathBuf, game_name: &str) {
+        let mut path = data_path.clone();
+
+        path.push(game_name);
+        path.set_extension("savedgame");
+
+        self.cartridge.save_ram(&data_path);
     }
 
     pub fn initialize_logger(&mut self) {

@@ -11,6 +11,7 @@ pub mod memory;
 pub mod memvis;
 
 use std::num::Wrapping;
+use std::path::PathBuf;
 
 use disasm::*;
 use self::constants::*;
@@ -2254,9 +2255,28 @@ impl Cpu {
         self.state = CpuState::Crashed;
     }
 
-    pub fn load_rom(&mut self, file_path: &str) {
+
+    /// Loads the ROM with saved RAM if its available
+    pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
         trace!("Loading ROM");
         self.mem.load(file_path);
+
+        // load RAM if it exists
+        if let Some(data_location) = data_path {
+            let game_name = self.get_game_name();
+            self.mem.load_saved_ram(data_location, game_name.as_ref());
+        } 
+        
         self.mem.initialize_logger();
+
+    }
+
+    pub fn save_ram(&self, data_path: Option<PathBuf>) {
+        trace!("Saving RAM");
+
+        if let Some(data_location) = data_path {
+            let game_name = self.get_game_name();
+            self.mem.save_ram(data_location, game_name.as_ref());
+        }
     }
 }
