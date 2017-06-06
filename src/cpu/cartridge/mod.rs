@@ -234,7 +234,7 @@ impl Cartridgey for Cartridge {
                 }
             }
             Some(CartridgeSubType::Mbc3 { mem_bank_selector: ref mut mbs,
-                                          ram_bank_selector: ref mut rbs,
+                                          //ram_bank_selector: ref mut rbs,
                                           ram_active: ref mut ra,
                                           .. }) => {
                 match index {
@@ -397,29 +397,37 @@ impl Index<u16> for Cartridge {
 
     fn index<'a>(&'a self, ind: u16) -> &'a byte {
         match ind {
-            0x0000...0x3FFF => &(self.memory_bank0[ind as usize]),
+            0x0000...0x3FFF => unsafe { self.memory_bank0.get_unchecked(ind as usize) },
             0x4000...0x7FFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly { memory_bank1: ref membank1, .. }) => {
-                        &membank1[(ind - 0x4000) as usize]
+                        unsafe {
+                            membank1.get_unchecked((ind - 0x4000) as usize)
+                        }
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::SixteenEight,
                                                   memory_banks: ref mb,
                                                   mem_bank_selector: index,
                                                   .. }) => {
-                        &mb[index as usize][((ind - 0x4000) as usize)]
+                        unsafe {
+                            mb[index as usize].get_unchecked(((ind - 0x4000) as usize))
+                        }
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,
                                                   memory_banks: ref mb,
                                                   mem_bank_selector: index,
                                                   .. }) => {
-                        &mb[index as usize][(ind - 0x4000) as usize]
+                        unsafe {
+                            mb[index as usize].get_unchecked((ind - 0x4000) as usize)
+                        }
                         //panic!("Indexing {:X}", ind)
                     }
                     Some(CartridgeSubType::Mbc3 { memory_banks: ref mb,
                                                   mem_bank_selector: index,
                                                   .. }) => {
-                        &mb[index as usize][(ind - 0x4000) as usize]
+                        unsafe {
+                            mb[index as usize].get_unchecked((ind - 0x4000) as usize)
+                        }
                     }
 
                     _ => panic!("Indexing {:X}", ind),
@@ -434,18 +442,24 @@ impl Index<u16> for Cartridge {
             0xA000...0xBFFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly { ram_bank: ref rambank, .. }) => {
-                        &rambank[(ind - 0xA000) as usize]
+                        unsafe {
+                            rambank.get_unchecked((ind - 0xA000) as usize)
+                        }
                     }
                     Some(CartridgeSubType::Mbc1 { // ram_active: true,
                                                   ram_banks: ref ram_vec,
                                                   ram_bank_selector: rbs,
                                                   .. }) => {
-                        &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
+                        unsafe {
+                            ram_vec[rbs as usize].get_unchecked((ind as u32 - 0xA000) as usize)
+                        }
                     }
                     Some(CartridgeSubType::Mbc3 { ram_banks: ref ram_vec,
                                                   ram_bank_selector: rbs,
                                                   .. }) => {
-                        &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
+                        unsafe {
+                            ram_vec[rbs as usize].get_unchecked((ind as u32 - 0xA000) as usize)
+                        }
                     }
                     /*Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
                         panic!("Ram is not active")
@@ -491,7 +505,7 @@ impl Cartridge {
         match self.cart_sub {
             Some(CartridgeSubType::Mbc1 {ram_banks: ref mut ra, ..}) => {
                 for ref mut b in ra {
-                    file.read_exact(&mut b[..]);
+                    file.read_exact(&mut b[..]).unwrap();
                 }
             }
             _ => ()

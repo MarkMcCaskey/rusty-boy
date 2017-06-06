@@ -17,7 +17,6 @@ use disasm::*;
 use self::constants::*;
 use self::memory::*;
 use self::memvis::cpumemvis::*;
-use self::memvis::memvis::*;
 
 
 #[inline]
@@ -2278,5 +2277,27 @@ impl Cpu {
             let game_name = self.get_game_name();
             self.mem.save_ram(data_location, game_name.as_ref());
         }
+    }
+        
+    pub fn remove_old_events(&mut self) {
+        use io::constants::FADE_DELAY;
+
+        let event_logger = match self.mem.logger {
+            Some(ref mut logger) => logger,
+            None => return,
+        };
+
+        // Remove events that are too old
+        while !event_logger.events_deq.is_empty() {
+            let timestamp = event_logger.events_deq
+                .front()
+                .unwrap()
+                .timestamp;
+            if (Wrapping(self.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
+                event_logger.events_deq.pop_front();
+            } else {
+                break;
+            }
+        }   
     }
 }
