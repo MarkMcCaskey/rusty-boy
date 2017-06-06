@@ -15,7 +15,7 @@ development = ["asm", "debugger"]
 
 [dependencies]
 clap = "2.24"
-sdl2 = "^0.29"
+sdl2 = "^0.30"
 log = "0.3.7"
 log4rs = "0.6.2"
 ncurses = "5.85.0"
@@ -25,3 +25,4 @@ serde_derive = "1.0.0"
 nom = "^2.2"
 app_dirs = "1.1.1"
 time = "0.1"
+lazy_static = "0.2"

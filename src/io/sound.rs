@@ -70,7 +70,7 @@ impl SoundChannel for SquareWave {
         };
         self.phase = (self.phase + self.phase_inc) % 1.0;
         // To make it sound slightly nicer
-        out.sin()
+        out//.sin()
     }
 }
 
@@ -91,7 +91,7 @@ impl SoundChannel for SquareWaveRam {
         self.phase = (self.phase + self.phase_inc) % 1.0;
 
         self.wave_ram_index = (self.wave_ram_index + 1) % 32;
-        out.sin()
+        out//.sin()
     }
 }
 

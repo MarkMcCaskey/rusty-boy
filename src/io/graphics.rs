@@ -4,12 +4,13 @@ use sdl2;
 use sdl2::pixels::*;
 use std::fmt::Debug;
 use sdl2::rect::{Rect, Point};
+use sdl2::surface::Surface;
 
 use cpu::Cpu;
 
 /// Saves the current screen to file
-pub fn save_screenshot(renderer: &sdl2::render::Renderer, filename: &str) {
-    let window = renderer.window().unwrap();
+pub fn save_screenshot(renderer: &sdl2::render::Canvas<sdl2::video::Window>, filename: &str) {
+    let window = renderer.window();
     let (w, h) = window.size();
     let format = window.window_pixel_format();
     let mut pixels = renderer.read_pixels(None, format).unwrap();
@@ -32,10 +33,10 @@ pub struct Toggle<T> {
     values: Vec<T>,
 }
 
-impl<T> Toggle<T>
-    where T: Clone + Debug
+impl<S> Toggle<S>
+    where S: Clone + Debug
 {
-    pub fn new(rect: sdl2::rect::Rect, values: Vec<T>) -> Toggle<T> {
+    pub fn new(rect: sdl2::rect::Rect, values: Vec<S>) -> Toggle<S> {
         Toggle {
             rect: rect,
             current: 0,
@@ -46,11 +47,11 @@ impl<T> Toggle<T>
         self.current = (self.current + 1) % self.values.len();
         debug!("Click! {} {:?}", self.current, self.value());
     }
-    pub fn draw(&self, renderer: &mut sdl2::render::Renderer) {
+    pub fn draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget {
         renderer.set_draw_color(Color::RGB(255, 0, 0));
         renderer.draw_rect(self.rect).unwrap();
     }
-    pub fn value(&self) -> Option<T> {
+    pub fn value(&self) -> Option<S> {
         if !self.values.is_empty() {
             Some(self.values[self.current].clone())
         } else {
@@ -74,7 +75,7 @@ pub struct PositionedFrame {
 
 impl PositionedFrame {
     #[inline]
-    fn before_draw(&self, renderer: &mut sdl2::render::Renderer) {
+    fn before_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget{
         let r = self.rect;
 
         let view_rect = r;
@@ -85,7 +86,7 @@ impl PositionedFrame {
     }
 
     #[inline]
-    fn after_draw(&self, renderer: &mut sdl2::render::Renderer) {
+    fn after_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget{
         let (s_x, s_y) = renderer.scale();
         renderer.set_scale(s_x / self.scale, s_y / self.scale).unwrap();
         renderer.set_clip_rect(None);
@@ -96,7 +97,7 @@ impl PositionedFrame {
 
 pub trait Drawable {
     fn get_initial_size(&self) -> (u32, u32);
-    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu);
+    fn draw(&mut self, renderer: &mut sdl2::render::Canvas<Surface>, cpu: &mut Cpu);
     fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu);
 }
 
@@ -106,9 +107,9 @@ impl Drawable for PositionedFrame {
         self.vis.get_initial_size()
     }
 
-    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, cpu: &mut Cpu) {
+    fn draw(&mut self, renderer: &mut sdl2::render::Canvas<Surface>, cpu: &mut Cpu) {
         self.before_draw(renderer);
-        // draw_frame_bounds(self, renderer); // Use to debug clipping
+        //draw_frame_bounds(self, renderer); // Use to debug clipping
         self.vis.draw(renderer, cpu);
         self.after_draw(renderer);
     }
@@ -121,7 +122,7 @@ impl Drawable for PositionedFrame {
 }
 
 
-pub fn draw_frame_bounds(frame: &PositionedFrame, renderer: &mut sdl2::render::Renderer) {
+pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget {
     renderer.set_draw_color(Color::RGB(0, 0, 0));
     renderer.fill_rect(Rect::new(0, 0, frame.rect.width(), frame.rect.height())).unwrap();
 

@@ -72,26 +72,6 @@ macro_rules! test_op_really_no_arg {
 }
 
 
-macro_rules! test_op_no_arg16 {
-    ($func:ident, $method:ident, $output_reg:expr, $input:expr,
-     $expected_output:expr, $flag_find_value:expr,
-     $flag_expected_value:expr) => {
-        
-        #[test]
-        fn $func() {
-            let mut cpu = Cpu::new();
-            let old_hl = cpu.hl();
-
-            cpu.set_register16($output_reg, $input);
-            cpu.$method($output_reg);
-            println!("{:X} + {:X} = {:X}. should be: {:X}, but expected {:X}", $input, old_hl, cpu.access_register16(CpuRegister16::HL), ($input + (old_hl as u32)) as u16, $expected_output);
-            
-            assert_eq!(
-                cpu.access_register16($output_reg), $expected_output);
-            assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
-        }
-    }
-}
 
 macro_rules! test_op16 {
     ($func:ident, $method:ident, $input_reg:expr, $output_reg:expr, $input:expr,

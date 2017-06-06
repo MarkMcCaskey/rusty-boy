@@ -71,7 +71,7 @@ impl Memory {
     pub fn write_ram_value(&mut self, index: u16, value: byte) {
         match index {
             0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.write_ram_value(index, value),
-            n => self[index as usize] = value,
+            _ => self[index as usize] = value,
         }
     }
 
@@ -101,7 +101,7 @@ impl Memory {
         let mut mem_buffer: [byte; 0x10000] = [0u8; 0x10000];
         for index in 0..0xFFFF {
             mem_buffer[index] = match index {
-                0x0000...0x7FFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
+                0x0000...0x7FFF | 0xA000 ... 0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
                 0x8000...0x9FFF => self.video_ram[index - 0x8000],
                 0xC000...0xDFFF => self.internal_ram[index - 0xC000],
                 0xE000...0xFDFF => self.internal_ram[index - 0xE000],
@@ -116,6 +116,7 @@ impl Memory {
         }
         self.logger = Some(DeqCpuEventLogger::new(Some(&mem_buffer[..])));
     }
+
 
     pub fn reset(&mut self) {
         self[0xFF05] = 0x00;
@@ -160,13 +161,13 @@ impl Index<usize> for Memory {
         //TODO: figure out why it's being indexed too high
         match index % 0x10000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.index(index as u16), //self.cartridge[index as u16],
-            0x8000...0x9FFF => &self.video_ram[index - 0x8000],
-            0xC000...0xDFFF => &self.internal_ram[index - 0xC000],
-            0xE000...0xFDFF => &self.internal_ram[index - 0xE000],
-            0xFE00...0xFE9F => &self.oam[index - 0xFE00],
-            0xFEA0...0xFEFF => &self.empty[index - 0xFEA0],
-            0xFF00...0xFF7F => &self.io_ports[index - 0xFF00],
-            0xFF80...0xFFFE => &self.hram[index - 0xFF80],
+            0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked(index - 0x8000) },
+            0xC000...0xDFFF => unsafe { self.internal_ram.get_unchecked(index - 0xC000) },
+            0xE000...0xFDFF => unsafe { self.internal_ram.get_unchecked(index - 0xE000) },
+            0xFE00...0xFE9F => unsafe { self.oam.get_unchecked(index - 0xFE00) },
+            0xFEA0...0xFEFF => unsafe { self.empty.get_unchecked(index - 0xFEA0) },
+            0xFF00...0xFF7F => unsafe { self.io_ports.get_unchecked(index - 0xFF00) },
+            0xFF80...0xFFFE => unsafe { self.hram.get_unchecked(index - 0xFF80) },
             0xFFFF => &self.interrupt_flag,
             _ => panic!("Address 0x{:X} is out of bounds!", index),
         }
@@ -177,7 +178,7 @@ impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
         match index % 0x10000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => &mut self.cartridge[index as u16],
-            0x8000...0x9FFF => &mut self.video_ram[index - 0x8000],
+            0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked_mut(index - 0x8000) },
             0xC000...0xDFFF => &mut self.internal_ram[index - 0xC000],
             0xE000...0xFDFF => &mut self.internal_ram[index - 0xE000],
             0xFE00...0xFE9F => &mut self.oam[index - 0xFE00],

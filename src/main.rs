@@ -22,6 +22,8 @@ extern crate serde_derive;
 extern crate nom;
 extern crate app_dirs;
 extern crate time;
+#[macro_use]
+extern crate lazy_static;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;

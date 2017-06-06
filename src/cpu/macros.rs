@@ -33,19 +33,6 @@ macro_rules! setter_unsetter_and_getter {
     }
 }
 
-macro_rules! make_getter {
-    ($name_m:ident, $memory_location:expr) => {
-        macro_rules! $ident {
-            ($name:ident, $location:expr) => {
-                fn $name(&self) -> bool {
-                    (self.mem[$memory_location] & $location)
-                        == $location
-                }
-            }
-        }
-    }
-}
-
 
 //NOTE: look into separate sound on/off storage outside of
 // GB memory to prevent subtle "bug"/non-correct behavior
