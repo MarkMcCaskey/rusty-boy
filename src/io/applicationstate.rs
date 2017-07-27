@@ -78,7 +78,10 @@ pub struct ApplicationState {
 
 impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
-    pub fn new(trace_mode: bool, debug_mode: bool, rom_file_name: &str) -> ApplicationState {
+    pub fn new(trace_mode: bool,
+               debug_mode: bool,
+               rom_file_name: &str)
+               -> Result<ApplicationState, String> {
         // Set up logging
         let stdout = ConsoleAppender::builder()
             .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
@@ -86,12 +89,14 @@ impl ApplicationState {
 
         let config = Config::builder()
             .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(Root::builder().appender("stdout").build(match (trace_mode, debug_mode) {
-                (true, _) => LogLevelFilter::Trace,
-                (false, true) => LogLevelFilter::Debug,
-                _ => LogLevelFilter::Info,
-            }))
-            .unwrap();
+            .build(Root::builder()
+                       .appender("stdout")
+                       .build(match (trace_mode, debug_mode) {
+                                  (true, _) => LogLevelFilter::Trace,
+                                  (false, true) => LogLevelFilter::Debug,
+                                  _ => LogLevelFilter::Info,
+                              }))
+            .or_else(|_| Err("Could not build Config".to_string()))?;
 
 
         // Set up debugging or command-line logging
@@ -99,7 +104,8 @@ impl ApplicationState {
             info!("Running in debug mode");
             (true, None)
         } else {
-            let handle = log4rs::init_config(config).unwrap();
+            let handle = log4rs::init_config(config)
+                .or_else(|_| Err("Could not init Config"))?;
             (false, Some(handle))
         };
 
@@ -140,13 +146,13 @@ impl ApplicationState {
         };
 
 
-        let sdl_context = sdl2::init().unwrap();
-        let device = setup_audio(&sdl_context);
+        let sdl_context = sdl2::init()?;
+        let device = setup_audio(&sdl_context)?;
         let controller = setup_controller_subsystem(&sdl_context);
 
         // Set up graphics and window
         trace!("Opening window");
-        let video_subsystem = sdl_context.video().unwrap();
+        let video_subsystem = sdl_context.video()?;
 
         let gl_attr = video_subsystem.gl_attr();
 
@@ -154,34 +160,36 @@ impl ApplicationState {
         ///gl_attr.set_context_flags().debug().set();
         gl_attr.set_context_version(3, 2);
 
-        let window = match video_subsystem.window(gameboy.get_game_name().as_str(),
-                    RB_SCREEN_WIDTH,
-                    RB_SCREEN_HEIGHT)
-            .position_centered()
-            .opengl()
-            .build() {
+        let window = match video_subsystem
+                  .window(gameboy.get_game_name().as_str(),
+                          RB_SCREEN_WIDTH,
+                          RB_SCREEN_HEIGHT)
+                  .position_centered()
+                  .opengl()
+                  .build() {
             Ok(v) => v,
             Err(e) => panic!("Fatal error: {}", e),
         };
 
         // video_subsystem.gl_load_library_default();
 
-        let renderer = window.into_canvas()
+        let renderer = window
+            .into_canvas()
             .accelerated()
             .present_vsync()
             .build()
-            .unwrap();
+            .or_else(|_| Err("Could not create SDL2 window"))?;
 
         let gbcopy = gameboy.clone();
 
-       // let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
+        // let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
         //let w = MEM_DISP_WIDTH as u32;
         //let h = MEM_DISP_HEIGHT as u32;
         //let memvis_texture = tc.create_texture_static(txt_format, w, h).unwrap();
 
         // TODO function for widget creation and automaic layout
         let widget_memvis = {
-            let vis = MemVisState::new();//memvis_texture);
+            let vis = MemVisState::new(); //memvis_texture);
             let (w, h) = vis.get_initial_size();
             PositionedFrame {
                 rect: Rect::new(1, 1, w, h),
@@ -219,39 +227,40 @@ impl ApplicationState {
         widgets.push(widget_vidram_bg);
         widgets.push(widget_vidram_tiles);
 
-        ApplicationState {
-            gameboy: gameboy,
-            sdl_context: sdl_context,
-            sound_system: device,
-            //renderer: renderer,
-            canvas: renderer,
-            cycle_count: 0,
-            prev_time: 0,
-            // FIXME sound_cycles is probably wrong or not needed
-            sound_cycles: 0,
-            debugger: debugger,
-            prev_hsync_cycles: 0,
-            timer_cycles: 0,
-            div_timer_cycles: 0,
-            initial_gameboy_state: gbcopy,
-            logger_handle: handle,
-            controller: controller,
-            screenshot_frame_num: Wrapping(0),
-            ui_scale: SCALE,
-            ui_offset: Point::new(0, 0),
-            widgets: widgets,
-            config_path: config_path,
-            data_path: data_path,
+        Ok(ApplicationState {
+               gameboy: gameboy,
+               sdl_context: sdl_context,
+               sound_system: device,
+               //renderer: renderer,
+               canvas: renderer,
+               cycle_count: 0,
+               prev_time: 0,
+               // FIXME sound_cycles is probably wrong or not needed
+               sound_cycles: 0,
+               debugger: debugger,
+               prev_hsync_cycles: 0,
+               timer_cycles: 0,
+               div_timer_cycles: 0,
+               initial_gameboy_state: gbcopy,
+               logger_handle: handle,
+               controller: controller,
+               screenshot_frame_num: Wrapping(0),
+               ui_scale: SCALE,
+               ui_offset: Point::new(0, 0),
+               widgets: widgets,
+               config_path: config_path,
+               data_path: data_path,
             //texture_creator: tc,
-        }
+           })
     }
 
     /// Loads a controller to be used as input if there isn't currently an active controller
     pub fn load_controller_if_none_exist(&mut self) {
-        let should_load =
-            if let Some(ref c) = self.controller {
-                !c.attached() 
-            } else { true };
+        let should_load = if let Some(ref c) = self.controller {
+            !c.attached()
+        } else {
+            true
+        };
 
         if should_load {
             self.controller = setup_controller_subsystem(&self.sdl_context);
@@ -261,7 +270,7 @@ impl ApplicationState {
                 //Note: not printing a warning here because this function is
                 // called every frame now
 
-                
+
                 //warn!("Could not attach controller!");
             }
         }
@@ -278,11 +287,8 @@ impl ApplicationState {
     /// Handles both controller input and keyboard/mouse debug input
     /// NOTE: does not handle input for ncurses debugger
     pub fn handle_events(&mut self) {
-        
-        for event in self.sdl_context
-            .event_pump()
-            .unwrap()
-            .poll_iter() {
+
+        for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
 
             match event {
@@ -350,18 +356,19 @@ impl ApplicationState {
                 /*Event::JoyDeviceAdded {..} | Event::ControllerDeviceAdded{..} => {
                     self.load_controller_if_none_exist();
                 }*/
-                Event::JoyDeviceRemoved {which: device_id, ..}
-                | Event::ControllerDeviceRemoved{which: device_id, ..} => {
-                    let should_remove =
-                        if let Some(ref controller) = self.controller {
-                            let sr = device_id == controller.instance_id();
+                Event::JoyDeviceRemoved { which: device_id, .. } |
+                Event::ControllerDeviceRemoved { which: device_id, .. } => {
+                    let should_remove = if let Some(ref controller) = self.controller {
+                        let sr = device_id == controller.instance_id();
 
-                            if sr {
-                                info!("Removing controller {}", controller.name());
-                            }
+                        if sr {
+                            info!("Removing controller {}", controller.name());
+                        }
 
-                            sr
-                        } else {false};
+                        sr
+                    } else {
+                        false
+                    };
 
                     if should_remove {
                         self.controller = None;
@@ -376,7 +383,11 @@ impl ApplicationState {
                     self.gameboy.save_ram(self.data_path.clone());
                     std::process::exit(0);
                 }
-                Event::KeyDown { keycode: Some(keycode), repeat, .. } => {
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    repeat,
+                    ..
+                } => {
                     if !repeat {
                         match keycode {
                             Keycode::F3 => self.gameboy.toggle_logger(),
@@ -406,7 +417,11 @@ impl ApplicationState {
                         }
                     }
                 }
-                Event::KeyUp { keycode: Some(keycode), repeat, .. } => {
+                Event::KeyUp {
+                    keycode: Some(keycode),
+                    repeat,
+                    ..
+                } => {
                     if !repeat {
                         match keycode {
                             Keycode::A => self.gameboy.unpress_a(),
@@ -557,7 +572,7 @@ impl ApplicationState {
 
             //check for new controller every frame
             self.load_controller_if_none_exist();
-                
+
             if let Some(ref mut dbg) = self.debugger {
                 dbg.step(&mut self.gameboy);
             }
@@ -570,19 +585,27 @@ impl ApplicationState {
             // Draw all widgets
 
             let tc = self.canvas.texture_creator();
-            let temp_surface = Surface::new((MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X + (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
-                                            (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y + (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
-                                            PixelFormatEnum::RGBA8888).unwrap();
+            let temp_surface = Surface::new((MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X +
+                                            (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
+                                            (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y +
+                                            (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
+                                            PixelFormatEnum::RGBA8888)
+                    .unwrap();
 
             let mut temp_canvas = temp_surface.into_canvas().unwrap();
             for ref mut widget in &mut self.widgets {
                 widget.draw(&mut temp_canvas, &mut self.gameboy);
             }
-            let mut texture = tc.create_texture_from_surface(&temp_canvas.into_surface() ).unwrap();
+            let mut texture = tc.create_texture_from_surface(&temp_canvas.into_surface())
+                .unwrap();
 
             texture.set_blend_mode(sdl2::render::BlendMode::None);
 
-            self.canvas.copy(&texture, None, Some(Rect::new(0,0, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32))).unwrap();
+            self.canvas
+                .copy(&texture,
+                      None,
+                      Some(Rect::new(0, 0, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32)))
+                .unwrap();
 
 
 
