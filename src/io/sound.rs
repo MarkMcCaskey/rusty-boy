@@ -112,9 +112,9 @@ impl AudioCallback for GBSound {
 
 /// Creates a device from a context
 /// May have to be changed to allow each GB channel to have its own `Wave`
-pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<GBSound> {
+pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, String> {
     // set up audio
-    let audio_subsystem = sdl_context.audio().unwrap();
+    let audio_subsystem = sdl_context.audio()?;
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -155,5 +155,4 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> AudioDevice<GBSound> {
                 },
             }
         })
-        .unwrap()
 }

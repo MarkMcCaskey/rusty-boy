@@ -54,17 +54,15 @@ fn main() {
     let trace_mode = arguments.is_present("trace");
 
     // Set up gameboy and app state
-    let mut appstate = ApplicationState::new(trace_mode, debug_mode, rom_file);
+    let mut appstate = match ApplicationState::new(trace_mode, debug_mode, rom_file) {
+        Ok(apst) => apst,
+        Err(e) => {
+            eprintln!("Fatal error: could not create Gameboy: {}", e);
+            return ();
+        }
+    };
 
-    /*let mut oldtime = time::PreciseTime::now();
-    let max_time = time::Duration::microseconds(15 * 1000).num_microseconds().unwrap();
-    */
     loop {
-        /* while oldtime.to(time::PreciseTime::now()).num_microseconds().unwrap() < max_time {
-            use std::time::Duration;
-            std::thread::sleep(Duration::from_millis(1));
-        }*/
-        //  oldtime = time::PreciseTime::now();
         appstate.handle_events();
         appstate.step();
     }

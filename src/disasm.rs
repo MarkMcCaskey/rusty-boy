@@ -320,10 +320,7 @@ pub fn binsearch_inst(vec: &[(String, u16)],
     if end < begin {
         return None;
     } else if end - begin <= 10 {
-        for (x, &(_, b)) in vec.iter()
-                .enumerate()
-                .take(end + 1)
-                .skip(begin) {
+        for (x, &(_, b)) in vec.iter().enumerate().take(end + 1).skip(begin) {
             //            let (_, b) = vec[x];
             if b == desired_pc {
                 return Some(x);
@@ -381,7 +378,14 @@ fn main() {
     let mut rom = File::open(file_path).expect("Could not open rom file");
     let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 
-    let rom_size = rom.read(&mut rom_buffer).unwrap();
+    let rom_size = match rom.read(&mut rom_buffer) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Could not read ROM file");
+            eprintln!("{}", e);
+            return ();
+        } 
+    };
 
     disasm_rom(rom_buffer, rom_size);
 }
