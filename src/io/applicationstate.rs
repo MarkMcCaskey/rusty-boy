@@ -80,7 +80,8 @@ impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
     pub fn new(trace_mode: bool,
                debug_mode: bool,
-               rom_file_name: &str)
+               rom_file_name: &str,
+               with_mem_vis: bool)
                -> Result<ApplicationState, String> {
         // Set up logging
         let stdout = ConsoleAppender::builder()
@@ -160,10 +161,14 @@ impl ApplicationState {
         ///gl_attr.set_context_flags().debug().set();
         gl_attr.set_context_version(3, 2);
 
+        let (window_width, window_height) =
+            if with_mem_vis { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
+        else { (((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
+                ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32) };
         let window = match video_subsystem
                   .window(gameboy.get_game_name().as_str(),
-                          RB_SCREEN_WIDTH,
-                          RB_SCREEN_HEIGHT)
+                          window_width,
+                          window_height)
                   .position_centered()
                   .opengl()
                   .build() {
@@ -201,9 +206,13 @@ impl ApplicationState {
 
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
+            let (screen_pos_w, screen_pos_h) =
+                if with_mem_vis { (MEM_DISP_WIDTH + 3, 1) }
+                else { (0, 1) };
+
             let (w, h) = vis.get_initial_size();
             PositionedFrame {
-                rect: Rect::new(MEM_DISP_WIDTH + 3, 1, w, h),
+                rect: Rect::new(screen_pos_w, screen_pos_h, w, h),
                 scale: 1.0,
                 vis: Box::new(vis),
             }
@@ -223,9 +232,9 @@ impl ApplicationState {
         };
 
         let mut widgets = Vec::new();
-        widgets.push(widget_memvis);
+        if with_mem_vis { widgets.push(widget_memvis); }
         widgets.push(widget_vidram_bg);
-        widgets.push(widget_vidram_tiles);
+        if with_mem_vis { widgets.push(widget_vidram_tiles); }
 
         Ok(ApplicationState {
                gameboy: gameboy,
