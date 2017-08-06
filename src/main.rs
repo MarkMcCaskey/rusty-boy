@@ -52,9 +52,10 @@ fn main() {
     let rom_file = arguments.value_of("game").expect("Could not open specified rom");
     let debug_mode = arguments.is_present("debug");
     let trace_mode = arguments.is_present("trace");
+    let memviz_mode = arguments.is_present("visualize");
 
     // Set up gameboy and app state
-    let mut appstate = match ApplicationState::new(trace_mode, debug_mode, rom_file) {
+    let mut appstate = match ApplicationState::new(trace_mode, debug_mode, rom_file, memviz_mode) {
         Ok(apst) => apst,
         Err(e) => {
             eprintln!("Fatal error: could not create Gameboy: {}", e);

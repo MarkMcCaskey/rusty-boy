@@ -33,6 +33,6 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
                  .short("z")
                  .long("visualize")
                  .help("Turns on interactive memory visualization")
-                 .takes_value(false))
+             .takes_value(false))
         .get_matches()
 }
