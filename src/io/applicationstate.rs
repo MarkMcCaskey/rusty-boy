@@ -22,6 +22,7 @@ use io::graphics::*;
 use io::memvis::MemVisState;
 use io::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use io::sound::*;
+use io::applicationsettings::ApplicationSettings;
 
 use log::LogLevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -78,10 +79,7 @@ pub struct ApplicationState {
 
 impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
-    pub fn new(trace_mode: bool,
-               debug_mode: bool,
-               rom_file_name: &str,
-               with_mem_vis: bool)
+    pub fn new(app_settings: &ApplicationSettings)
                -> Result<ApplicationState, String> {
         // Set up logging
         let stdout = ConsoleAppender::builder()
@@ -91,17 +89,18 @@ impl ApplicationState {
         let config = Config::builder()
             .appender(Appender::builder().build("stdout", Box::new(stdout)))
             .build(Root::builder()
-                       .appender("stdout")
-                       .build(match (trace_mode, debug_mode) {
-                                  (true, _) => LogLevelFilter::Trace,
-                                  (false, true) => LogLevelFilter::Debug,
-                                  _ => LogLevelFilter::Info,
-                              }))
+                   .appender("stdout")
+                   .build(match (app_settings.trace_mode,
+                                 app_settings.debug_mode) {
+                       (true, _) => LogLevelFilter::Trace,
+                       (false, true) => LogLevelFilter::Debug,
+                       _ => LogLevelFilter::Info,
+                   }))
             .or_else(|_| Err("Could not build Config".to_string()))?;
 
 
         // Set up debugging or command-line logging
-        let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
+        let (should_debugger, handle) = if app_settings.debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
             (true, None)
         } else {
@@ -136,7 +135,7 @@ impl ApplicationState {
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
         trace!("loading ROM");
-        gameboy.load_rom(rom_file_name, data_path.clone());
+        gameboy.load_rom(app_settings.rom_file_name.as_ref(), data_path.clone());
 
 
         // delay debugger so loading rom can be logged if need be
@@ -162,7 +161,7 @@ impl ApplicationState {
         gl_attr.set_context_version(3, 2);
 
         let (window_width, window_height) =
-            if with_mem_vis { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
+            if app_settings.memvis_mode { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
         else { (((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
                 ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32) };
         let window = match video_subsystem
@@ -207,7 +206,7 @@ impl ApplicationState {
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
             let (screen_pos_w, screen_pos_h) =
-                if with_mem_vis { (MEM_DISP_WIDTH + 3, 1) }
+                if app_settings.memvis_mode { (MEM_DISP_WIDTH + 3, 1) }
                 else { (0, 1) };
 
             let (w, h) = vis.get_initial_size();
@@ -232,9 +231,9 @@ impl ApplicationState {
         };
 
         let mut widgets = Vec::new();
-        if with_mem_vis { widgets.push(widget_memvis); }
+        if app_settings.memvis_mode { widgets.push(widget_memvis); }
         widgets.push(widget_vidram_bg);
-        if with_mem_vis { widgets.push(widget_vidram_tiles); }
+        if app_settings.memvis_mode { widgets.push(widget_vidram_tiles); }
 
         Ok(ApplicationState {
                gameboy: gameboy,
