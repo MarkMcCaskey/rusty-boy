@@ -9,3 +9,4 @@ pub mod vidram;
 pub mod arguments;
 pub mod events;
 pub mod applicationstate;
+pub mod applicationsettings;
