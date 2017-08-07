@@ -160,20 +160,23 @@ impl ApplicationState {
         ///gl_attr.set_context_flags().debug().set();
         gl_attr.set_context_version(3, 2);
 
-        let (window_width, window_height) =
-            if app_settings.memvis_mode { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
-        else { (((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
-                ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32) };
-        let window = match video_subsystem
-                  .window(gameboy.get_game_name().as_str(),
-                          window_width,
-                          window_height)
-                  .position_centered()
-                  .opengl()
-                  .build() {
-            Ok(v) => v,
-            Err(e) => panic!("Fatal error: {}", e),
-        };
+
+        let window = {
+            let (window_width, window_height) = 
+                if app_settings.memvis_mode { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
+                else { (((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
+                        ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32) };
+
+            match video_subsystem
+                .window(gameboy.get_game_name().as_str(),
+                        window_width,
+                        window_height)
+                .position_centered()
+                .opengl()
+                .build() {
+                    Ok(v) => v,
+                    Err(e) => panic!("Fatal error: {}", e),
+                }};
 
         // video_subsystem.gl_load_library_default();
 
@@ -231,9 +234,9 @@ impl ApplicationState {
         };
 
         let mut widgets = Vec::new();
-        if app_settings.memvis_mode { widgets.push(widget_memvis); }
+        if app_settings.memvis_mode { widgets.push(widget_memvis);
+                                      widgets.push(widget_vidram_tiles);}
         widgets.push(widget_vidram_bg);
-        if app_settings.memvis_mode { widgets.push(widget_vidram_tiles); }
 
         Ok(ApplicationState {
                gameboy: gameboy,
