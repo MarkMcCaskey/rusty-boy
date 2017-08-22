@@ -68,7 +68,7 @@ lazy_static! {
                                                Color::RGB(156, 146, 244),
                                                Color::RGB(252, 250, 175)];
 
-    pub static ref OBJECT_PALETTE: [Color; 4] = [Color::RGB(184, 248, 24),
+    pub static ref OBJECT_PALETTE: [Color; 4] = [Color::RGB(0, 0, 0),
                                                  Color::RGB(174, 124, 9),
                                                  Color::RGB(248, 184, 0),
                                                  Color::RGB(248, 240, 240)];
