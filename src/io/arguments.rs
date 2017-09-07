@@ -33,6 +33,11 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
                  .short("z")
                  .long("visualize")
                  .help("Turns on interactive memory visualization")
-             .takes_value(false))
+                 .takes_value(false))
+        .arg(Arg::with_name("vulkan")
+                 .short("v")
+                 .long("vulkan")
+                 .help("Runs graphics on the GPU with Vulkan")
+                 .takes_value(false))
         .get_matches()
 }
