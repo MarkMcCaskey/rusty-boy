@@ -98,7 +98,7 @@ impl Memory {
     }
 
     pub fn initialize_logger(&mut self) {
-        let mut mem_buffer: [byte; 0x10000] = [0u8; 0x10000];
+        let mut mem_buffer: [byte; 0x1_0000] = [0u8; 0x1_0000];
         for index in 0..0xFFFF {
             mem_buffer[index] = match index {
                 0x0000...0x7FFF | 0xA000 ... 0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
@@ -159,7 +159,7 @@ impl Index<usize> for Memory {
 
     fn index(&self, index: usize) -> &byte {
         //TODO: figure out why it's being indexed too high
-        match index % 0x10000 {
+        match index % 0x1_0000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.index(index as u16), //self.cartridge[index as u16],
             0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked(index - 0x8000) },
             0xC000...0xDFFF => unsafe { self.internal_ram.get_unchecked(index - 0xC000) },
@@ -176,7 +176,7 @@ impl Index<usize> for Memory {
 
 impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
-        match index % 0x10000 {
+        match index % 0x1_0000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => &mut self.cartridge[index as u16],
             0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked_mut(index - 0x8000) },
             0xC000...0xDFFF => &mut self.internal_ram[index - 0xC000],

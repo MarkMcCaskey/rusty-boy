@@ -121,7 +121,7 @@ impl Cpu {
             interrupt_next_inst: false,
         };
 
-        /// The reset state is the default state of the CPU
+        // The reset state is the default state of the CPU
         new_cpu.reset();
 
         new_cpu
@@ -182,9 +182,9 @@ impl Cpu {
         // NOTE these values differ for SGB
         match self.mem[0xFF07] & 0x3 {
             0 => 4096,
-            1 => 262144,
-            2 => 65536,
-            3 => 16384,
+            1 => 262_144,
+            2 => 65_536,
+            3 => 16_384,
             _ => unreachable!("The impossible happened!"),
         }
     }

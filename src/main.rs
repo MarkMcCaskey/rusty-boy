@@ -18,7 +18,7 @@ extern crate rand; //for channel4 noise sound
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
+//#[macro_use]
 extern crate nom;
 extern crate app_dirs;
 extern crate time;
@@ -48,11 +48,17 @@ use io::applicationsettings::*;
 #[allow(unused_variables)]
 fn main() {
     let arguments = io::arguments::read_arguments();
-    let application_settings = ApplicationSettings::new(&arguments);
+    let application_settings =
+        match  ApplicationSettings::new(&arguments) {
+            Ok(app_settings) => app_settings,
+            Err(e) => {
+                eprintln!("Fatal error: could not initialize application settings: {}", e);
+                return ();
+            }};
 
 
     // Set up gameboy and app state
-    let mut appstate = match ApplicationState::new(&application_settings) {
+    let mut appstate = match ApplicationState::new(application_settings) {
         Ok(apst) => apst,
         Err(e) => {
             eprintln!("Fatal error: could not create Gameboy: {}", e);

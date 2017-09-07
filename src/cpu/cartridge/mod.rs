@@ -410,7 +410,7 @@ impl Index<u16> for Cartridge {
                                                   mem_bank_selector: index,
                                                   .. }) => {
                         unsafe {
-                            mb[index as usize].get_unchecked(((ind - 0x4000) as usize))
+                            mb[index as usize].get_unchecked((ind - 0x4000) as usize)
                         }
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::FourThirtytwo,

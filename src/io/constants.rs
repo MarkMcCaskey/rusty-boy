@@ -1,6 +1,7 @@
 use sdl2;
 use sdl2::pixels::*;
 use cpu::constants::*;
+use app_dirs::AppInfo;
 
 pub const RB_SCREEN_WIDTH: u32 = 1400;
 pub const RB_SCREEN_HEIGHT: u32 = 900;
@@ -89,3 +90,8 @@ pub const GB_SCREEN_HEIGHT: u8 = 144;
 pub const OBJECT_ATTRIBUTE_START: u16 = 0xFE00;
 pub const OBJECT_ATTRIBUTE_END: u16 = 0xFE9F;
 pub const OBJECT_ATTRIBUTE_BLOCK_SIZE: u16 = 4;
+
+pub const APP_INFO: AppInfo = AppInfo {
+    name: "rusty-boy",
+    author: "Mark McCaskey, SpawnedArtifact, and friends",
+};
