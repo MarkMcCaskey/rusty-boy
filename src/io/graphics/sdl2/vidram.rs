@@ -11,8 +11,7 @@ use sdl2::pixels::*;
 use sdl2::surface::Surface;
 use sdl2::render::Texture;
 
-use io::graphics::Drawable;
-
+use super::utility::Drawable;
 
 pub struct VidRamBGDisplay {
     pub tile_data_select: TileDataSelect,
@@ -47,7 +46,11 @@ impl Drawable for VidRamBGDisplay {
             TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
         };
 
-        draw_background_buffer(renderer, cpu, tile_map_offset, tile_patterns_offset, MEM_DISP_WIDTH);
+        draw_background_buffer(renderer,
+                               cpu,
+                               tile_map_offset,
+                               tile_patterns_offset,
+                               MEM_DISP_WIDTH);
         draw_objects(renderer, cpu, cpu.scx() as i32, cpu.scy() as i32);
     }
 
@@ -128,7 +131,9 @@ pub fn draw_tile(renderer: &mut sdl2::render::Canvas<Surface>,
             pixel_buffer[(tile_index + 3) as usize] = rval;
         }
     }
-    texture.update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize).unwrap();
+    texture
+        .update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize)
+        .unwrap();
     renderer.copy(&texture, None, Some(*dst_rect)).unwrap();
 }
 
@@ -144,8 +149,11 @@ pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
                                 flip_x: bool,
                                 flip_y: bool,
                                 texture: &mut Texture,
-                                pixel_buffer: &mut [u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
-                                dst_rect: &Rect) where T: sdl2::render::RenderTarget {
+                                pixel_buffer: &mut [u8;
+                                                    (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
+                                dst_rect: &Rect)
+    where T: sdl2::render::RenderTarget
+{
 
     #[inline]
     fn get_bit(n: u8, offset: u8) -> u8 {
@@ -187,33 +195,35 @@ pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
             }*/
 
             //if DEBUG_OAM_BG || px_color != 0 {
-                let (rval, bval, gval) = OBJECT_PALETTE[px_color as usize].rgb();
-                let tile_index = ((((realpy as u16) * TILE_SIZE_PX) + (realpx as u16)) * 4) as u8;
-                pixel_buffer[tile_index.wrapping_add(0) as usize] = if px_color == 0 {0} else {255};
-                pixel_buffer[(tile_index.wrapping_add(1)) as usize] = gval;
-                pixel_buffer[(tile_index.wrapping_add(2)) as usize] = bval;
-                pixel_buffer[(tile_index.wrapping_add(3)) as usize] = rval;
+            let (rval, bval, gval) = OBJECT_PALETTE[px_color as usize].rgb();
+            let tile_index = ((((realpy as u16) * TILE_SIZE_PX) + (realpx as u16)) * 4) as u8;
+            pixel_buffer[tile_index.wrapping_add(0) as usize] = if px_color == 0 { 0 } else { 255 };
+            pixel_buffer[(tile_index.wrapping_add(1)) as usize] = gval;
+            pixel_buffer[(tile_index.wrapping_add(2)) as usize] = bval;
+            pixel_buffer[(tile_index.wrapping_add(3)) as usize] = rval;
             //}
 
         }
     }
-    texture.update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize).unwrap();
+    texture
+        .update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize)
+        .unwrap();
     renderer.copy(&texture, None, Some(*dst_rect)).unwrap();
 }
 
 /// This is the dumbest and straightforward code for displaying Tile
 /// Patterns. It displays both background and sprite "tiles" as they
 /// overlap in memory.
-pub fn draw_tile_patterns(renderer: &mut sdl2::render::Canvas<Surface>,
-                          gameboy: &Cpu) {
+pub fn draw_tile_patterns(renderer: &mut sdl2::render::Canvas<Surface>, gameboy: &Cpu) {
 
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
     let texture_creator = renderer.texture_creator();
-    let mut texture = texture_creator.create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32).unwrap();
+    let mut texture = texture_creator
+        .create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32)
+        .unwrap();
     texture.set_blend_mode(sdl2::render::BlendMode::None);
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
-    let mut dst_rect = Rect::new(0, 0,
-                                 TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
+    let mut dst_rect = Rect::new(0, 0, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
 
 
 
@@ -249,11 +259,15 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
 
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
     let texture_creator = renderer.texture_creator();
-    let mut texture = texture_creator.create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32).unwrap();
+    let mut texture = texture_creator
+        .create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32)
+        .unwrap();
     texture.set_blend_mode(sdl2::render::BlendMode::None);
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
-    let mut dst_rect = Rect::new(screen_offset_x, screen_offset_y,
-                                 TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
+    let mut dst_rect = Rect::new(screen_offset_x,
+                                 screen_offset_y,
+                                 TILE_SIZE_PX as u32,
+                                 TILE_SIZE_PX as u32);
 
 
 
@@ -318,9 +332,11 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
 /// Draw rectangle showing values of SCX and SCY registers,
 /// i.e. visible screen area.
 fn draw_screen_border<T>(renderer: &mut sdl2::render::Canvas<T>,
-                      gameboy: &Cpu,
-                      screen_offset_x: i32,
-                      screen_offset_y: i32) where T: sdl2::render::RenderTarget {
+                         gameboy: &Cpu,
+                         screen_offset_x: i32,
+                         screen_offset_y: i32)
+    where T: sdl2::render::RenderTarget
+{
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     let scx: u8 = gameboy.scx();
     let scy: u8 = gameboy.scy();
@@ -335,10 +351,11 @@ fn draw_screen_border<T>(renderer: &mut sdl2::render::Canvas<T>,
         for y in -1..2 {
             let offset_x = screen_offset_x.wrapping_add(x * SCREEN_BUFFER_SIZE_X as i32);
             let offset_y = screen_offset_y.wrapping_add(y * SCREEN_BUFFER_SIZE_X as i32);
-            renderer.draw_rect(Rect::new(offset_x + scx as i32 - 1,
-                                         offset_y + scy as i32 - 1,
-                                         GB_SCREEN_WIDTH as u32 + 2,
-                                         GB_SCREEN_HEIGHT as u32 + 2))
+            renderer
+                .draw_rect(Rect::new(offset_x + scx as i32 - 1,
+                                     offset_y + scy as i32 - 1,
+                                     GB_SCREEN_WIDTH as u32 + 2,
+                                     GB_SCREEN_HEIGHT as u32 + 2))
                 .unwrap();
         }
     }
@@ -348,18 +365,18 @@ fn draw_screen_border<T>(renderer: &mut sdl2::render::Canvas<T>,
 
 /// Draw "sprites" (something gameboy calls "Objects").
 pub fn draw_objects(renderer: &mut sdl2::render::Canvas<Surface>,
-                       gameboy: &Cpu,
-                       screen_offset_x: i32,
-                       screen_offset_y: i32) //where T: sdl2::render::RenderTarget {
-    {
+                    gameboy: &Cpu,
+                    screen_offset_x: i32,
+                    screen_offset_y: i32) {
 
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
     let texture_creator = renderer.texture_creator();
-    let mut texture = texture_creator.create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32).unwrap();
-        texture.set_blend_mode(sdl2::render::BlendMode::Blend);
+    let mut texture = texture_creator
+        .create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32)
+        .unwrap();
+    texture.set_blend_mode(sdl2::render::BlendMode::Blend);
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
-    let mut dst_rect = Rect::new(0, 0,
-                                 TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
+    let mut dst_rect = Rect::new(0, 0, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
 
 
     // TODO sprites should use palletes

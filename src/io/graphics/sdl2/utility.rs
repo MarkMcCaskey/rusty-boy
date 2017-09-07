@@ -1,4 +1,4 @@
-//! Graphics utility functions
+//! sdl2 utility functions
 
 use sdl2;
 use sdl2::pixels::*;
@@ -47,7 +47,9 @@ impl<S> Toggle<S>
         self.current = (self.current + 1) % self.values.len();
         debug!("Click! {} {:?}", self.current, self.value());
     }
-    pub fn draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget {
+    pub fn draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
+        where T: sdl2::render::RenderTarget
+    {
         renderer.set_draw_color(Color::RGB(255, 0, 0));
         renderer.draw_rect(self.rect).unwrap();
     }
@@ -75,7 +77,9 @@ pub struct PositionedFrame {
 
 impl PositionedFrame {
     #[inline]
-    fn before_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget{
+    fn before_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
+        where T: sdl2::render::RenderTarget
+    {
         let r = self.rect;
 
         let view_rect = r;
@@ -86,9 +90,13 @@ impl PositionedFrame {
     }
 
     #[inline]
-    fn after_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget{
+    fn after_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
+        where T: sdl2::render::RenderTarget
+    {
         let (s_x, s_y) = renderer.scale();
-        renderer.set_scale(s_x / self.scale, s_y / self.scale).unwrap();
+        renderer
+            .set_scale(s_x / self.scale, s_y / self.scale)
+            .unwrap();
         renderer.set_clip_rect(None);
         renderer.set_viewport(None);
     }
@@ -122,12 +130,20 @@ impl Drawable for PositionedFrame {
 }
 
 
-pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render::Canvas<T>) where T: sdl2::render::RenderTarget {
+pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render::Canvas<T>)
+    where T: sdl2::render::RenderTarget
+{
     renderer.set_draw_color(Color::RGB(0, 0, 0));
-    renderer.fill_rect(Rect::new(0, 0, frame.rect.width(), frame.rect.height())).unwrap();
+    renderer
+        .fill_rect(Rect::new(0, 0, frame.rect.width(), frame.rect.height()))
+        .unwrap();
 
-    renderer.draw_line(frame.rect.top_left(), frame.rect.bottom_right()).unwrap();
-    renderer.draw_line(frame.rect.top_right(), frame.rect.bottom_left()).unwrap();
+    renderer
+        .draw_line(frame.rect.top_left(), frame.rect.bottom_right())
+        .unwrap();
+    renderer
+        .draw_line(frame.rect.top_right(), frame.rect.bottom_left())
+        .unwrap();
 
 
     renderer.set_draw_color(Color::RGB(255, 0, 255));
@@ -136,6 +152,10 @@ pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     let w = frame.rect.width();
     let h = frame.rect.height();
-    renderer.draw_line(Point::new(0, 0), Point::new(w as i32, h as i32)).unwrap();
-    renderer.draw_line(Point::new(w as i32, 0), Point::new(0, h as i32)).unwrap();
+    renderer
+        .draw_line(Point::new(0, 0), Point::new(w as i32, h as i32))
+        .unwrap();
+    renderer
+        .draw_line(Point::new(w as i32, 0), Point::new(0, h as i32))
+        .unwrap();
 }

@@ -9,7 +9,7 @@ use sdl2::mouse::MouseButton;
 use std::num::Wrapping;
 
 use io::constants::*;
-use io::graphics::Drawable;
+use super::utility::Drawable;
 use cpu::constants::MemAddr;
 use cpu::constants::CpuState;
 //use cpu::memvis::cpuCOLOR_DEPTH;
@@ -26,7 +26,7 @@ pub struct MemVisState {
 }
 
 impl MemVisState {
-    pub fn new(/*texture: sdl2::render::Texture<'a>*/) -> MemVisState {
+    pub fn new() -> MemVisState {
         MemVisState {
             mem_val_display_enabled: true,
             //texture: texture,
@@ -62,18 +62,26 @@ impl Drawable for MemVisState {
             let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
 
             let texture_creator = renderer.texture_creator();
-            let mut texture = texture_creator.create_texture_streaming(txt_format, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32).unwrap();
+            let mut texture = texture_creator
+                .create_texture_streaming(txt_format,
+                                          MEM_DISP_WIDTH as u32,
+                                          MEM_DISP_HEIGHT as u32)
+                .unwrap();
             let depth = COLOR_DEPTH;
             let memvis_pitch = MEM_DISP_WIDTH as usize * depth;
 
             // Draw memory values just by copying them
             texture.set_blend_mode(sdl2::render::BlendMode::None);
-            texture.update(None, &logger.values[..], memvis_pitch).unwrap();
+            texture
+                .update(None, &logger.values[..], memvis_pitch)
+                .unwrap();
             renderer.copy(&texture, None, Some(dst_rect)).unwrap();
 
             // Blend access type on top of values
             texture.set_blend_mode(sdl2::render::BlendMode::Add);
-            texture.update(None, &logger.access_flags[..], memvis_pitch).unwrap();
+            texture
+                .update(None, &logger.access_flags[..], memvis_pitch)
+                .unwrap();
             renderer.copy(&texture, None, Some(dst_rect)).unwrap();
 
 
@@ -97,11 +105,17 @@ impl Drawable for MemVisState {
             // Create texture with alpha to do fading effect
             let mut blend = Surface::new(MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32, txt_format)
                 .unwrap();
-            blend.fill_rect(None, Color::RGBA(0, 0, 0, ACCESS_FADE_ALPHA)).unwrap();
+            blend
+                .fill_rect(None, Color::RGBA(0, 0, 0, ACCESS_FADE_ALPHA))
+                .unwrap();
 
             // Default blend mode works, whatever it is.
-             blend.set_blend_mode(sdl2::render::BlendMode::Blend).unwrap();
-             surface.set_blend_mode(sdl2::render::BlendMode::Add).unwrap();
+            blend
+                .set_blend_mode(sdl2::render::BlendMode::Blend)
+                .unwrap();
+            surface
+                .set_blend_mode(sdl2::render::BlendMode::Add)
+                .unwrap();
 
             // Do the actual fading effect
             blend.blit(None, &mut surface, None).unwrap();
@@ -121,7 +135,9 @@ impl Drawable for MemVisState {
             renderer.copy(&blend_texture, None, Some(dst_rect)).unwrap();
 
             texture.set_blend_mode(sdl2::render::BlendMode::Add);
-            texture.update(None, &logger.access_times[..], memvis_pitch).unwrap();
+            texture
+                .update(None, &logger.access_times[..], memvis_pitch)
+                .unwrap();
             renderer.copy(&texture, None, Some(dst_rect)).unwrap();
 
             // Reset blend mode to make other operations faster
@@ -202,7 +218,9 @@ fn scale_col(scale: u8, color: u8) -> u8 {
 
 /// Draw all memory values represented by pixels. Width is determined
 /// by `MEM_DISP_WIDTH`.
-pub fn draw_memory_values<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu) where T: sdl2::render::RenderTarget {
+pub fn draw_memory_values<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu)
+    where T: sdl2::render::RenderTarget
+{
     let mut x = 0;
     let mut y = 0;
 
@@ -241,7 +259,9 @@ pub fn draw_memory_values<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &C
 
 /// Draw memory values represented by pixels with colors showing types
 /// of access (r/w/x).
-pub fn draw_memory_access<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu) where T: sdl2::render::RenderTarget {
+pub fn draw_memory_access<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu)
+    where T: sdl2::render::RenderTarget
+{
     // TODO replace this function with parts of MemVisState::draw()
     let mut x = 0;
     let mut y = 0;
@@ -321,7 +341,9 @@ pub fn draw_memory_access<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &C
 
 /// Draw all `CpuEvents` that fade depending on current cpu time. When
 /// age of event is more that `FADE_DELAY`, event is removed.
-pub fn draw_memory_events<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu) where T: sdl2::render::RenderTarget{
+pub fn draw_memory_events<T>(renderer: &mut sdl2::render::Canvas<T>, gameboy: &Cpu)
+    where T: sdl2::render::RenderTarget
+{
     // TODO: can be used to do partial "smart" redraw, and speed thing up.
     // But event logging itself is extremely slow
 

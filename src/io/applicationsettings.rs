@@ -2,7 +2,7 @@
 
 use clap::ArgMatches;
 use std::path::PathBuf;
-use io::constants::APP_INFO;
+use io::constants::{APP_INFO, SCALE};
 use app_dirs::*;
 
 use log::LogLevelFilter;
@@ -19,8 +19,10 @@ pub struct ApplicationSettings {
     pub trace_mode: bool,
     pub memvis_mode: bool,
     pub debugger_on: bool,
+    pub vulkan_mode: bool,
     config_path: Option<PathBuf>,
     pub data_path: Option<PathBuf>,
+    pub ui_scale: f32,
 }
 
 impl ApplicationSettings {
@@ -33,6 +35,7 @@ impl ApplicationSettings {
         let debug_mode = arguments.is_present("debug");
         let trace_mode = arguments.is_present("trace");
         let memvis_mode = arguments.is_present("visualize");
+        let vulkan_mode = arguments.is_present("vulkan");
 
         // Set up logging
         let stdout = ConsoleAppender::builder()
@@ -90,10 +93,12 @@ impl ApplicationSettings {
                debug_mode,
                trace_mode,
                memvis_mode,
+               vulkan_mode,
                config_path,
                data_path,
                debugger_on: should_debugger,
-//               logger_handle: handle,
+               //               logger_handle: handle,
+               ui_scale: SCALE,
            })
     }
 }
