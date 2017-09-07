@@ -12,7 +12,6 @@ use sdl2::keyboard::Keycode;
 use sdl2::surface::Surface;
 use sdl2::pixels::PixelFormatEnum;
 //use sdl2::render::{TextureCreator, Texture};
-use log4rs;
 
 use debugger::graphics::*;
 use cpu;
@@ -24,28 +23,12 @@ use io::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use io::sound::*;
 use io::applicationsettings::ApplicationSettings;
 
-use log::LogLevelFilter;
-use log4rs::append::console::ConsoleAppender;
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::config::{Appender, Config, Root};
-
 use sdl2;
 use sdl2::rect::{Point, Rect};
 
 use std::num::Wrapping;
-use std::path::PathBuf;
-
-
-use app_dirs::*;
-
-const APP_INFO: AppInfo = AppInfo {
-    name: "rusty-boy",
-    author: "Mark McCaskey, SpawnedArtifact, and friends",
-};
 
 /// Holds all the data needed to use the emulator in meaningful ways
-#[allow(dead_code)] //suppress pointers to things to keep them alive,
-// could almost certainly be done in a better way
 pub struct ApplicationState {
     pub gameboy: cpu::Cpu,
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
@@ -54,7 +37,6 @@ pub struct ApplicationState {
     //renderer: render::Renderer<'static>,
     cycle_count: u64,
     prev_time: u64,
-    debugger: Option<Debugger>,
     /// counts cycles for hsync updates
     prev_hsync_cycles: u64,
     /// counts cycles since last timer update
@@ -63,83 +45,30 @@ pub struct ApplicationState {
     div_timer_cycles: u64,
     /// counts cycles since last sound update
     sound_cycles: u64,
+    debugger: Option<Debugger>,
     initial_gameboy_state: cpu::Cpu,
-    logger_handle: Option<log4rs::Handle>, // storing to keep alive
+    //    logger_handle: Option<log4rs::Handle>, // storing to keep alive
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     screenshot_frame_num: Wrapping<u64>,
     ui_scale: f32,
     ui_offset: Point, // TODO whole interface pan
     widgets: Vec<PositionedFrame>,
-    config_path: Option<PathBuf>,
-    data_path: Option<PathBuf>,
+    application_settings: ApplicationSettings,
 //    texture_creator: TextureCreator<WindowContext>,
 }
 
-
-
 impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
-    pub fn new(app_settings: &ApplicationSettings)
-               -> Result<ApplicationState, String> {
-        // Set up logging
-        let stdout = ConsoleAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
-            .build();
-
-        let config = Config::builder()
-            .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(Root::builder()
-                   .appender("stdout")
-                   .build(match (app_settings.trace_mode,
-                                 app_settings.debug_mode) {
-                       (true, _) => LogLevelFilter::Trace,
-                       (false, true) => LogLevelFilter::Debug,
-                       _ => LogLevelFilter::Info,
-                   }))
-            .or_else(|_| Err("Could not build Config".to_string()))?;
-
-
-        // Set up debugging or command-line logging
-        let (should_debugger, handle) = if app_settings.debug_mode && cfg!(feature = "debugger") {
-            info!("Running in debug mode");
-            (true, None)
-        } else {
-            let handle = log4rs::init_config(config)
-                .or_else(|_| Err("Could not init Config"))?;
-            (false, Some(handle))
-        };
-
-
-        let data_path = match app_root(AppDataType::UserData, &APP_INFO) {
-            Ok(v) => {
-                debug!("Using user data path: {:?}", v);
-                Some(v)
-            }
-            Err(e) => {
-                error!("Could not open a user data path: {}", e);
-                None
-            }
-        };
-
-        let config_path = match app_root(AppDataType::UserConfig, &APP_INFO) {
-            Ok(v) => {
-                debug!("Using user config path: {:?}", v);
-                Some(v)
-            }
-            Err(e) => {
-                error!("Could not open a user config path: {}", e);
-                None
-            }
-        };
+    pub fn new(app_settings: ApplicationSettings) -> Result<ApplicationState, String> {
 
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
         trace!("loading ROM");
-        gameboy.load_rom(app_settings.rom_file_name.as_ref(), data_path.clone());
-
+        gameboy.load_rom(app_settings.rom_file_name.as_ref(),
+                         app_settings.data_path.clone());
 
         // delay debugger so loading rom can be logged if need be
-        let debugger = if should_debugger {
+        let debugger = if app_settings.debugger_on {
             Some(Debugger::new(&gameboy))
         } else {
             None
@@ -160,23 +89,24 @@ impl ApplicationState {
         ///gl_attr.set_context_flags().debug().set();
         gl_attr.set_context_version(3, 2);
 
-
         let window = {
-            let (window_width, window_height) = 
-                if app_settings.memvis_mode { (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT) }
-                else { (((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
-                        ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32) };
+            let (window_width, window_height) = if app_settings.memvis_mode {
+                (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT)
+            } else {
+                (((GB_SCREEN_WIDTH as f32) * 2.0) as u32, ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32)
+            };
 
             match video_subsystem
-                .window(gameboy.get_game_name().as_str(),
-                        window_width,
-                        window_height)
-                .position_centered()
-                .opengl()
-                .build() {
-                    Ok(v) => v,
-                    Err(e) => panic!("Fatal error: {}", e),
-                }};
+                      .window(gameboy.get_game_name().as_str(),
+                              window_width,
+                              window_height)
+                      .position_centered()
+                      .opengl()
+                      .build() {
+                Ok(v) => v,
+                Err(e) => panic!("Fatal error: {}", e),
+            }
+        };
 
         // video_subsystem.gl_load_library_default();
 
@@ -208,9 +138,11 @@ impl ApplicationState {
 
         let widget_vidram_bg = {
             let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
-            let (screen_pos_w, screen_pos_h) =
-                if app_settings.memvis_mode { (MEM_DISP_WIDTH + 3, 1) }
-                else { (0, 1) };
+            let (screen_pos_w, screen_pos_h) = if app_settings.memvis_mode {
+                (MEM_DISP_WIDTH + 3, 1)
+            } else {
+                (0, 1)
+            };
 
             let (w, h) = vis.get_initial_size();
             PositionedFrame {
@@ -234,8 +166,10 @@ impl ApplicationState {
         };
 
         let mut widgets = Vec::new();
-        if app_settings.memvis_mode { widgets.push(widget_memvis);
-                                      widgets.push(widget_vidram_tiles);}
+        if app_settings.memvis_mode {
+            widgets.push(widget_memvis);
+            widgets.push(widget_vidram_tiles);
+        }
         widgets.push(widget_vidram_bg);
 
         Ok(ApplicationState {
@@ -253,14 +187,13 @@ impl ApplicationState {
                timer_cycles: 0,
                div_timer_cycles: 0,
                initial_gameboy_state: gbcopy,
-               logger_handle: handle,
+               //logger_handle: handle,
                controller: controller,
                screenshot_frame_num: Wrapping(0),
                ui_scale: SCALE,
                ui_offset: Point::new(0, 0),
                widgets: widgets,
-               config_path: config_path,
-               data_path: data_path,
+               application_settings: app_settings,
             //texture_creator: tc,
            })
     }
@@ -391,7 +324,8 @@ impl ApplicationState {
                     if let Some(ref mut debugger) = self.debugger {
                         debugger.die();
                     }
-                    self.gameboy.save_ram(self.data_path.clone());
+                    self.gameboy
+                        .save_ram(self.application_settings.data_path.clone());
                     std::process::exit(0);
                 }
                 Event::KeyDown {
