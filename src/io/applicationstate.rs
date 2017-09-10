@@ -102,71 +102,92 @@ impl ApplicationState {
     /// NOTE: does not handle input for ncurses debugger
     //this should be properly abstracted... allow for rebinding too
     pub fn handle_events(&mut self) {
-        self.renderer
-            .handle_events(&mut self.gameboy, &self.application_settings);
+        use self::graphics::renderer::EventResponse;
+        for event in self.renderer
+                .handle_events(&mut self.gameboy, &self.application_settings)
+                .iter() {
+            match *event {
+                EventResponse::ProgramTerminated => {
+                    info!("Program exiting!");
+                    if let Some(ref mut debugger) = self.debugger {
+                        debugger.die();
+                    }
+                    self.gameboy
+                        .save_ram(self.application_settings.data_path.clone());
+                    std::process::exit(0);
+                }
+                _ => unimplemented!(),
+            }
+        }
     }
 
     /// Runs the game application forward one "unit of time"
     /// Attepmts to load a controller if it can find one every time a frame is drawn
     /// TODO: elaborate
     pub fn step(&mut self) {
-        let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
-            self.gameboy.dispatch_opcode() as u64
-        } else {
-            10 // FIXME think about what to return here or refactor code around this
-        };
+        //TODO optimize here (quite a bit; need to reduce branches and
+        // allow for more consecutive instructions to be executed)
+        'steploop: loop {
+            let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
+                self.gameboy.dispatch_opcode() as u64
+            } else {
+                10 // FIXME think about what to return here or refactor code around this
+            };
 
-        self.cycle_count += current_op_time;
+            self.cycle_count += current_op_time;
 
-        // FF04 (DIV) Divider Register stepping
-        self.div_timer_cycles += current_op_time;
-        if self.div_timer_cycles >= CPU_CYCLES_PER_DIVIDER_STEP {
-            self.gameboy.inc_div();
-            self.div_timer_cycles -= CPU_CYCLES_PER_DIVIDER_STEP;
-        }
+            // FF04 (DIV) Divider Register stepping
+            self.div_timer_cycles += current_op_time;
+            if self.div_timer_cycles >= CPU_CYCLES_PER_DIVIDER_STEP {
+                self.gameboy.inc_div();
+                self.div_timer_cycles -= CPU_CYCLES_PER_DIVIDER_STEP;
+            }
 
-        // FF05 (TIMA) Timer counter stepping
-        self.timer_cycles += current_op_time;
-        let timer_hz = self.gameboy.timer_frequency_hz();
-        let cpu_cycles_per_timer_counter_step =
-            (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
-        if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
-            //           std::thread::sleep_ms(16);
-            // trace!("Incrementing the timer!");
-            self.gameboy.timer_cycle();
-            self.timer_cycles -= cpu_cycles_per_timer_counter_step;
-        }
+            // FF05 (TIMA) Timer counter stepping
+            self.timer_cycles += current_op_time;
+            let timer_hz = self.gameboy.timer_frequency_hz();
+            let cpu_cycles_per_timer_counter_step =
+                (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
+            if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
+                //           std::thread::sleep_ms(16);
+                // trace!("Incrementing the timer!");
+                self.gameboy.timer_cycle();
+                self.timer_cycles -= cpu_cycles_per_timer_counter_step;
+            }
 
-        // Faking hsync to get the games running
-        let fake_display_hsync = true;
-        if fake_display_hsync {
-            // update LY respective to cycles spent execing instruction
-            let cycle_count = self.cycle_count;
-            loop {
-                if cycle_count < self.prev_hsync_cycles {
-                    break;
+            // Faking hsync to get the games running
+            let fake_display_hsync = true;
+            if fake_display_hsync {
+                // update LY respective to cycles spent execing instruction
+                let cycle_count = self.cycle_count;
+                loop {
+                    if cycle_count < self.prev_hsync_cycles {
+                        break;
+                    }
+                    self.gameboy.inc_ly();
+                    self.prev_hsync_cycles += CYCLES_PER_HSYNC;
                 }
-                self.gameboy.inc_ly();
-                self.prev_hsync_cycles += CYCLES_PER_HSYNC;
-            }
-        }
-
-        if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
-
-            /*//check for new controller every frame
-            self.load_controller_if_none_exist();*/
-
-            if let Some(ref mut dbg) = self.debugger {
-                dbg.step(&mut self.gameboy);
             }
 
-            let cycle_count = self.cycle_count;
-            self.prev_time = cycle_count;
+            if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
 
-            self.renderer
-                .draw_gameboy(&self.gameboy, &self.application_settings);
+                /*//check for new controller every frame
+                self.load_controller_if_none_exist();*/
+
+                if let Some(ref mut dbg) = self.debugger {
+                    dbg.step(&mut self.gameboy);
+                }
+
+                let cycle_count = self.cycle_count;
+                self.prev_time = cycle_count;
+
+                self.renderer
+                    .draw_gameboy(&self.gameboy, &self.application_settings);
+                //for memory visualization
+                self.gameboy.remove_old_events();
+                break 'steploop;
+            }
+
         }
-        //for memory visualization
-        self.gameboy.remove_old_events();
     }
 }
