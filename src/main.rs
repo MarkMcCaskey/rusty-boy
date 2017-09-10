@@ -24,6 +24,12 @@ extern crate app_dirs;
 extern crate time;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate vulkano;
+#[macro_use]
+extern crate vulkano_shader_derive;
+extern crate winit;
+extern crate vulkano_win;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;
@@ -66,8 +72,15 @@ fn main() {
         }
     };
 
+    use time;
     loop {
+        let time_since_last_frame = time::PreciseTime::now();
         appstate.handle_events();
         appstate.step();
+
+        let time_diff = time_since_last_frame.to(time::PreciseTime::now()).num_milliseconds();
+        if time_diff < 16 {
+            std::thread::sleep(time::Duration::milliseconds(16 - time_diff).to_std().unwrap());
+        }
     }
 }

@@ -364,15 +364,10 @@ impl Renderer for Sdl2Renderer {
                         self.controller = None;
                     }
                 }
+                Event::AppTerminating { .. } |
                 Event::Quit { .. } |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    info!("Program exiting!");
                     ret_vec.push(EventResponse::ProgramTerminated);
-                    /*    if let Some(ref mut debugger) = self.debugger {
-                        debugger.die();
-                    }
-                    gameboy.save_ram(self.application_settings.data_path.clone());
-                    std::process::exit(0);*/
                 }
                 Event::KeyDown {
                     keycode: Some(keycode),
