@@ -13,22 +13,27 @@ extern crate clap;
 extern crate log;
 extern crate log4rs;
 extern crate sdl2;
+#[cfg(feature="debugger")]
 extern crate ncurses;
 extern crate rand; //for channel4 noise sound
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-//#[macro_use]
+#[cfg(any(feature="debugger", feature="asm"))]
 extern crate nom;
 extern crate app_dirs;
 extern crate time;
 #[macro_use]
 extern crate lazy_static;
+#[cfg(feature="vulkan")]
 #[macro_use]
 extern crate vulkano;
+#[cfg(feature="vulkan")]
 #[macro_use]
 extern crate vulkano_shader_derive;
+#[cfg(feature="vulkan")]
 extern crate winit;
+#[cfg(feature="vulkan")]
 extern crate vulkano_win;
 
 /// Simple Gameboy-flavored Z80 assembler

@@ -61,11 +61,18 @@ impl ApplicationState {
             None
         };
 
-        let renderer: Box<Renderer> = if app_settings.vulkan_mode {
-            Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
-        } else {
-            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
-        };
+        #[cfg(feature = "vulkan")]
+        let renderer: Box<Renderer> =
+            if app_settings.vulkan_mode {
+                Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
+            } else {
+                Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
+            };
+
+
+        #[cfg(not(feature = "vulkan"))]
+        let renderer: Box<Renderer> =
+            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
 
         let gbcopy = gameboy.clone();
