@@ -2,15 +2,19 @@
 name = "gameboy"
 version = "0.1.0"
 authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
+description = "A Gameboy emulator and related tools"
 
 build = "build.rs"
 
+[badges]
+travis-ci = { repository = "MarkMcCaskey/rusty-boy", branch = "master" }
+maintainence = {status = "experimental"}
+
 [features]
-
 default = []
-
 asm = []
 debugger = []
+vulkan = []
 development = ["asm", "debugger"]
 
 [dependencies]
@@ -18,15 +22,35 @@ clap = "2.24"
 sdl2 = "^0.30"
 log = "0.3.7"
 log4rs = "0.6.2"
-ncurses = "5.85.0"
 rand = "0.3.15"
 serde = "1.0.0"
 serde_derive = "1.0.0"
-nom = "^2.2"
 app_dirs = "1.1.1"
 time = "0.1"
 lazy_static = "0.2"
-vulkano = "0.6.2"
-vulkano-shader-derive = "0.6.2"
-winit = "0.7.6"
-vulkano-win = "0.6.2"
+
+vulkano = {version = "0.6.2", optional = true}
+vulkano-shader-derive = {version = "0.6.2", optional = true}
+winit = {version = "0.7.6", optional = true}
+vulkano-win = {version = "0.6.2", optional = true}
+
+nom = {version = "^2.2", optional = true}
+ncurses = {version = "5.85.0", optional = true}
+
+[profile.dev]
+opt-level = 0
+debug = true
+rpath = false
+lto = false
+debug-assertions = true
+codegen-units = 2
+panic = 'unwind'
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'unwind'
