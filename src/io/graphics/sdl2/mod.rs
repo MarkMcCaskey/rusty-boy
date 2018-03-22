@@ -56,16 +56,22 @@ impl Sdl2Renderer {
             let (window_width, window_height) = if app_settings.memvis_mode {
                 (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT)
             } else {
-                (((GB_SCREEN_WIDTH as f32) * 2.0) as u32, ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32)
+                (
+                    ((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
+                    ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32,
+                )
             };
 
             match video_subsystem
-                      .window(app_settings.rom_file_name.as_str(),
-                              window_width,
-                              window_height)
-                      .position_centered()
-                      .opengl()
-                      .build() {
+                .window(
+                    app_settings.rom_file_name.as_str(),
+                    window_width,
+                    window_height,
+                )
+                .position_centered()
+                .opengl()
+                .build()
+            {
                 Ok(v) => v,
                 Err(e) => panic!("Fatal error: {}", e),
             }
@@ -80,7 +86,6 @@ impl Sdl2Renderer {
             .build()
             .or_else(|_| Err("Could not create SDL2 window"))?;
 
-
         // TODO function for widget creation and automaic layout
         let widget_memvis = {
             let vis = MemVisState::new(); //memvis_texture);
@@ -92,9 +97,10 @@ impl Sdl2Renderer {
             }
         };
 
-
         let widget_vidram_bg = {
-            let vis = VidRamBGDisplay { tile_data_select: TileDataSelect::Auto };
+            let vis = VidRamBGDisplay {
+                tile_data_select: TileDataSelect::Auto,
+            };
             let (screen_pos_w, screen_pos_h) = if app_settings.memvis_mode {
                 (MEM_DISP_WIDTH + 3, 1)
             } else {
@@ -110,13 +116,17 @@ impl Sdl2Renderer {
         };
 
         let widget_vidram_tiles = {
-            let vis = VidRamTileDisplay { tile_data_select: TileDataSelect::Auto };
+            let vis = VidRamTileDisplay {
+                tile_data_select: TileDataSelect::Auto,
+            };
             let (w, h) = vis.get_initial_size();
             PositionedFrame {
-                rect: Rect::new((MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 5,
-                                0,
-                                w,
-                                h),
+                rect: Rect::new(
+                    (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 5,
+                    0,
+                    w,
+                    h,
+                ),
                 scale: 1.0,
                 vis: Box::new(vis),
             }
@@ -130,11 +140,11 @@ impl Sdl2Renderer {
         widgets.push(widget_vidram_bg);
 
         Ok(Sdl2Renderer {
-               sdl_context,
-               canvas: renderer,
-               controller,
-               widgets,
-           })
+            sdl_context,
+            canvas: renderer,
+            controller,
+            widgets,
+        })
     }
 
     /// Loads a controller to be used as input if there isn't currently an active controller
@@ -153,17 +163,14 @@ impl Sdl2Renderer {
                 //Note: not printing a warning here because this function is
                 // called every frame now
 
-
                 //warn!("Could not attach controller!");
             }
         }
-
     }
 }
 
 impl Renderer for Sdl2Renderer {
     fn draw_gameboy(&mut self, gameboy: &Cpu, app_settings: &ApplicationSettings) {
-
         // Gameboy screen is 256x256
         // only 160x144 are displayed at a time
         //
@@ -176,7 +183,6 @@ impl Renderer for Sdl2Renderer {
         // CPU is at 4.194304MHz (or 1.05MHz) 105000000hz
         // hsync at 9198KHz = 9198000hz
         // vsync at 59.73Hz
-
 
         let scale = app_settings.ui_scale;
         match self.canvas.set_scale(scale, scale) {
@@ -221,19 +227,19 @@ impl Renderer for Sdl2Renderer {
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
 
-
         self.canvas.set_draw_color(*NICER_COLOR);
         self.canvas.clear();
 
         // Draw all widgets
 
         let tc = self.canvas.texture_creator();
-        let temp_surface = Surface::new((MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X +
-                                        (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
-                                        (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y +
-                                        (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
-                                        PixelFormatEnum::RGBA8888)
-                .unwrap();
+        let temp_surface = Surface::new(
+            (MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X
+                + (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
+            (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y
+                + (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
+            PixelFormatEnum::RGBA8888,
+        ).unwrap();
 
         let mut temp_canvas = temp_surface.into_canvas().unwrap();
         //FIXME:
@@ -247,12 +253,17 @@ impl Renderer for Sdl2Renderer {
         texture.set_blend_mode(sdl2::render::BlendMode::None);
 
         self.canvas
-            .copy(&texture,
-                  None,
-                  Some(Rect::new(0, 0, MEM_DISP_WIDTH as u32, MEM_DISP_HEIGHT as u32)))
+            .copy(
+                &texture,
+                None,
+                Some(Rect::new(
+                    0,
+                    0,
+                    MEM_DISP_WIDTH as u32,
+                    MEM_DISP_HEIGHT as u32,
+                )),
+            )
             .unwrap();
-
-
 
         // feature disabled while graphics are being generalized
             // TODO add a way to enable/disable this while running
@@ -264,25 +275,25 @@ impl Renderer for Sdl2Renderer {
             }*/
 
         self.canvas.present();
-
-
     }
-
 
     fn draw_memory_visualization(&mut self, gameboy: &Cpu, app_settings: &ApplicationSettings) {
         unimplemented!();
     }
 
-    fn handle_events(&mut self,
-                     gameboy: &mut Cpu,
-                     app_settings: &ApplicationSettings)
-                     -> Vec<renderer::EventResponse> {
+    fn handle_events(
+        &mut self,
+        gameboy: &mut Cpu,
+        app_settings: &ApplicationSettings,
+    ) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
 
             match event {
-                Event::ControllerAxisMotion { axis, value: val, .. } => {
+                Event::ControllerAxisMotion {
+                    axis, value: val, ..
+                } => {
                     let deadzone = 10000;
                     trace!("Axis {:?} moved to {}", axis, val);
                     match axis {
@@ -314,7 +325,6 @@ impl Renderer for Sdl2Renderer {
                         }
                         _ => {}
                     }
-
                 }
                 Event::ControllerButtonDown { button, .. } => {
                     trace!("Button {:?} down", button);
@@ -346,8 +356,12 @@ impl Renderer for Sdl2Renderer {
                 /*Event::JoyDeviceAdded {..} | Event::ControllerDeviceAdded{..} => {
                     self.load_controller_if_none_exist();
                 }*/
-                Event::JoyDeviceRemoved { which: device_id, .. } |
-                Event::ControllerDeviceRemoved { which: device_id, .. } => {
+                Event::JoyDeviceRemoved {
+                    which: device_id, ..
+                }
+                | Event::ControllerDeviceRemoved {
+                    which: device_id, ..
+                } => {
                     let should_remove = if let Some(ref controller) = self.controller {
                         let sr = device_id == controller.instance_id();
 
@@ -364,9 +378,12 @@ impl Renderer for Sdl2Renderer {
                         self.controller = None;
                     }
                 }
-                Event::AppTerminating { .. } |
-                Event::Quit { .. } |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                Event::AppTerminating { .. }
+                | Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
                     ret_vec.push(EventResponse::ProgramTerminated);
                 }
                 Event::KeyDown {
@@ -424,7 +441,9 @@ impl Renderer for Sdl2Renderer {
                         }
                     }
                 }
-                Event::MouseButtonDown { x, y, mouse_btn, .. } => {
+                Event::MouseButtonDown {
+                    x, y, mouse_btn, ..
+                } => {
                     // Transform screen coordinates in UI coordinates
                     let click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
 

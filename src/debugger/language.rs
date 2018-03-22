@@ -1,15 +1,12 @@
 use serde::*;
 use nom;
-use nom::{le_u16, hex_digit, hex_u32, space};
-
+use nom::{hex_digit, space, hex_u32, le_u16};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum ShowableThing {
     Address { addr: u16 },
     Breakpoints,
 }
-
-
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum DebuggerAction {
@@ -39,9 +36,10 @@ named!(dbg_parser<&[u8], DebuggerAction>, alt!(
 named!(run_parser<&[u8], DebuggerAction>, do_parse!(tag!("run") >> (DebuggerAction::Run)));
 named!(step_parser<&[u8], DebuggerAction>, do_parse!(tag!("step") >> (DebuggerAction::Step)));
 named!(reset_parser<&[u8], DebuggerAction>, do_parse!(tag!("reset") >> (DebuggerAction::Reset)));
-named!(runtoaddress_parser<&[u8], DebuggerAction>, do_parse!(tag!("run to") >>
-                                                          n: number_parser >>
-                                                          (DebuggerAction::RunToAddress {addr: n})));
+named!(runtoaddress_parser<&[u8], DebuggerAction>,
+       do_parse!(tag!("run to") >>
+                 n: number_parser >>
+                 (DebuggerAction::RunToAddress {addr: n})));
 named!(show_parser<&[u8], DebuggerAction>, do_parse!(tag!("show") >>
                                                      many1!(space) >>
                                                      s: showablething_parser >>
@@ -82,7 +80,6 @@ named!(showablething_parser<&[u8], ShowableThing>,
                         (ShowableThing::Address{addr: n}))));
 
 named!(number_parser<&[u8], u16>, alt!(le_u16 | hex_parser));
-
 
 named!(hex_parser<&[u8], u16>, do_parse!(
     res: hex_u32 >>

@@ -17,7 +17,6 @@ pub const CL: byte = 0x10;
 /// Additional 3 bytes to skip bounds check when fetching instr. operands
 pub const MEM_ARRAY_SIZE: usize = 0xFFFF + 1 + 3;
 
-
 /// Where the PC should go when the vblank interupt is handled
 pub const VBLANK_INTERRUPT_ADDRESS: u16 = 0x40;
 pub const LCDC_INTERRUPT_ADDRESS: u16 = 0x48;
@@ -38,11 +37,8 @@ pub const OAM_END: usize = 0xFE9F;
 /// TODO: List what STAT contains
 pub const STAT_ADDR: usize = 0xFF41;
 
-
-
-
 /// The state of the CPU's execution
-#[derive(Debug,Clone,Copy,PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CpuState {
     /// CPU is running normally
     Normal,
@@ -55,7 +51,7 @@ pub enum CpuState {
 }
 
 /// 8-bit registers of the CPU and an 8-bit numeric literal
-#[derive(Clone,Copy,PartialEq,Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CpuRegister {
     A,
     B,
@@ -69,7 +65,7 @@ pub enum CpuRegister {
 }
 
 /// 16-bit registers of the CPU and an 16-bit numeric literal
-#[derive(Clone,Copy,PartialEq,Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CpuRegister16 {
     BC,
     DE,
@@ -81,7 +77,7 @@ pub enum CpuRegister16 {
 
 /// TODO: verify CC
 /// Control codes used in some control flow instructions
-#[derive(Clone,Copy)]
+#[derive(Clone, Copy)]
 pub enum Cc {
     /// Not zero
     NZ,

@@ -33,21 +33,23 @@ macro_rules! setter_unsetter_and_getter {
     }
 }
 
-
 //NOTE: look into separate sound on/off storage outside of
 // GB memory to prevent subtle "bug"/non-correct behavior
 
 setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
-setter_unsetter_and_getter!(set_interrupt_bit,
-                            unset_interrupt_bit,
-                            get_interrupt,
-                            0xFF0F);
-setter_unsetter_and_getter!(set_interrupt_enabled,
-                            unset_interrupt_enabled,
-                            get_interrupt_enabled,
-                            0xFFFF);
+setter_unsetter_and_getter!(
+    set_interrupt_bit,
+    unset_interrupt_bit,
+    get_interrupt,
+    0xFF0F
+);
+setter_unsetter_and_getter!(
+    set_interrupt_enabled,
+    unset_interrupt_enabled,
+    get_interrupt_enabled,
+    0xFFFF
+);
 setter_unsetter_and_getter!(set_stat, unset_stat, get_stat, 0xFF41);
-
 
 //macro for dispatching on opcodes where the LSB of the "y" set of
 // octets determines which opcode to run
@@ -63,7 +65,7 @@ macro_rules! even_odd_dispatch {
         if $num % 2 == 0 {
             let adjusted_number:u8 = $num / 2;
             $cpu.$func0($f0dispfunc(adjusted_number));
-            
+
             // TODO: Verify this executes it n-1 times
             for _ in 1..($f0pcincs) {
                 $cpu.inc_pc();
@@ -71,14 +73,13 @@ macro_rules! even_odd_dispatch {
         } else {
             let adjusted_number:u8 = $num / 2;
             $cpu.$func1($f1dispfunc(adjusted_number));
-            
+
             for _ in 1..($f1pcincs) {
                 $cpu.inc_pc();
             }
         }
     }
 }
-
 
 /* Unfortunately, there's just no way to prevent this boiler plate in
 Rust right now... The concat_idents! does not work for new identifiers
@@ -96,7 +97,7 @@ macro_rules! button {
             }
             self.set_input_interrupt_bit();
         }
-        
+
         pub fn $unpress_button(&mut self) {
             let old_val = self.input_state;
             self.input_state = (old_val | $location) as byte;

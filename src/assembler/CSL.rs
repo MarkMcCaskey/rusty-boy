@@ -32,7 +32,9 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Environment {
-        Environment { labels: HashMap::new() }
+        Environment {
+            labels: HashMap::new(),
+        }
     }
 }
 
@@ -84,7 +86,6 @@ pub fn cpuReg_dispatch16(reg: CpuRegister16) -> u8 {
     }
 }
 
-
 /// Returns in Big endian
 pub fn lookup_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
     let z = cpuReg_dispatch(reg);
@@ -92,7 +93,6 @@ pub fn lookup_prefix(n: u8, reg: CpuRegister) -> (u8, u8) {
 
     (0xCB, value)
 }
-
 
 /// Returns in Big endian
 /// For prefixed opcodes (0xCB)

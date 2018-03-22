@@ -15,9 +15,7 @@ use io::applicationsettings::ApplicationSettings;
 use io::graphics::renderer::Renderer;
 use io::graphics;
 
-
 use std::num::Wrapping;
-
 
 /// Holds all the data needed to use the emulator in meaningful ways
 pub struct ApplicationState {
@@ -41,18 +39,19 @@ pub struct ApplicationState {
     //ui_offset: Point, // TODO whole interface pan
     application_settings: ApplicationSettings,
     renderer: Box<Renderer>,
-//    texture_creator: TextureCreator<WindowContext>,
+    //    texture_creator: TextureCreator<WindowContext>,
 }
 
 impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
     pub fn new(app_settings: ApplicationSettings) -> Result<ApplicationState, String> {
-
         // Set up gameboy and other state
         let mut gameboy = cpu::Cpu::new();
         trace!("loading ROM");
-        gameboy.load_rom(app_settings.rom_file_name.as_ref(),
-                         app_settings.data_path.clone());
+        gameboy.load_rom(
+            app_settings.rom_file_name.as_ref(),
+            app_settings.data_path.clone(),
+        );
 
         // delay debugger so loading rom can be logged if need be
         let debugger = if app_settings.debugger_on {
@@ -62,18 +61,14 @@ impl ApplicationState {
         };
 
         #[cfg(feature = "vulkan")]
-        let renderer: Box<Renderer> =
-            if app_settings.vulkan_mode {
-                Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
-            } else {
-                Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
-            };
-
+        let renderer: Box<Renderer> = if app_settings.vulkan_mode {
+            Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
+        } else {
+            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
+        };
 
         #[cfg(not(feature = "vulkan"))]
-        let renderer: Box<Renderer> =
-            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
-
+        let renderer: Box<Renderer> = Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();
 
@@ -82,28 +77,26 @@ impl ApplicationState {
         //let h = MEM_DISP_HEIGHT as u32;
         //let memvis_texture = tc.create_texture_static(txt_format, w, h).unwrap();
 
-
         Ok(ApplicationState {
-               gameboy: gameboy,
-               //sound_system: device,
-               cycle_count: 0,
-               prev_time: 0,
-               // FIXME sound_cycles is probably wrong or not needed
-               sound_cycles: 0,
-               debugger: debugger,
-               prev_hsync_cycles: 0,
-               timer_cycles: 0,
-               div_timer_cycles: 0,
-               initial_gameboy_state: gbcopy,
-               //logger_handle: handle,
-               screenshot_frame_num: Wrapping(0),
-               //ui_offset: Point::new(0, 0),
-               application_settings: app_settings,
-               renderer: renderer,
+            gameboy: gameboy,
+            //sound_system: device,
+            cycle_count: 0,
+            prev_time: 0,
+            // FIXME sound_cycles is probably wrong or not needed
+            sound_cycles: 0,
+            debugger: debugger,
+            prev_hsync_cycles: 0,
+            timer_cycles: 0,
+            div_timer_cycles: 0,
+            initial_gameboy_state: gbcopy,
+            //logger_handle: handle,
+            screenshot_frame_num: Wrapping(0),
+            //ui_offset: Point::new(0, 0),
+            application_settings: app_settings,
+            renderer: renderer,
             //texture_creator: tc,
-           })
+        })
     }
-
 
     /// Handles both controller input and keyboard/mouse debug input
     /// NOTE: does not handle input for ncurses debugger
@@ -111,8 +104,9 @@ impl ApplicationState {
     pub fn handle_events(&mut self) {
         use self::graphics::renderer::EventResponse;
         for event in self.renderer
-                .handle_events(&mut self.gameboy, &self.application_settings)
-                .iter() {
+            .handle_events(&mut self.gameboy, &self.application_settings)
+            .iter()
+        {
             match *event {
                 EventResponse::ProgramTerminated => {
                     info!("Program exiting!");
@@ -177,7 +171,6 @@ impl ApplicationState {
             }
 
             if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
-
                 /*//check for new controller every frame
                 self.load_controller_if_none_exist();*/
 
@@ -194,7 +187,6 @@ impl ApplicationState {
                 self.gameboy.remove_old_events();
                 break 'steploop;
             }
-
         }
     }
 }

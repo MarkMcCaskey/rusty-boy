@@ -2,8 +2,9 @@
 use sdl2;
 
 ///
-pub fn setup_controller_subsystem(sdl_context: &sdl2::Sdl)
-                                  -> Option<sdl2::controller::GameController> {
+pub fn setup_controller_subsystem(
+    sdl_context: &sdl2::Sdl,
+) -> Option<sdl2::controller::GameController> {
     let controller_subsystem = sdl_context.game_controller().unwrap();
     controller_subsystem
         .load_mappings("controllers/sneslayout.txt")
@@ -30,7 +31,6 @@ pub fn setup_controller_subsystem(sdl_context: &sdl2::Sdl)
                 }
                 Err(e) => warn!("failed to open controller: {:?}", e),
             }
-
         } else {
             debug!("{} is not a game controller", id);
         }
