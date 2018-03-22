@@ -55,7 +55,7 @@ impl ApplicationSettings {
             .or_else(|_| Err("Could not build Config".to_string()))?;
 
         // Set up debugging or command-line logging
-        let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
+        let (should_debugger, _handle) = if debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
             (true, None)
         } else {

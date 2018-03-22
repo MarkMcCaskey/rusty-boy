@@ -8,9 +8,7 @@ use std;
 use debugger::graphics::*;
 use cpu;
 use io::constants::*;
-use io::input::*;
 
-use io::sound::*;
 use io::applicationsettings::ApplicationSettings;
 use io::graphics::renderer::Renderer;
 use io::graphics;
@@ -31,11 +29,10 @@ pub struct ApplicationState {
     /// counts cycles since last divider register update
     div_timer_cycles: u64,
     /// counts cycles since last sound update
-    sound_cycles: u64,
+    _sound_cycles: u64,
     debugger: Option<Debugger>,
-    initial_gameboy_state: cpu::Cpu,
-    //    logger_handle: Option<log4rs::Handle>, // storing to keep alive
-    screenshot_frame_num: Wrapping<u64>,
+    _initial_gameboy_state: cpu::Cpu,
+    _screenshot_frame_num: Wrapping<u64>,
     //ui_offset: Point, // TODO whole interface pan
     application_settings: ApplicationSettings,
     renderer: Box<Renderer>,
@@ -78,22 +75,22 @@ impl ApplicationState {
         //let memvis_texture = tc.create_texture_static(txt_format, w, h).unwrap();
 
         Ok(ApplicationState {
-            gameboy: gameboy,
+            gameboy,
             //sound_system: device,
             cycle_count: 0,
             prev_time: 0,
             // FIXME sound_cycles is probably wrong or not needed
-            sound_cycles: 0,
-            debugger: debugger,
+            _sound_cycles: 0,
+            debugger,
             prev_hsync_cycles: 0,
             timer_cycles: 0,
             div_timer_cycles: 0,
-            initial_gameboy_state: gbcopy,
+            _initial_gameboy_state: gbcopy,
             //logger_handle: handle,
-            screenshot_frame_num: Wrapping(0),
+            _screenshot_frame_num: Wrapping(0),
             //ui_offset: Point::new(0, 0),
             application_settings: app_settings,
-            renderer: renderer,
+            renderer,
             //texture_creator: tc,
         })
     }

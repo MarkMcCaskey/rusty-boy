@@ -147,8 +147,8 @@ pub fn draw_tile_transparent<T>(
     gameboy: &Cpu,
     mem_offset: u16,
     tile_idx: u16, // technically when used by GB it's only 8bit
-    screen_offset_x: i32,
-    screen_offset_y: i32,
+    _screen_offset_x: i32,
+    _screen_offset_y: i32,
     flip_x: bool,
     flip_y: bool,
     texture: &mut Texture,
@@ -177,9 +177,6 @@ pub fn draw_tile_transparent<T>(
             // let d = 255/4;
             // let px_val = px_color*d;
             // renderer.set_draw_color(Color::RGB(px_val, px_val, px_val));
-
-            // TODO add toggle for this or remove it
-            const DEBUG_OAM_BG: bool = false;
 
             let realpx = if flip_x { TILE_SIZE_PX - px } else { px } as u8;
             let realpy = if flip_y { TILE_SIZE_PX - py } else { py } as u8;
