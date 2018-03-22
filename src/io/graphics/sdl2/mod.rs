@@ -7,8 +7,6 @@ pub mod input;
 use sdl2;
 use sdl2::*;
 use sdl2::rect::{Point, Rect};
-use sdl2::video::GLProfile;
-use sdl2::audio::AudioDevice;
 use sdl2::keyboard::Keycode;
 use sdl2::surface::Surface;
 use sdl2::pixels::PixelFormatEnum;
@@ -25,8 +23,6 @@ use io::sound::*;
 use io::applicationsettings::ApplicationSettings;
 use super::renderer::EventResponse;
 
-use std;
-
 use self::utility::*;
 
 pub struct Sdl2Renderer {
@@ -39,18 +35,12 @@ pub struct Sdl2Renderer {
 impl Sdl2Renderer {
     pub fn new(app_settings: &ApplicationSettings) -> Result<Self, String> {
         let sdl_context = sdl2::init()?;
-        let device = setup_audio(&sdl_context)?;
+        setup_audio(&sdl_context)?;
         let controller = setup_controller_subsystem(&sdl_context);
 
         // Set up graphics and window
         trace!("Opening window");
         let video_subsystem = sdl_context.video()?;
-
-        let gl_attr = video_subsystem.gl_attr();
-
-        gl_attr.set_context_profile(GLProfile::Core);
-        ///gl_attr.set_context_flags().debug().set();
-        gl_attr.set_context_version(3, 2);
 
         let window = {
             let (window_width, window_height) = if app_settings.memvis_mode {
@@ -69,7 +59,6 @@ impl Sdl2Renderer {
                     window_height,
                 )
                 .position_centered()
-                .opengl()
                 .build()
             {
                 Ok(v) => v,
@@ -277,7 +266,7 @@ impl Renderer for Sdl2Renderer {
         self.canvas.present();
     }
 
-    fn draw_memory_visualization(&mut self, gameboy: &Cpu, app_settings: &ApplicationSettings) {
+    fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
         unimplemented!();
     }
 
@@ -455,7 +444,7 @@ impl Renderer for Sdl2Renderer {
                         }
                     }
                 }
-                Event::MouseWheel { y, .. } => {
+                Event::MouseWheel { y: _y, .. } => {
                     //self.ui_scale += y as f32;
                     // self.widgets[0].scale += y as f32;
                 }
