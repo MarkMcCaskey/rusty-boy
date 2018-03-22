@@ -1,6 +1,6 @@
 //! Everything for making sound play
 use sdl2;
-use sdl2::audio::{AudioCallback, AudioSpecDesired, AudioDevice};
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
 pub struct GBSound {
     /// The number of samples sent to the sound device every second.
@@ -9,7 +9,6 @@ pub struct GBSound {
     pub channel2: SquareWave,
     pub channel3: SquareWaveRam,
 }
-
 
 /// Contains information for a single channel of audio
 ///
@@ -54,9 +53,6 @@ pub struct SquareWaveRam {
     pub shift_amount: u8,
 }
 
-
-
-
 trait SoundChannel {
     fn generate_sample(&mut self) -> f32;
 }
@@ -70,28 +66,27 @@ impl SoundChannel for SquareWave {
         };
         self.phase = (self.phase + self.phase_inc) % 1.0;
         // To make it sound slightly nicer
-        out//.sin()
+        out //.sin()
     }
 }
 
 impl SoundChannel for SquareWaveRam {
     fn generate_sample(&mut self) -> f32 {
-        let out = if self.phase <=
-                     ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) {
-            self.volume * self.phase
-        } else {
-            0.0
-        };
+        let out =
+            if self.phase <= ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) {
+                self.volume * self.phase
+            } else {
+                0.0
+            };
 
         /*        self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
         // To make it sound slightly nicer
-        */
-
+         */
 
         self.phase = (self.phase + self.phase_inc) % 1.0;
 
         self.wave_ram_index = (self.wave_ram_index + 1) % 32;
-        out//.sin()
+        out //.sin()
     }
 }
 
@@ -102,8 +97,8 @@ impl AudioCallback for GBSound {
         for x in out.iter_mut() {
             // FIXME is just adding them is the right way to do it?
             // Maybe for floats it is?
-            let val = self.channel1.generate_sample() + self.channel2.generate_sample() +
-                      self.channel3.generate_sample();
+            let val = self.channel1.generate_sample() + self.channel2.generate_sample()
+                + self.channel3.generate_sample();
             *x = val;
             // TODO mix other channels here
         }
@@ -123,36 +118,36 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
     };
 
     audio_subsystem.open_playback(None, &desired_spec, |spec| {
-            // Show obtained AudioSpec
-            debug!("{:?}", spec);
+        // Show obtained AudioSpec
+        debug!("{:?}", spec);
 
-            // initialize the audio callback
-            GBSound {
-                out_freq: spec.freq as f32,
-                channel1: SquareWave {
-                    phase_inc: 440.0 / spec.freq as f32,
-                    phase: 0.0,
-                    volume: 0.025,
-                    wave_duty: 0.25,
-                    add: true,
-                },
-                channel2: SquareWave {
-                    phase_inc: 440.0 / spec.freq as f32,
-                    phase: 0.0,
-                    volume: 0.025,
-                    wave_duty: 0.25,
-                    add: true,
-                },
-                channel3: SquareWaveRam {
-                    phase_inc: 440.0 / spec.freq as f32,
-                    phase: 0.0,
-                    volume: 0.025,
-                    wave_duty: 0.25,
-                    add: true,
-                    wave_ram: [0u8; 32],
-                    wave_ram_index: 0,
-                    shift_amount: 0,
-                },
-            }
-        })
+        // initialize the audio callback
+        GBSound {
+            out_freq: spec.freq as f32,
+            channel1: SquareWave {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.025,
+                wave_duty: 0.25,
+                add: true,
+            },
+            channel2: SquareWave {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.025,
+                wave_duty: 0.25,
+                add: true,
+            },
+            channel3: SquareWaveRam {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.025,
+                wave_duty: 0.25,
+                add: true,
+                wave_ram: [0u8; 32],
+                wave_ram_index: 0,
+                shift_amount: 0,
+            },
+        }
+    })
 }

@@ -17,19 +17,24 @@ const WIN_X_ADJ: i32 = 3;
 const X_WIDTH: i32 = 11;
 const WATCHPOINT_Y_OFFSET: i32 = 9;
 const STACK_X_POS_OFFSET: i32 = 26;
-const REG8BIT_LIST: [CpuRegister; 8] = [CpuRegister::A,
-                                        CpuRegister::B,
-                                        CpuRegister::C,
-                                        CpuRegister::D,
-                                        CpuRegister::E,
-                                        CpuRegister::H,
-                                        CpuRegister::HL,
-                                        CpuRegister::L];
+const REG8BIT_LIST: [CpuRegister; 8] = [
+    CpuRegister::A,
+    CpuRegister::B,
+    CpuRegister::C,
+    CpuRegister::D,
+    CpuRegister::E,
+    CpuRegister::H,
+    CpuRegister::HL,
+    CpuRegister::L,
+];
 const REG8BIT_NAME: [&'static str; 8] = ["A", "B", "C", "D", "E", "H", "(HL)", "L"];
-const REG16BIT_LIST: [CpuRegister16; 4] =
-    [CpuRegister16::BC, CpuRegister16::DE, CpuRegister16::HL, CpuRegister16::SP];
+const REG16BIT_LIST: [CpuRegister16; 4] = [
+    CpuRegister16::BC,
+    CpuRegister16::DE,
+    CpuRegister16::HL,
+    CpuRegister16::SP,
+];
 const REG16BIT_NAME: [&'static str; 4] = ["BC", "DE", "HL", "SP"];
-
 
 #[derive(PartialEq)]
 enum DebuggerState {
@@ -74,15 +79,19 @@ impl Debugger {
 
         let dbg = Debugger {
             //         symbol_table: HashMap::new(),
-            asm_win: create_win((max_y / WIN_Y_DIV) * WIN_Y_ADJ,
-                                (max_x / WIN_X_DIV) * WIN_X_ADJ,
-                                0,
-                                max_x / WIN_X_DIV),
+            asm_win: create_win(
+                (max_y / WIN_Y_DIV) * WIN_Y_ADJ,
+                (max_x / WIN_X_DIV) * WIN_X_ADJ,
+                0,
+                max_x / WIN_X_DIV,
+            ),
             reg_win: create_win((max_y / WIN_Y_DIV) * WIN_Y_ADJ, max_x / WIN_X_DIV, 0, 0),
-            in_win: create_win(max_y - ((max_y / WIN_Y_DIV) * WIN_Y_ADJ),
-                               max_x,
-                               (max_y / WIN_Y_DIV) * WIN_Y_ADJ,
-                               0),
+            in_win: create_win(
+                max_y - ((max_y / WIN_Y_DIV) * WIN_Y_ADJ),
+                max_x,
+                (max_y / WIN_Y_DIV) * WIN_Y_ADJ,
+                0,
+            ),
             dissassembled_rom: disasm_rom_to_vec(romcp, 0x7FF0),
             input_buffer: String::new(),
             output_buffer: vec![String::new(), String::new()], // to make history nicer
@@ -106,9 +115,8 @@ impl Debugger {
                 cpu.dispatch_opcode();
             }
             // numbers and letters
-            v @ 0x20...0x7F => {
-                self.input_buffer.push_str(String::from_utf8(vec![v as u8]).unwrap().as_ref())
-            }
+            v @ 0x20...0x7F => self.input_buffer
+                .push_str(String::from_utf8(vec![v as u8]).unwrap().as_ref()),
             // This shouldn't need to be handled
             // KEY_RESIZE => (),
             // backspace
@@ -167,14 +175,13 @@ impl Debugger {
 
                 let out_string = match maybe_output {
                     Some(da) => self.dispatch_debugger_action(cpu, da),
-                    None => {
-                        self.dispatch_debugger_action(cpu,
-                                                      DebuggerAction::Echo {
-                                                          str: "Could not parse result".to_string(),
-                                                      })
-                    }
+                    None => self.dispatch_debugger_action(
+                        cpu,
+                        DebuggerAction::Echo {
+                            str: "Could not parse result".to_string(),
+                        },
+                    ),
                 };
-
 
                 let old_input_string = self.input_buffer.clone();
                 self.output_buffer.push(old_input_string);
@@ -202,7 +209,6 @@ impl Debugger {
         self.draw_in();
         self.draw_asm(cpu);
 
-
         wrefresh(self.asm_win);
         wrefresh(self.reg_win);
         wrefresh(self.in_win);
@@ -210,7 +216,6 @@ impl Debugger {
         refresh();
         wrefresh(self.in_win);
     }
-
 
     // draws the input window
     fn draw_in(&mut self) {
@@ -288,11 +293,8 @@ impl Debugger {
                 let (cur_inst, _) = self.dissassembled_rom[(idx + i) as usize].clone();
                 let cur_instref = cur_inst.as_ref();
                 self.draw_instruction((i + 1) as i32, cur_instref);
-
             }
         }
-
-
     }
 
     fn draw_instruction(&mut self, y_loc: i32, disinst: &str) {
@@ -305,36 +307,39 @@ impl Debugger {
         let mut x = 0;
         let mut y = 0;
         getmaxyx(self.reg_win, &mut y, &mut x);
-        let watchpoints: Vec<u16> = self.watchpoints
-            .iter()
-            .cloned()
-            .collect();
-
+        let watchpoints: Vec<u16> = self.watchpoints.iter().cloned().collect();
 
         for i in WATCHPOINT_Y_OFFSET..(WATCHPOINT_Y_OFFSET + (self.watchpoints.len() as i32)) {
             wmove(self.reg_win, i, 1);
-            wprintw(self.reg_win,
-                    format!("({:X}): {:X}",
-                            watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
-                            cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize])
-                            .as_ref());
+            wprintw(
+                self.reg_win,
+                format!(
+                    "({:X}): {:X}",
+                    watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
+                    cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize]
+                ).as_ref(),
+            );
         }
-
     }
 
     fn draw_register(&mut self, cpu: &Cpu, y_loc: i32, name: &str, reg: CpuRegister) {
         wmove(self.reg_win, y_loc, 1);
-        wprintw(self.reg_win,
-                format!("{:4}: 0x{:02X}",
-                        name,
-                        cpu.access_register(reg).expect("invalid register"))
-                        .as_ref());
+        wprintw(
+            self.reg_win,
+            format!(
+                "{:4}: 0x{:02X}",
+                name,
+                cpu.access_register(reg).expect("invalid register")
+            ).as_ref(),
+        );
     }
 
     fn draw_register16(&mut self, cpu: &mut Cpu, y_loc: i32, name: &str, reg: CpuRegister16) {
         wmove(self.reg_win, y_loc, 13);
-        wprintw(self.reg_win,
-                format!("{:2}: 0x{:04X}", name, cpu.access_register16(reg)).as_ref());
+        wprintw(
+            self.reg_win,
+            format!("{:2}: 0x{:04X}", name, cpu.access_register16(reg)).as_ref(),
+        );
     }
 
     fn draw_stack_data(&mut self, cpu: &mut Cpu) {
@@ -362,41 +367,48 @@ impl Debugger {
         for (i, addr) in (cur_stack_ptr..0xFFFF).filter(|&n| n % 2 == 0).enumerate() {
             // i+1 because enumerate starts at 0
             wmove(self.reg_win, (i as i32) + 1, STACK_X_POS_OFFSET);
-            wprintw(self.reg_win,
-                    format!("({:X}): {:02X}{:02X}",
-                            addr,
-                            cpu.mem[(addr + 1) as usize],
-                            cpu.mem[addr as usize])
-                            .as_ref());
+            wprintw(
+                self.reg_win,
+                format!(
+                    "({:X}): {:02X}{:02X}",
+                    addr,
+                    cpu.mem[(addr + 1) as usize],
+                    cpu.mem[addr as usize]
+                ).as_ref(),
+            );
         }
     }
 
     fn draw_registers(&mut self, cpu: &Cpu) {
-
         for i in 0..8 {
-            self.draw_register(cpu,
-                               i + 1,
-                               REG8BIT_NAME[i as usize],
-                               REG8BIT_LIST[i as usize]);
+            self.draw_register(
+                cpu,
+                i + 1,
+                REG8BIT_NAME[i as usize],
+                REG8BIT_LIST[i as usize],
+            );
         }
         wmove(self.reg_win, 8, 1);
         wprintw(self.reg_win, format!("{:4}: 0x{:02X}", "F", cpu.f).as_ref());
-
     }
 
     // draw 16bit registers in the second column (right shifted by 11 characters) of the reg_win
     fn draw_registers16(&mut self, cpu: &mut Cpu) {
         for i in 0..4 {
-            self.draw_register16(cpu,
-                                 i + 1,
-                                 REG16BIT_NAME[i as usize],
-                                 REG16BIT_LIST[i as usize]);
+            self.draw_register16(
+                cpu,
+                i + 1,
+                REG16BIT_NAME[i as usize],
+                REG16BIT_LIST[i as usize],
+            );
         }
 
         // 4
         wmove(self.reg_win, 5, 13);
-        wprintw(self.reg_win,
-                format!("{:2}: 0x{:04X}", "PC", cpu.pc).as_ref());
+        wprintw(
+            self.reg_win,
+            format!("{:2}: 0x{:04X}", "PC", cpu.pc).as_ref(),
+        );
     }
 
     #[cfg(feature = "debugger")]
@@ -443,14 +455,12 @@ impl Debugger {
                 self.run_to_point = Some(addr);
                 format!("Going to 0x{:X}", addr)
             }
-            DebuggerAction::Show { show } => {
-                match show {
-                    ShowableThing::Address { addr } => {
-                        format!("(0x{:X}) = 0x{:X}", addr, cpu.mem[addr as usize])
-                    }
-                    ShowableThing::Breakpoints => format!("Breakpoints: {:?}", self.breakpoints),
+            DebuggerAction::Show { show } => match show {
+                ShowableThing::Address { addr } => {
+                    format!("(0x{:X}) = 0x{:X}", addr, cpu.mem[addr as usize])
                 }
-            }
+                ShowableThing::Breakpoints => format!("Breakpoints: {:?}", self.breakpoints),
+            },
         }
     }
 
@@ -473,7 +483,6 @@ impl Debugger {
                 }
             }
         };
-
 
         if let Some(x) = new_idx {
             Some(self.output_buffer[x].clone())
@@ -518,7 +527,6 @@ impl Debugger {
     pub fn pause(&mut self) {
         self.debugger_state = DebuggerState::Paused;
     }
-
 
     // NOTE: non-blocking read as timeout(delay) or wtimeout(window,delay)
     pub fn step(&mut self, cpu: &mut Cpu) {

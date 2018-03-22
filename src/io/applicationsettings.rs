@@ -5,12 +5,11 @@ use std::path::PathBuf;
 use io::constants::{APP_INFO, SCALE};
 use app_dirs::*;
 
-use log::LogLevelFilter;
+use log::LevelFilter;
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
-
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ApplicationSettings {
@@ -44,26 +43,25 @@ impl ApplicationSettings {
 
         let config = Config::builder()
             .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(Root::builder()
-                       .appender("stdout")
-                       .build(match (trace_mode, debug_mode) {
-                                  (true, _) => LogLevelFilter::Trace,
-                                  (false, true) => LogLevelFilter::Debug,
-                                  _ => LogLevelFilter::Info,
-                              }))
+            .build(
+                Root::builder()
+                    .appender("stdout")
+                    .build(match (trace_mode, debug_mode) {
+                        (true, _) => LevelFilter::Trace,
+                        (false, true) => LevelFilter::Debug,
+                        _ => LevelFilter::Info,
+                    }),
+            )
             .or_else(|_| Err("Could not build Config".to_string()))?;
-
 
         // Set up debugging or command-line logging
         let (should_debugger, handle) = if debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
             (true, None)
         } else {
-            let handle = log4rs::init_config(config)
-                .or_else(|_| Err("Could not init Config"))?;
+            let handle = log4rs::init_config(config).or_else(|_| Err("Could not init Config"))?;
             (false, Some(handle))
         };
-
 
         let data_path = match app_root(AppDataType::UserData, &APP_INFO) {
             Ok(v) => {
@@ -87,18 +85,17 @@ impl ApplicationSettings {
             }
         };
 
-
         Ok(ApplicationSettings {
-               rom_file_name,
-               debug_mode,
-               trace_mode,
-               memvis_mode,
-               vulkan_mode,
-               config_path,
-               data_path,
-               debugger_on: should_debugger,
-               //               logger_handle: handle,
-               ui_scale: SCALE,
-           })
+            rom_file_name,
+            debug_mode,
+            trace_mode,
+            memvis_mode,
+            vulkan_mode,
+            config_path,
+            data_path,
+            debugger_on: should_debugger,
+            //               logger_handle: handle,
+            ui_scale: SCALE,
+        })
     }
 }

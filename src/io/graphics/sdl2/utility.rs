@@ -3,7 +3,7 @@
 use sdl2;
 use sdl2::pixels::*;
 use std::fmt::Debug;
-use sdl2::rect::{Rect, Point};
+use sdl2::rect::{Point, Rect};
 use sdl2::surface::Surface;
 
 use cpu::Cpu;
@@ -25,7 +25,6 @@ pub fn save_screenshot(renderer: &sdl2::render::Canvas<sdl2::video::Window>, fil
     }
 }
 
-
 /// Dumb gui button
 pub struct Toggle<T> {
     pub rect: sdl2::rect::Rect,
@@ -34,7 +33,8 @@ pub struct Toggle<T> {
 }
 
 impl<S> Toggle<S>
-    where S: Clone + Debug
+where
+    S: Clone + Debug,
 {
     pub fn new(rect: sdl2::rect::Rect, values: Vec<S>) -> Toggle<S> {
         Toggle {
@@ -48,7 +48,8 @@ impl<S> Toggle<S>
         debug!("Click! {} {:?}", self.current, self.value());
     }
     pub fn draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
-        where T: sdl2::render::RenderTarget
+    where
+        T: sdl2::render::RenderTarget,
     {
         renderer.set_draw_color(Color::RGB(255, 0, 0));
         renderer.draw_rect(self.rect).unwrap();
@@ -59,10 +60,8 @@ impl<S> Toggle<S>
         } else {
             None
         }
-
     }
 }
-
 
 /// Simple "window" inside of main gui window. Contains Drawable and
 /// is Drawable itself. It moves contained drawable `vis` to new
@@ -78,7 +77,8 @@ pub struct PositionedFrame {
 impl PositionedFrame {
     #[inline]
     fn before_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
-        where T: sdl2::render::RenderTarget
+    where
+        T: sdl2::render::RenderTarget,
     {
         let r = self.rect;
 
@@ -91,7 +91,8 @@ impl PositionedFrame {
 
     #[inline]
     fn after_draw<T>(&self, renderer: &mut sdl2::render::Canvas<T>)
-        where T: sdl2::render::RenderTarget
+    where
+        T: sdl2::render::RenderTarget,
     {
         let (s_x, s_y) = renderer.scale();
         renderer
@@ -102,13 +103,11 @@ impl PositionedFrame {
     }
 }
 
-
 pub trait Drawable {
     fn get_initial_size(&self) -> (u32, u32);
     fn draw(&mut self, renderer: &mut sdl2::render::Canvas<Surface>, cpu: &mut Cpu);
     fn click(&mut self, button: sdl2::mouse::MouseButton, position: Point, cpu: &mut Cpu);
 }
-
 
 impl Drawable for PositionedFrame {
     fn get_initial_size(&self) -> (u32, u32) {
@@ -129,9 +128,9 @@ impl Drawable for PositionedFrame {
     }
 }
 
-
 pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render::Canvas<T>)
-    where T: sdl2::render::RenderTarget
+where
+    T: sdl2::render::RenderTarget,
 {
     renderer.set_draw_color(Color::RGB(0, 0, 0));
     renderer
@@ -144,7 +143,6 @@ pub fn draw_frame_bounds<T>(frame: &PositionedFrame, renderer: &mut sdl2::render
     renderer
         .draw_line(frame.rect.top_right(), frame.rect.bottom_left())
         .unwrap();
-
 
     renderer.set_draw_color(Color::RGB(255, 0, 255));
     renderer.fill_rect(frame.rect).unwrap();

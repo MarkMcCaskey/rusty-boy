@@ -46,11 +46,13 @@ impl Drawable for VidRamBGDisplay {
             TileDataSelect::Mode2 => TILE_PATTERN_TABLE_2_ORIGIN,
         };
 
-        draw_background_buffer(renderer,
-                               cpu,
-                               tile_map_offset,
-                               tile_patterns_offset,
-                               MEM_DISP_WIDTH);
+        draw_background_buffer(
+            renderer,
+            cpu,
+            tile_map_offset,
+            tile_patterns_offset,
+            MEM_DISP_WIDTH,
+        );
         draw_objects(renderer, cpu, cpu.scx() as i32, cpu.scy() as i32);
     }
 
@@ -64,20 +66,20 @@ impl Drawable for VidRamBGDisplay {
     }
 }
 
-
 pub struct VidRamTileDisplay {
     pub tile_data_select: TileDataSelect,
 }
-
 
 /// Display for tile data. Display tiles in `TILE_COLUMNS` with
 /// `BORDER_PX` spacing.
 impl Drawable for VidRamTileDisplay {
     fn get_initial_size(&self) -> (u32, u32) {
-
         let cell_size = TILE_SIZE_PX + BORDER_PX;
         let tile_num = TILE_PATTERN_TABLES_SIZE / TILE_SIZE_BYTES;
-        ((TILE_COLUMNS * cell_size) as u32, ((tile_num / TILE_COLUMNS) * cell_size) as u32)
+        (
+            (TILE_COLUMNS * cell_size) as u32,
+            ((tile_num / TILE_COLUMNS) * cell_size) as u32,
+        )
     }
 
     fn draw(&mut self, renderer: &mut sdl2::render::Canvas<Surface>, cpu: &mut Cpu) {
@@ -89,15 +91,16 @@ impl Drawable for VidRamTileDisplay {
     }
 }
 
-
 /// Draw single tile at given screen position
-pub fn draw_tile(renderer: &mut sdl2::render::Canvas<Surface>,
-                 gameboy: &Cpu,
-                 mem_offset: u16,
-                 tile_idx: u16, // technically when used by GB it's only 8bit
-                 texture: &mut Texture,
-                 pixel_buffer: &mut [u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
-                 dst_rect: &Rect) {
+pub fn draw_tile(
+    renderer: &mut sdl2::render::Canvas<Surface>,
+    gameboy: &Cpu,
+    mem_offset: u16,
+    tile_idx: u16, // technically when used by GB it's only 8bit
+    texture: &mut Texture,
+    pixel_buffer: &mut [u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
+    dst_rect: &Rect,
+) {
     #[inline]
     fn get_bit(n: u8, offset: u8) -> u8 {
         (n >> (7 - offset)) & 1u8
@@ -106,7 +109,6 @@ pub fn draw_tile(renderer: &mut sdl2::render::Canvas<Surface>,
     let offset = mem_offset + (tile_idx * TILE_SIZE_BYTES);
 
     for px in 0..TILE_SIZE_PX {
-
         for py in 0..TILE_SIZE_PX {
             let col_byte_off = py * 2;
             let col_byte1_v = gameboy.mem[(offset + col_byte_off) as usize];
@@ -140,21 +142,21 @@ pub fn draw_tile(renderer: &mut sdl2::render::Canvas<Surface>,
 // TODO cache tiles into texture and use blending options (?) to make
 // desired color "trasnparent".
 /// Draw single tile at given screen position without drawing "0" color.
-pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
-                                gameboy: &Cpu,
-                                mem_offset: u16,
-                                tile_idx: u16, // technically when used by GB it's only 8bit
-                                screen_offset_x: i32,
-                                screen_offset_y: i32,
-                                flip_x: bool,
-                                flip_y: bool,
-                                texture: &mut Texture,
-                                pixel_buffer: &mut [u8;
-                                                    (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
-                                dst_rect: &Rect)
-    where T: sdl2::render::RenderTarget
+pub fn draw_tile_transparent<T>(
+    renderer: &mut sdl2::render::Canvas<T>,
+    gameboy: &Cpu,
+    mem_offset: u16,
+    tile_idx: u16, // technically when used by GB it's only 8bit
+    screen_offset_x: i32,
+    screen_offset_y: i32,
+    flip_x: bool,
+    flip_y: bool,
+    texture: &mut Texture,
+    pixel_buffer: &mut [u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize],
+    dst_rect: &Rect,
+) where
+    T: sdl2::render::RenderTarget,
 {
-
     #[inline]
     fn get_bit(n: u8, offset: u8) -> u8 {
         (n >> (7 - offset)) & 1u8
@@ -182,7 +184,6 @@ pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
             let realpx = if flip_x { TILE_SIZE_PX - px } else { px } as u8;
             let realpy = if flip_y { TILE_SIZE_PX - py } else { py } as u8;
 
-
             /*if DEBUG_OAM_BG || px_color != 0 {
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
                 renderer.set_draw_color(px_pal_col);
@@ -202,7 +203,6 @@ pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
             pixel_buffer[(tile_index.wrapping_add(2)) as usize] = bval;
             pixel_buffer[(tile_index.wrapping_add(3)) as usize] = rval;
             //}
-
         }
     }
     texture
@@ -215,7 +215,6 @@ pub fn draw_tile_transparent<T>(renderer: &mut sdl2::render::Canvas<T>,
 /// Patterns. It displays both background and sprite "tiles" as they
 /// overlap in memory.
 pub fn draw_tile_patterns(renderer: &mut sdl2::render::Canvas<Surface>, gameboy: &Cpu) {
-
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
     let texture_creator = renderer.texture_creator();
     let mut texture = texture_creator
@@ -225,10 +224,7 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Canvas<Surface>, gameboy:
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
     let mut dst_rect = Rect::new(0, 0, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
 
-
-
     for tile_idx in 0..(TILE_PATTERN_TABLES_SIZE / TILE_SIZE_BYTES) + 1 {
-
         let tile_start_x = (tile_idx % TILE_COLUMNS) * (TILE_SIZE_PX + BORDER_PX);
         let y_pos = tile_idx / TILE_COLUMNS;
         let tile_start_y = (TILE_SIZE_PX + BORDER_PX) * y_pos;
@@ -236,23 +232,26 @@ pub fn draw_tile_patterns(renderer: &mut sdl2::render::Canvas<Surface>, gameboy:
         dst_rect.set_x(tile_start_x as i32);
         dst_rect.set_y(tile_start_y as i32);
 
-        draw_tile(renderer,
-                  gameboy,
-                  TILE_PATTERN_TABLE_1_START,
-                  tile_idx,
-                  &mut texture,
-                  &mut pixel_buffer,
-                  &dst_rect);
+        draw_tile(
+            renderer,
+            gameboy,
+            TILE_PATTERN_TABLE_1_START,
+            tile_idx,
+            &mut texture,
+            &mut pixel_buffer,
+            &dst_rect,
+        );
     }
 }
 
 /// Draw whole background buffer (256x256 px)
-pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
-                              gameboy: &Cpu,
-                              tile_map_offset: cpu::constants::MemAddr,
-                              tile_patterns_offset: cpu::constants::MemAddr,
-                              screen_offset_x: i32) {
-
+pub fn draw_background_buffer(
+    renderer: &mut sdl2::render::Canvas<Surface>,
+    gameboy: &Cpu,
+    tile_map_offset: cpu::constants::MemAddr,
+    tile_patterns_offset: cpu::constants::MemAddr,
+    screen_offset_x: i32,
+) {
     // TODO implement proper windows/widgets
     const TOP_Y: i32 = 1;
     let screen_offset_y = TOP_Y;
@@ -264,12 +263,12 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
         .unwrap();
     texture.set_blend_mode(sdl2::render::BlendMode::None);
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
-    let mut dst_rect = Rect::new(screen_offset_x,
-                                 screen_offset_y,
-                                 TILE_SIZE_PX as u32,
-                                 TILE_SIZE_PX as u32);
-
-
+    let mut dst_rect = Rect::new(
+        screen_offset_x,
+        screen_offset_y,
+        TILE_SIZE_PX as u32,
+        TILE_SIZE_PX as u32,
+    );
 
     // FIXME rethink how to do this better
     match tile_patterns_offset {
@@ -283,18 +282,17 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
                 dst_rect.set_x(0 + (tile_x * TILE_SIZE_PX as u32) as i32);
                 dst_rect.set_y(screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
 
-
-                draw_tile(renderer,
-                          gameboy,
-                          TILE_PATTERN_TABLE_1_START,
-                          tile_index as u16, // use index as unsigned 8bit
-                          //because rendering to its own surface, use 0
-                          // value is still needed for background, however
-                          &mut texture,
-                          &mut pixel_buffer,
-                          &dst_rect);
-
-
+                draw_tile(
+                    renderer,
+                    gameboy,
+                    TILE_PATTERN_TABLE_1_START,
+                    tile_index as u16, // use index as unsigned 8bit
+                    //because rendering to its own surface, use 0
+                    // value is still needed for background, however
+                    &mut texture,
+                    &mut pixel_buffer,
+                    &dst_rect,
+                );
             }
         }
         TILE_PATTERN_TABLE_2_ORIGIN => {
@@ -307,20 +305,18 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
                 dst_rect.set_x(0 + (tile_x * TILE_SIZE_PX as u32) as i32);
                 dst_rect.set_y(screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
 
-
-                draw_tile(renderer,
-                          gameboy,
-                          TILE_PATTERN_TABLE_2_START, // reposition origin
-                          add_u16_i8(128u16, (tile_index as i8)), // index is signed 8bit
-                          //use 0 instead because it's rendering to its
-                          // own surface
-                          &mut texture,
-                          &mut pixel_buffer,
-                          &dst_rect);
-
-
+                draw_tile(
+                    renderer,
+                    gameboy,
+                    TILE_PATTERN_TABLE_2_START, // reposition origin
+                    add_u16_i8(128u16, (tile_index as i8)), // index is signed 8bit
+                    //use 0 instead because it's rendering to its
+                    // own surface
+                    &mut texture,
+                    &mut pixel_buffer,
+                    &dst_rect,
+                );
             }
-
         }
         _ => panic!("Wrong tile data select"),
     };
@@ -328,23 +324,26 @@ pub fn draw_background_buffer(renderer: &mut sdl2::render::Canvas<Surface>,
     draw_screen_border(renderer, gameboy, screen_offset_x, TOP_Y);
 }
 
-
 /// Draw rectangle showing values of SCX and SCY registers,
 /// i.e. visible screen area.
-fn draw_screen_border<T>(renderer: &mut sdl2::render::Canvas<T>,
-                         gameboy: &Cpu,
-                         screen_offset_x: i32,
-                         screen_offset_y: i32)
-    where T: sdl2::render::RenderTarget
+fn draw_screen_border<T>(
+    renderer: &mut sdl2::render::Canvas<T>,
+    gameboy: &Cpu,
+    screen_offset_x: i32,
+    screen_offset_y: i32,
+) where
+    T: sdl2::render::RenderTarget,
 {
     renderer.set_draw_color(Color::RGB(255, 255, 255));
     let scx: u8 = gameboy.scx();
     let scy: u8 = gameboy.scy();
 
-    renderer.set_clip_rect(Some(Rect::new(screen_offset_x,
-                                          screen_offset_y,
-                                          SCREEN_BUFFER_SIZE_X,
-                                          SCREEN_BUFFER_SIZE_Y)));
+    renderer.set_clip_rect(Some(Rect::new(
+        screen_offset_x,
+        screen_offset_y,
+        SCREEN_BUFFER_SIZE_X,
+        SCREEN_BUFFER_SIZE_Y,
+    )));
     // Draw 9 versions to do wrap around
     // FIXME is this inefficient/dumb and there is a better way? probably.
     for x in -1..2 {
@@ -352,23 +351,25 @@ fn draw_screen_border<T>(renderer: &mut sdl2::render::Canvas<T>,
             let offset_x = screen_offset_x.wrapping_add(x * SCREEN_BUFFER_SIZE_X as i32);
             let offset_y = screen_offset_y.wrapping_add(y * SCREEN_BUFFER_SIZE_X as i32);
             renderer
-                .draw_rect(Rect::new(offset_x + scx as i32 - 1,
-                                     offset_y + scy as i32 - 1,
-                                     GB_SCREEN_WIDTH as u32 + 2,
-                                     GB_SCREEN_HEIGHT as u32 + 2))
+                .draw_rect(Rect::new(
+                    offset_x + scx as i32 - 1,
+                    offset_y + scy as i32 - 1,
+                    GB_SCREEN_WIDTH as u32 + 2,
+                    GB_SCREEN_HEIGHT as u32 + 2,
+                ))
                 .unwrap();
         }
     }
     renderer.set_clip_rect(None);
 }
 
-
 /// Draw "sprites" (something gameboy calls "Objects").
-pub fn draw_objects(renderer: &mut sdl2::render::Canvas<Surface>,
-                    gameboy: &Cpu,
-                    screen_offset_x: i32,
-                    screen_offset_y: i32) {
-
+pub fn draw_objects(
+    renderer: &mut sdl2::render::Canvas<Surface>,
+    gameboy: &Cpu,
+    screen_offset_x: i32,
+    screen_offset_y: i32,
+) {
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
     let texture_creator = renderer.texture_creator();
     let mut texture = texture_creator
@@ -377,7 +378,6 @@ pub fn draw_objects(renderer: &mut sdl2::render::Canvas<Surface>,
     texture.set_blend_mode(sdl2::render::BlendMode::Blend);
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
     let mut dst_rect = Rect::new(0, 0, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
-
 
     // TODO sprites should use palletes
     // TODO sprites can have transparent color
@@ -410,50 +410,53 @@ pub fn draw_objects(renderer: &mut sdl2::render::Canvas<Surface>,
             dst_rect.set_x(screen_offset_x + screen_x as i32);
             dst_rect.set_y(screen_offset_y + screen_y as i32);
 
-            draw_tile_transparent(renderer,
-                                  gameboy,
-                                  pattern_table,
-                                  tile_16 as u16,
-                                  screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y as i32,
-                                  x_flip,
-                                  y_flip,
-                                  &mut texture,
-                                  &mut pixel_buffer,
-                                  &dst_rect);
+            draw_tile_transparent(
+                renderer,
+                gameboy,
+                pattern_table,
+                tile_16 as u16,
+                screen_offset_x + screen_x as i32,
+                screen_offset_y + screen_y as i32,
+                x_flip,
+                y_flip,
+                &mut texture,
+                &mut pixel_buffer,
+                &dst_rect,
+            );
             // Draw second sprite below the first one
             dst_rect.set_x(screen_offset_x + screen_x as i32);
             dst_rect.set_y(screen_offset_y + screen_y.wrapping_add(8) as i32);
 
-            draw_tile_transparent(renderer,
-                                  gameboy,
-                                  pattern_table,
-                                  tile_16 as u16 + 1,
-                                  screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y.wrapping_add(8) as i32,
-                                  x_flip,
-                                  y_flip,
-                                  &mut texture,
-                                  &mut pixel_buffer,
-                                  &dst_rect);
+            draw_tile_transparent(
+                renderer,
+                gameboy,
+                pattern_table,
+                tile_16 as u16 + 1,
+                screen_offset_x + screen_x as i32,
+                screen_offset_y + screen_y.wrapping_add(8) as i32,
+                x_flip,
+                y_flip,
+                &mut texture,
+                &mut pixel_buffer,
+                &dst_rect,
+            );
         } else {
             // 8x8 sprites mode
             dst_rect.set_x(screen_offset_x + screen_x as i32);
             dst_rect.set_y(screen_offset_y + screen_y as i32);
-            draw_tile_transparent(renderer,
-                                  gameboy,
-                                  pattern_table,
-                                  tile_index as u16,
-                                  screen_offset_x + screen_x as i32,
-                                  screen_offset_y + screen_y as i32,
-                                  x_flip,
-                                  y_flip,
-                                  &mut texture,
-                                  &mut pixel_buffer,
-                                  &dst_rect);
-
+            draw_tile_transparent(
+                renderer,
+                gameboy,
+                pattern_table,
+                tile_index as u16,
+                screen_offset_x + screen_x as i32,
+                screen_offset_y + screen_y as i32,
+                x_flip,
+                y_flip,
+                &mut texture,
+                &mut pixel_buffer,
+                &dst_rect,
+            );
         }
-
     }
-
 }

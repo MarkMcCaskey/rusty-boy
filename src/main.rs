@@ -8,33 +8,33 @@
 //!
 //! Memory visualization inspired by [ICU64 / Frodo Redpill v0.1](https://icu64.blogspot.com/2009/09/first-public-release-of-icu64frodo.html)
 
+extern crate app_dirs;
 extern crate clap;
 #[macro_use]
-extern crate log;
+extern crate lazy_static;
 extern crate log4rs;
-extern crate sdl2;
-#[cfg(feature="debugger")]
+#[macro_use]
+extern crate log;
+#[cfg(feature = "debugger")]
 extern crate ncurses;
+#[cfg(any(feature = "debugger", feature = "asm"))]
+extern crate nom;
 extern crate rand; //for channel4 noise sound
+extern crate sdl2;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-#[cfg(any(feature="debugger", feature="asm"))]
-extern crate nom;
-extern crate app_dirs;
 extern crate time;
-#[macro_use]
-extern crate lazy_static;
-#[cfg(feature="vulkan")]
+#[cfg(feature = "vulkan")]
 #[macro_use]
 extern crate vulkano;
-#[cfg(feature="vulkan")]
+#[cfg(feature = "vulkan")]
 #[macro_use]
 extern crate vulkano_shader_derive;
-#[cfg(feature="vulkan")]
-extern crate winit;
-#[cfg(feature="vulkan")]
+#[cfg(feature = "vulkan")]
 extern crate vulkano_win;
+#[cfg(feature = "vulkan")]
+extern crate winit;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;
@@ -51,22 +51,22 @@ pub mod disasm;
 /// Functionality for making the Gameboy emulator useful
 pub mod io;
 
-
 use io::applicationstate::*;
 use io::applicationsettings::*;
-
 
 #[allow(unused_variables)]
 fn main() {
     let arguments = io::arguments::read_arguments();
-    let application_settings =
-        match  ApplicationSettings::new(&arguments) {
-            Ok(app_settings) => app_settings,
-            Err(e) => {
-                eprintln!("Fatal error: could not initialize application settings: {}", e);
-                return ();
-            }};
-
+    let application_settings = match ApplicationSettings::new(&arguments) {
+        Ok(app_settings) => app_settings,
+        Err(e) => {
+            eprintln!(
+                "Fatal error: could not initialize application settings: {}",
+                e
+            );
+            return ();
+        }
+    };
 
     // Set up gameboy and app state
     let mut appstate = match ApplicationState::new(application_settings) {
@@ -83,9 +83,15 @@ fn main() {
         appstate.handle_events();
         appstate.step();
 
-        let time_diff = time_since_last_frame.to(time::PreciseTime::now()).num_milliseconds();
+        let time_diff = time_since_last_frame
+            .to(time::PreciseTime::now())
+            .num_milliseconds();
         if time_diff < 16 {
-            std::thread::sleep(time::Duration::milliseconds(16 - time_diff).to_std().unwrap());
+            std::thread::sleep(
+                time::Duration::milliseconds(16 - time_diff)
+                    .to_std()
+                    .unwrap(),
+            );
         }
     }
 }

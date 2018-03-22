@@ -101,7 +101,7 @@ impl Memory {
         let mut mem_buffer: [byte; 0x1_0000] = [0u8; 0x1_0000];
         for index in 0..0xFFFF {
             mem_buffer[index] = match index {
-                0x0000...0x7FFF | 0xA000 ... 0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
+                0x0000...0x7FFF | 0xA000...0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
                 0x8000...0x9FFF => self.video_ram[index - 0x8000],
                 0xC000...0xDFFF => self.internal_ram[index - 0xC000],
                 0xE000...0xFDFF => self.internal_ram[index - 0xE000],
@@ -111,12 +111,10 @@ impl Memory {
                 0xFF80...0xFFFE => self.hram[index - 0xFF80],
                 0xFFFF => self.interrupt_flag,
                 _ => 0,
-
             };
         }
         self.logger = Some(DeqCpuEventLogger::new(Some(&mem_buffer[..])));
     }
-
 
     pub fn reset(&mut self) {
         self[0xFF05] = 0x00;
@@ -150,7 +148,6 @@ impl Memory {
         self[0xFF4A] = 0x00;
         self[0xFF4B] = 0x00;
         self[0xFFFF] = 0x00;
-
     }
 }
 
@@ -191,7 +188,6 @@ impl IndexMut<usize> for Memory {
     }
 }
 
-
 impl Iterator for Memory {
     type Item = byte;
 
@@ -215,40 +211,23 @@ impl Clone for Memory {
         let mut hram: [u8; 0x80] = [0u8; 0x80];
         let mut io_ports: [u8; 0x80] = [0u8; 0x80];
 
-        for (i, &vram_val) in self.video_ram
-                .iter()
-                .enumerate()
-                .take(0x2000) {
+        for (i, &vram_val) in self.video_ram.iter().enumerate().take(0x2000) {
             vram[i] = vram_val;
         }
 
-        for (i, &internal_ram_val) in
-            self.internal_ram
-                .iter()
-                .enumerate()
-                .take(0x2000) {
+        for (i, &internal_ram_val) in self.internal_ram.iter().enumerate().take(0x2000) {
             iram[i] = internal_ram_val;
         }
 
-        for (i, &oam_val) in self.oam
-                .iter()
-                .enumerate()
-                .take(0xA0) {
+        for (i, &oam_val) in self.oam.iter().enumerate().take(0xA0) {
             oam[i] = oam_val;
         }
 
-        for (i, &hram_val) in self.hram
-                .iter()
-                .enumerate()
-                .take(0x80) {
+        for (i, &hram_val) in self.hram.iter().enumerate().take(0x80) {
             hram[i] = hram_val;
         }
 
-        for (i, &io_port_val) in
-            self.io_ports
-                .iter()
-                .enumerate()
-                .take(0x80) {
+        for (i, &io_port_val) in self.io_ports.iter().enumerate().take(0x80) {
             io_ports[i] = io_port_val;
         }
 

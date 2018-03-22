@@ -74,7 +74,6 @@ impl CpuEventLogger for DeqCpuEventLogger {
                 logger.access_flags[pi] = EVENT_LOGGER_ACCESS_TYPE_ALPHA;
                 // initial alpha for current access
                 logger.access_times[pi] = 255;
-
             }
         }
         logger
@@ -90,7 +89,7 @@ impl CpuEventLogger for DeqCpuEventLogger {
         let pi = addr as usize * COLOR_DEPTH;
         // Mirror written value into texture
         self.values[pi] = 255; // Alpha
-        // Fade values a little bit to see access better.
+                               // Fade values a little bit to see access better.
         self.values[pi + 1] = value / 4; // Blue
         self.values[pi + 2] = value / 4; // Green
         self.values[pi + 3] = value / 4; // Red
@@ -109,16 +108,12 @@ impl CpuEventLogger for DeqCpuEventLogger {
         let log_jumps = true;
         if log_jumps {
             self.events_deq.push_back(EventLogEntry {
-                                          timestamp: timestamp,
-                                          event: CpuEvent::Jump {
-                                              from: src,
-                                              to: dst,
-                                          },
-                                      });
+                timestamp: timestamp,
+                event: CpuEvent::Jump { from: src, to: dst },
+            });
         }
     }
 }
-
 
 /// Types for storing and visualizing various things happening
 #[derive(Copy, Clone)]

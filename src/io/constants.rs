@@ -40,7 +40,7 @@ pub const TILE_PATTERN_TABLE_2_END: MemAddr = 0x97FF;
 pub const TILE_PATTERN_TABLE_1_ORIGIN: MemAddr = 0x8000;
 pub const TILE_PATTERN_TABLE_2_ORIGIN: MemAddr = 0x9000;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum TileDataSelect {
     Auto,
     Mode1,
@@ -53,7 +53,6 @@ pub const TILE_MAP_1_START: MemAddr = 0x9800;
 pub const TILE_MAP_1_END: MemAddr = 0x9BFF;
 pub const TILE_MAP_2_START: MemAddr = 0x9C00;
 pub const TILE_MAP_2_END: MemAddr = 0x9FFF;
-
 
 // tables are overlapping
 pub const TILE_PATTERN_TABLES_SIZE: MemAddr = TILE_PATTERN_TABLE_2_END - TILE_PATTERN_TABLE_1_START;

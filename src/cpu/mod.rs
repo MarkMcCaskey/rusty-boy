@@ -18,7 +18,6 @@ use self::constants::*;
 use self::memory::*;
 use self::memvis::cpumemvis::*;
 
-
 #[inline]
 pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
     (((high_byte as u8) as u16) << 8) | ((low_byte as u8) as u16)
@@ -235,7 +234,6 @@ impl Cpu {
         panic!("Additive pixel!");
     }
 
-
     /* sound */
     pub fn channel1_sweep_time(&self) -> f32 {
         (((self.mem[0xFF10] >> 4) & 0x7) as f32) / 128.0
@@ -290,7 +288,6 @@ impl Cpu {
         ((self.mem[0xFF14] >> 7) & 1) == 1
     }
 
-
     pub fn channel2_wave_pattern_duty(&self) -> u8 {
         ((self.mem[0xFF16] >> 6) & 0x3) as u8
     }
@@ -344,7 +341,6 @@ impl Cpu {
         let higher = self.mem[0xFF1D] & 0x7;
 
         byte_to_u16(lower, higher)
-
     }
 
     pub fn channel3_shift_amount(&self) -> u8 {
@@ -405,7 +401,6 @@ impl Cpu {
         };
     }
 
-
     set_interrupt_bit!(set_vblank_interrupt_bit, 0x1);
     set_interrupt_bit!(set_lcdc_interrupt_bit, 0x2);
     set_interrupt_bit!(set_timer_interrupt_bit, 0x4);
@@ -423,7 +418,6 @@ impl Cpu {
     get_interrupt!(get_timer_interrupt_bit, 0x4);
     get_interrupt!(get_serial_io_interrupt_bit, 0x8);
     get_interrupt!(get_input_interrupt_bit, 0x10);
-
 
     /*
      * SOUND:
@@ -550,7 +544,6 @@ impl Cpu {
         self.mem[STAT_ADDR] |= 0x3;
     }
 
-
     pub fn lcdc_on(&self) -> bool {
         (self.mem[0xFF40] >> 7) & 1 == 1
     }
@@ -584,7 +577,6 @@ impl Cpu {
         self.mem[0xFF4A]
     }
 
-
     pub fn get_background_tiles(&self) -> [[byte; 64]; (32 * 32)] {
         let mut tiles = [[0u8; 64]; (32 * 32)];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {
@@ -605,9 +597,11 @@ impl Cpu {
                 for i in 0..16 {
                     for k in 0..4 {
                         //multiply offset by tile size
-                        tiles[j][i * (k + 1)] =
-                            ((self.mem[((tile_data_base_addr as i16) + ((tile_pointer as i16) * 0x40)) as
-                              usize] as u8) >> (k * 2)) & 0x3;
+                        tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as i16)
+                                                               + ((tile_pointer as i16) * 0x40))
+                                                               as usize]
+                            as u8) >> (k * 2))
+                            & 0x3;
                     }
                 }
             }
@@ -617,19 +611,18 @@ impl Cpu {
                 for i in 0..16 {
                     for k in 0..4 {
                         //multiply offset by tile size
-                        tiles[j][i * (k + 1)] =
-                            ((self.mem[((tile_data_base_addr as MemAddr) +
-                               ((tile_pointer as MemAddr) * 0x40)) as
-                              usize] as byte) >> (k * 2)) & 0x3;
+                        tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as MemAddr)
+                                                               + ((tile_pointer as MemAddr) * 0x40))
+                                                               as usize]
+                            as byte) >> (k * 2))
+                            & 0x3;
                     }
                 }
             }
-
         }
 
         tiles
     }
-
 
     pub fn scy(&self) -> u8 {
         self.mem[0xFF42]
@@ -736,7 +729,7 @@ impl Cpu {
      */
 
     /* Input : */
-    /* NOTE: see comment next to definition of button! for why this 
+    /* NOTE: see comment next to definition of button! for why this
     has to be done with so much boiler plate */
     button!(press_start, unpress_start, 0x80u8);
     button!(press_select, unpress_select, 0x40u8);
@@ -763,7 +756,6 @@ impl Cpu {
     pub fn get_cartridge_type(&self) -> u8 {
         self.mem[0x147] as u8
     }
-
 
     fn enable_interrupts(&mut self) {
         self.ime = true;
@@ -854,9 +846,12 @@ impl Cpu {
 
     #[inline]
     fn is_flag_set(&self, mask: u8) -> u8 {
-        if (self.f & mask) != 0 { 1 } else { 0 }
+        if (self.f & mask) != 0 {
+            1
+        } else {
+            0
+        }
     }
-
 
     #[inline]
     pub fn get_mem(&mut self, address: MemAddr) -> byte {
@@ -898,8 +893,7 @@ impl Cpu {
                     _ => self.mem[v] = value as byte,
                 }
             }
-            ad @ 0xE000...0xFE00 |
-            ad @ 0xC000...0xDE00 => {
+            ad @ 0xE000...0xFE00 | ad @ 0xC000...0xDE00 => {
                 self.mem[ad] = value;
                 self.mem[ad ^ (0xE000 - 0xC000)] = value;
             }
@@ -931,7 +925,6 @@ impl Cpu {
                 } else if (value >> 7) & 1 == 1 {
                     self.set_sound_all();
                 }
-
             }
             0xFF44 => self.mem[0xFF44] = 0,
             0xFF45 => {
@@ -982,7 +975,6 @@ impl Cpu {
         }
     }
 
-
     fn ldnnn(&mut self, nn: CpuRegister, n: u8) {
         self.set_register(nn, n as byte);
     }
@@ -1005,14 +997,16 @@ impl Cpu {
     }
 
     fn ldna16(&mut self, n: CpuRegister16) {
-        let val = self.access_register(CpuRegister::A).expect("Invalid register");
+        let val = self.access_register(CpuRegister::A)
+            .expect("Invalid register");
         let addr = self.access_register16(n);
 
         self.set_mem(addr, val);
     }
 
     fn ldna16c(&mut self, b1: u8, b2: u8) {
-        let val = self.access_register(CpuRegister::A).expect("Invalid register");
+        let val = self.access_register(CpuRegister::A)
+            .expect("Invalid register");
         self.set_mem(byte_to_u16(b1, b2), val);
     }
 
@@ -1093,8 +1087,10 @@ impl Cpu {
         let addr = byte_to_u16(b1, b2);
         // TODO function to write word (16 bit) to memory
         self.set_mem(addr, old_sp as byte & 0xFFu8);
-        self.set_mem(addr.wrapping_add(1),
-                     ((old_sp >> 8) as byte & 0xFFu8) as byte);
+        self.set_mem(
+            addr.wrapping_add(1),
+            ((old_sp >> 8) as byte & 0xFFu8) as byte,
+        );
     }
 
     // fn pushnn(&mut self, nn: CpuRegister16) {
@@ -1110,35 +1106,41 @@ impl Cpu {
 
     //TODO: rename this awfully named function
     fn alu_dispatch<F>(&self, reg: CpuRegister, f: F) -> i16
-        where F: FnOnce(byte, byte) -> i16
+    where
+        F: FnOnce(byte, byte) -> i16,
     {
-        f(self.a,
-          match reg {
-              CpuRegister::A => self.a,
-              CpuRegister::B => self.b,
-              CpuRegister::C => self.c,
-              CpuRegister::D => self.d,
-              CpuRegister::E => self.e,
-              CpuRegister::H => self.h,
-              CpuRegister::L => self.l,
-              CpuRegister::HL => self.mem[self.hl() as usize],
-              CpuRegister::Num(i) => i, 
-          })
+        f(
+            self.a,
+            match reg {
+                CpuRegister::A => self.a,
+                CpuRegister::B => self.b,
+                CpuRegister::C => self.c,
+                CpuRegister::D => self.d,
+                CpuRegister::E => self.e,
+                CpuRegister::H => self.h,
+                CpuRegister::L => self.l,
+                CpuRegister::HL => self.mem[self.hl() as usize],
+                CpuRegister::Num(i) => i,
+            },
+        )
     }
 
     //TODO: rename this awfully named function
     fn alu_dispatch16<F>(&self, reg: CpuRegister16, f: F) -> i32
-        where F: FnOnce(i32, i32) -> i32
+    where
+        F: FnOnce(i32, i32) -> i32,
     {
-        f(self.hl() as i32,
-          match reg {
-              CpuRegister16::BC => self.bc() as i32,
-              CpuRegister16::DE => self.de() as i32,
-              CpuRegister16::HL => self.hl() as i32,
-              CpuRegister16::SP => self.sp as i32,
-              CpuRegister16::AF => self.af() as i32,
-              CpuRegister16::Num(i) => i as i32, 
-          }) as i32
+        f(
+            self.hl() as i32,
+            match reg {
+                CpuRegister16::BC => self.bc() as i32,
+                CpuRegister16::DE => self.de() as i32,
+                CpuRegister16::HL => self.hl() as i32,
+                CpuRegister16::SP => self.sp as i32,
+                CpuRegister16::AF => self.af() as i32,
+                CpuRegister16::Num(i) => i as i32,
+            },
+        ) as i32
     }
 
     fn reg_or_const(&mut self, reg: CpuRegister) -> i8 {
@@ -1156,10 +1158,12 @@ impl Cpu {
         let new_sp = add_u16_i8(self.sp, n);
         self.sp = new_sp as u16;
 
-        self.set_flags(false,
-                       false,
-                       ((((old_sp as i16) & 0xF) + ((n as i16) & 0xF)) & 0xF0) != 0,
-                       ((((old_sp as i16) & 0xFF) + ((n as i16) & 0xFF)) & 0xF00) != 0);
+        self.set_flags(
+            false,
+            false,
+            ((((old_sp as i16) & 0xF) + ((n as i16) & 0xF)) & 0xF0) != 0,
+            ((((old_sp as i16) & 0xFF) + ((n as i16) & 0xFF)) & 0xF00) != 0,
+        );
     }
 
     fn add(&mut self, reg: CpuRegister) {
@@ -1169,10 +1173,12 @@ impl Cpu {
         let new_a = old_a.wrapping_add(old_b);
         self.a = new_a as byte;
 
-        self.set_flags(new_a == 0,
-                       false,
-                       ((old_a & 0xF) + (old_b & 0xF)) & 0x10 == 0x10,
-                       (((old_a as u8) as u16) + ((old_b as u8) as u16)) & 0x100 == 0x100);
+        self.set_flags(
+            new_a == 0,
+            false,
+            ((old_a & 0xF) + (old_b & 0xF)) & 0x10 == 0x10,
+            (((old_a as u8) as u16) + ((old_b as u8) as u16)) & 0x100 == 0x100,
+        );
     }
 
     fn adc(&mut self, reg: CpuRegister) {
@@ -1183,11 +1189,12 @@ impl Cpu {
         let new_a = old_a.wrapping_add(old_b).wrapping_add(cf);
         self.a = new_a as byte;
 
-        self.set_flags(new_a == 0,
-                       false,
-                       ((old_a & 0xF) + (old_b & 0xF) + cf) & 0x10 == 0x10,
-                       (((old_a as u8) as u16) + ((old_b as u8) as u16) + (cf as u16)) & 0x100 ==
-                       0x100);
+        self.set_flags(
+            new_a == 0,
+            false,
+            ((old_a & 0xF) + (old_b & 0xF) + cf) & 0x10 == 0x10,
+            (((old_a as u8) as u16) + ((old_b as u8) as u16) + (cf as u16)) & 0x100 == 0x100,
+        );
     }
 
     fn sub(&mut self, reg: CpuRegister) {
@@ -1196,13 +1203,14 @@ impl Cpu {
         let new_a = old_a.wrapping_sub(old_b) as u8;
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
-                       true,
-                       ((((old_a & 0xF) - (old_b & 0xF)) as u8) & 0xF0) != 0,
-                       //                       (old_a & 0xF) >= (old_b & 0xF),
-                       //                       (old_a as i16) - (old_b as i16)
-                       (((((old_a as i16) & 0xFF) - ((old_b as i16) & 0xFF)) as u16) & 0xFF00) !=
-                       0);
+        self.set_flags(
+            new_a == 0u8,
+            true,
+            ((((old_a & 0xF) - (old_b & 0xF)) as u8) & 0xF0) != 0,
+            //                       (old_a & 0xF) >= (old_b & 0xF),
+            //                       (old_a as i16) - (old_b as i16)
+            (((((old_a as i16) & 0xFF) - ((old_b as i16) & 0xFF)) as u16) & 0xFF00) != 0,
+        );
     }
 
     fn sbc(&mut self, reg: CpuRegister) {
@@ -1213,18 +1221,20 @@ impl Cpu {
         let new_a = old_a.wrapping_sub(old_b).wrapping_sub(cf) as u8;
         self.a = new_a;
 
-        self.set_flags(new_a == 0u8,
-                       true,
-                       ((((old_a & 0xF) - ((old_b & 0xF) + cf)) as u8) & 0xF0) != 0,
-                       //                       (old_a & 0xF) >= (old_b & 0xF),
-                       //                       (old_a as i16) - (old_b as i16)
-                       (((((old_a as i16) & 0xFF) - (((old_b as i16) & 0xFF) + (cf as i16))) as
-                         u16) & 0xFF00) != 0);
+        self.set_flags(
+            new_a == 0u8,
+            true,
+            ((((old_a & 0xF) - ((old_b & 0xF) + cf)) as u8) & 0xF0) != 0,
+            //                       (old_a & 0xF) >= (old_b & 0xF),
+            //                       (old_a as i16) - (old_b as i16)
+            (((((old_a as i16) & 0xFF) - (((old_b as i16) & 0xFF) + (cf as i16))) as u16) & 0xFF00)
+                != 0,
+        );
     }
 
     fn and(&mut self, reg: CpuRegister) {
-        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) & (b as i16)) as
-                          byte;
+        let new_a: byte =
+            self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) & (b as i16)) as byte;
 
         self.a = new_a;
         self.set_flags(new_a == 0u8, false, true, false);
@@ -1240,8 +1250,8 @@ impl Cpu {
     }
 
     fn xor(&mut self, reg: CpuRegister) {
-        let new_a: byte = self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) ^ (b as i16)) as
-                          byte;
+        let new_a: byte =
+            self.alu_dispatch(reg, |a: byte, b: byte| (a as i16) ^ (b as i16)) as byte;
 
         self.a = new_a;
         self.set_flags(new_a == 0u8, false, false, false);
@@ -1260,10 +1270,12 @@ impl Cpu {
         let old_val: i16 = self.access_register(reg).expect("invalid register") as i16;
         let new_val = (old_val + 1) as byte;
         self.set_register(reg, new_val);
-        self.set_flags(new_val == 0u8, // this check fails if new_val is i16 :)
-                       false,
-                       (old_3bit == 0x8u8) && ((new_val & 0x8u8) != 0x8),
-                       old_c);
+        self.set_flags(
+            new_val == 0u8, // this check fails if new_val is i16 :)
+            false,
+            (old_3bit == 0x8u8) && ((new_val & 0x8u8) != 0x8),
+            old_c,
+        );
     }
 
     //
@@ -1275,11 +1287,12 @@ impl Cpu {
         let new_val: byte = reg_val.wrapping_sub(1) as byte;
         self.set_register(reg, new_val);
 
-        self.set_flags(new_val == 0u8,
-                       true,
-                       ((reg_val & 0xF).wrapping_sub(1) & 0xF0) != 0,
-                       old_c);
-
+        self.set_flags(
+            new_val == 0u8,
+            true,
+            ((reg_val & 0xF).wrapping_sub(1) & 0xF0) != 0,
+            old_c,
+        );
     }
 
     /*
@@ -1293,7 +1306,7 @@ impl Cpu {
          *
          * 0xEFF + 0xEFF
          * 0xFFE
-        
+       
          * One bit adder:
          * Circuit with three inputs and two outputs
          * (diagram does not include carry as input)
@@ -1361,24 +1374,26 @@ impl Cpu {
 
     fn dec16(&mut self, reg: CpuRegister16) {
         let val: i16 = self.access_register16(reg) as i16;
-        self.set_register16(reg,
-                            if (val as u16) == 0 {
-                                u16::max_value()
-                            } else {
-                                (val as u16) - 1
-                            });
+        self.set_register16(
+            reg,
+            if (val as u16) == 0 {
+                u16::max_value()
+            } else {
+                (val as u16) - 1
+            },
+        );
     }
 
     fn swap(&mut self, reg: CpuRegister) {
         //Potentially can bitmask hl which is 16bit value
-        let val = self.access_register(reg).expect("couldn't access register value") as u8;
+        let val = self.access_register(reg)
+            .expect("couldn't access register value") as u8;
         let top = val & 0xF0u8;
         let bot = val & 0x0Fu8;
         self.set_register(reg, (((top >> 4) & 0xF) | (bot << 4)) as byte);
 
         self.f = if val == 0u8 { ZL } else { 0 };
     }
-
 
     fn daa(&mut self) {
         let nf = self.f & NLV == NLV;
@@ -1405,10 +1420,12 @@ impl Cpu {
         }
 
         let new_a = self.a;
-        self.set_flags(new_a == 0,
-                       nf, // unchanged
-                       false,
-                       new_cf);
+        self.set_flags(
+            new_a == 0,
+            nf, // unchanged
+            false,
+            new_cf,
+        );
     }
 
     fn cpl(&mut self) {
@@ -1435,13 +1452,11 @@ impl Cpu {
     fn halt(&mut self) {
         debug!("HALT");
         self.state = CpuState::Halt;
-
     }
 
     fn stop(&mut self) {
         debug!("STOP");
         self.state = CpuState::Stop;
-
     }
 
     fn di(&mut self) {
@@ -1464,7 +1479,6 @@ impl Cpu {
     fn rla(&mut self) {
         let old_bit7 = (self.a >> 7) & 1;
         let old_flags = ((self.f & CL) >> 4) & 0x1;
-
 
         let new_a = (self.a << 1) | old_flags;
         self.a = new_a;
@@ -1589,13 +1603,12 @@ impl Cpu {
     }
 
     fn jpccnn(&mut self, cc: Cc, nn: u16) -> bool {
-        if 1 ==
-           match cc {
-               Cc::NZ => (!(self.f >> 7)) & 1,
-               Cc::Z => (self.f >> 7) & 1,
-               Cc::NC => (!(self.f >> 4)) & 1,
-               Cc::C => (self.f >> 4) & 1,
-           } {
+        if 1 == match cc {
+            Cc::NZ => (!(self.f >> 7)) & 1,
+            Cc::Z => (self.f >> 7) & 1,
+            Cc::NC => (!(self.f >> 4)) & 1,
+            Cc::C => (self.f >> 4) & 1,
+        } {
             self.jpnn(nn);
             true
         } else {
@@ -1626,13 +1639,12 @@ impl Cpu {
 
     //Double check run time length
     fn jrccn(&mut self, cc: Cc, n: i8) -> bool {
-        if 1 ==
-           match cc {
-               Cc::NZ => (!(self.f >> 7)) & 1,
-               Cc::Z => (self.f >> 7) & 1,
-               Cc::NC => (!(self.f >> 4)) & 1,
-               Cc::C => (self.f >> 4) & 1,
-           } {
+        if 1 == match cc {
+            Cc::NZ => (!(self.f >> 7)) & 1,
+            Cc::Z => (self.f >> 7) & 1,
+            Cc::NC => (!(self.f >> 4)) & 1,
+            Cc::C => (self.f >> 4) & 1,
+        } {
             self.jrn(n);
             true
         } else {
@@ -1665,13 +1677,12 @@ impl Cpu {
     }
 
     fn callccnn(&mut self, cc: Cc, nn: u16) -> bool {
-        if 1 ==
-           match cc {
-               Cc::NZ => (!(self.f >> 7)) & 1,
-               Cc::Z => (self.f >> 7) & 1,
-               Cc::NC => (!(self.f >> 4)) & 1,
-               Cc::C => (self.f >> 4) & 1,
-           } {
+        if 1 == match cc {
+            Cc::NZ => (!(self.f >> 7)) & 1,
+            Cc::Z => (self.f >> 7) & 1,
+            Cc::NC => (!(self.f >> 4)) & 1,
+            Cc::C => (self.f >> 4) & 1,
+        } {
             self.callnn(nn);
             true
         } else {
@@ -1709,13 +1720,12 @@ impl Cpu {
     }
 
     fn retcc(&mut self, cc: Cc) -> bool {
-        if 1 ==
-           match cc {
-               Cc::NZ => (!(self.f >> 7)) & 1,
-               Cc::Z => (self.f >> 7) & 1,
-               Cc::NC => (!(self.f >> 4)) & 1,
-               Cc::C => (self.f >> 4) & 1,
-           } {
+        if 1 == match cc {
+            Cc::NZ => (!(self.f >> 7)) & 1,
+            Cc::Z => (self.f >> 7) & 1,
+            Cc::NC => (!(self.f >> 4)) & 1,
+            Cc::C => (self.f >> 4) & 1,
+        } {
             self.ret();
             true
         } else {
@@ -1732,10 +1742,12 @@ impl Cpu {
         // if self.pc > (0xFFFF - 3) {
         //     panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
         // }
-        (self.mem[self.pc as usize] as u8,
-         self.mem[(self.pc as usize) + 1] as u8,
-         self.mem[(self.pc as usize) + 2] as u8,
-         self.mem[(self.pc as usize) + 3] as u8)
+        (
+            self.mem[self.pc as usize] as u8,
+            self.mem[(self.pc as usize) + 1] as u8,
+            self.mem[(self.pc as usize) + 2] as u8,
+            self.mem[(self.pc as usize) + 3] as u8,
+        )
     }
 
     fn inc_pc(&mut self) {
@@ -1804,19 +1816,18 @@ impl Cpu {
 
             self.pc = P1013_INTERRUPT_ADDRESS;
         }
-
     }
 
     /*
     Handles running opcodes
     including handling of interrupts
 
-    Opcodes are prefixed or unprefixed 
+    Opcodes are prefixed or unprefixed
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
-    
+   
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
-    
+   
     Returned value is number of cycles that the instruction took
      */
     pub fn dispatch_opcode(&mut self) -> u8 {
@@ -1831,7 +1842,6 @@ impl Cpu {
         let x = (first_byte >> 6) & 0x3;
         let y = (first_byte >> 3) & 0x7;
         let z = first_byte & 0x7;
-
 
         //First check if CPU is in a running state
         if self.state == CpuState::Halt {
@@ -1908,7 +1918,8 @@ impl Cpu {
             let y = (second_byte >> 3) & 0x7;
             let z = second_byte & 0x7;
 
-            match x { // xxyy yzzz
+            match x {
+                // xxyy yzzz
                 0 => {
                     match y {
                         //(cpu_dispatch(z))
@@ -1943,8 +1954,7 @@ impl Cpu {
         } else {
             //unprefixed instruction
             match x {
-                0 =>
-                    match z {
+                0 => match z {
                         0 =>
                             match y {
                                 0        => self.nop(), //0x00
@@ -1969,7 +1979,7 @@ impl Cpu {
                                 },  //0x20, 0x28, 0x30, 0x38
                                 _        => unreachable!(uf),
                             },
-                        
+
                         1 =>  //00yy y001
                         {
                             inst_time = if y % 2 == 0 {
@@ -1983,7 +1993,7 @@ impl Cpu {
                                 8
                             };
                         },
-                        
+
                         2 => //00yy y010
                         {
                             match y {
@@ -2000,7 +2010,8 @@ impl Cpu {
 
                         3 => //00yy y011
                         {
-                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch, cpu16_dispatch, 1, 1);
+                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch,
+                                               cpu16_dispatch, 1, 1);
                             inst_time = 8;
                         },
 
@@ -2011,7 +2022,7 @@ impl Cpu {
                                 if cpu_dispatch(y) == CpuRegister::HL {
                                     12} else {4};
                         },
-                        
+
                         5 =>
                         {
                             self.dec(cpu_dispatch(y));
@@ -2044,19 +2055,16 @@ impl Cpu {
                         _ => unreachable!(uf),
                     }, //end x=0
 
-                1 => {
-                    match (z, y) {
-                        (6, 6) => self.halt(),
-                        (n, m) => {
-                            self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n));
-                            inst_time = match (cpu_dispatch(m), cpu_dispatch(n)) {
-                                (CpuRegister::HL, _) |
-                                (_, CpuRegister::HL) => 8,
-                                _ => 4,
-                            }
+                1 => match (z, y) {
+                    (6, 6) => self.halt(),
+                    (n, m) => {
+                        self.ldr1r2(cpu_dispatch(m), cpu_dispatch(n));
+                        inst_time = match (cpu_dispatch(m), cpu_dispatch(n)) {
+                            (CpuRegister::HL, _) | (_, CpuRegister::HL) => 8,
+                            _ => 4,
                         }
                     }
-                } //end x = 1
+                }, //end x = 1
 
                 2 => {
                     match y //10yy y000
@@ -2132,7 +2140,7 @@ impl Cpu {
 
                     2 => match y {
                         v @ 0...3 => { // 11yy y010
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                             inst_time = if
                                 self.jpccnn(cc_dispatch(v),
                                             const_val) {16} else {12};
@@ -2164,7 +2172,7 @@ impl Cpu {
 
                     3 => match y { //11yy y011
                         0 => {
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                             self.jpnn(const_val);
                             self.inc_pc();
                             self.inc_pc();
@@ -2182,7 +2190,7 @@ impl Cpu {
                     4 => {
                         match y {
                             0...3 => {
-                                let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                                let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                                 inst_time =
                                     if self.callccnn(cc_dispatch(y),
                                                      const_val) {24} else {12};
@@ -2202,7 +2210,7 @@ impl Cpu {
                             self.push_onto_stack(value);
                             inst_time = 16;
                         } else if y == 1 {
-                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8); 
+                            let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                             self.callnn(const_val);
                             self.inc_pc();
                             self.inc_pc();
@@ -2233,7 +2241,7 @@ impl Cpu {
                         self.rst(8*y);
                         inst_time = 16;
                     },
-                        
+
                     _ => unreachable!(uf),
                 }
                 }
@@ -2254,7 +2262,6 @@ impl Cpu {
         self.state = CpuState::Crashed;
     }
 
-
     /// Loads the ROM with saved RAM if its available
     pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
         trace!("Loading ROM");
@@ -2264,10 +2271,9 @@ impl Cpu {
         if let Some(data_location) = data_path {
             let game_name = self.get_game_name();
             self.mem.load_saved_ram(data_location, game_name.as_ref());
-        } 
-        
-        self.mem.initialize_logger();
+        }
 
+        self.mem.initialize_logger();
     }
 
     pub fn save_ram(&self, data_path: Option<PathBuf>) {
@@ -2278,7 +2284,7 @@ impl Cpu {
             self.mem.save_ram(data_location, game_name.as_ref());
         }
     }
-        
+
     pub fn remove_old_events(&mut self) {
         use io::constants::FADE_DELAY;
 
@@ -2289,15 +2295,12 @@ impl Cpu {
 
         // Remove events that are too old
         while !event_logger.events_deq.is_empty() {
-            let timestamp = event_logger.events_deq
-                .front()
-                .unwrap()
-                .timestamp;
+            let timestamp = event_logger.events_deq.front().unwrap().timestamp;
             if (Wrapping(self.cycles) - Wrapping(timestamp)).0 >= FADE_DELAY {
                 event_logger.events_deq.pop_front();
             } else {
                 break;
             }
-        }   
+        }
     }
 }

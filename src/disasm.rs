@@ -45,23 +45,26 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
         // know instruction size here.
         let mut r8 = |insize| {
             used_r8 += 1; //instruction_size += 1;
-            // jump is relative to post pc increment!
+                          // jump is relative to post pc increment!
             let addr = (Wrapping(pc) + Wrapping(insize) + Wrapping((second_byte as i8) as u16)).0;
             format!("Addr_{:04X}", addr)
         };
 
         let mut a16 = || {
             used_a16 += 2; //instruction_size += 2;
-            format!("${:04X}",
-                    (((third_byte as u16) << 8) | (second_byte as u16)))
+            format!(
+                "${:04X}",
+                (((third_byte as u16) << 8) | (second_byte as u16))
+            )
         };
 
         let mut d16 = || {
             used_d16 += 2; //instruction_size += 2;
-            format!("${:04X}",
-                    (((third_byte as u16) << 8) | (second_byte as u16)))
+            format!(
+                "${:04X}",
+                (((third_byte as u16) << 8) | (second_byte as u16))
+            )
         };
-
 
         // Converting indexes encoded in commands to symbolic arguments
         fn idx_r(i: u8) -> &'static str {
@@ -81,7 +84,9 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
         };
 
         fn idx_alu(i: u8) -> &'static str {
-            ["ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP"][i as usize]
+            [
+                "ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP"
+            ][i as usize]
         };
 
         fn idx_rot(i: u8) -> &'static str {
@@ -94,83 +99,65 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
 
         // The value of mnemonic =
         match x {
-            0 => {
-                match z {
-                    0 => {
-                        match y {
-                            0 => "NOP".to_string(),
-                            1 => format!("LD ({}),SP", a16()),
-                            2 => format!("STOP {}", d8()),
-                            3 => format!("JR {}", r8(2)),
-                            4 => format!("JR NZ,{}", r8(2)),
-                            5 => format!("JR Z,{}", r8(2)),
-                            6 => format!("JR NC,{}", r8(2)),
-                            7 => format!("JR C,{}", r8(2)),
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    1 => {
-                        match q {
-                            0 => format!("LD {},{}", idx_rp(p), d16()),
-                            1 => format!("ADD HL,{}", idx_rp(p)),
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    2 => {
-                        match q {
-                            0 => {
-                                match p {
-                                    0 => "LD (BC),A".to_string(),
-                                    1 => "LD (DE),A".to_string(),
-                                    2 => "LD (HL+),A".to_string(),
-                                    3 => "LD (HL-),A".to_string(),
-                                    _ => unreachable!("Impossible opcode"),
-                                }
-                            }
-                            1 => {
-                                match p {
-                                    0 => "LD A,(BC)".to_string(),
-                                    1 => "LD A,(DE)".to_string(),
-                                    2 => "LD A,(HL+)".to_string(),
-                                    3 => "LD A,(HL-)".to_string(),
-                                    _ => unreachable!("Impossible opcode"),
-                                }
-                            }
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    3 => {
-                        match q {
-                            0 => format!("INC {}", idx_rp(p)),
-                            1 => format!("DEC {}", idx_rp(p)),
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    4 => format!("INC {}", idx_r(y)),
-                    5 => format!("DEC {}", idx_r(y)),
-                    6 => format!("LD {},{}", idx_r(y), d8()),
-                    7 => {
-                        match y {
-                            0 => "RLCA".to_string(),
-                            1 => "RRCA".to_string(),
-                            2 => "RLA".to_string(),
-                            3 => "RRA".to_string(),
-                            4 => "DAA".to_string(),
-                            5 => "CPL".to_string(),
-                            6 => "SCF".to_string(),
-                            7 => "CCF".to_string(),
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
+            0 => match z {
+                0 => match y {
+                    0 => "NOP".to_string(),
+                    1 => format!("LD ({}),SP", a16()),
+                    2 => format!("STOP {}", d8()),
+                    3 => format!("JR {}", r8(2)),
+                    4 => format!("JR NZ,{}", r8(2)),
+                    5 => format!("JR Z,{}", r8(2)),
+                    6 => format!("JR NC,{}", r8(2)),
+                    7 => format!("JR C,{}", r8(2)),
                     _ => unreachable!("Impossible opcode"),
-                }
-            }
-            1 => {
-                match (z, y) {
-                    (6, 6) => "HALT".to_string(),
-                    _ => format!("LD {},{}", idx_r(y), idx_r(z)),
-                }
-            }
+                },
+                1 => match q {
+                    0 => format!("LD {},{}", idx_rp(p), d16()),
+                    1 => format!("ADD HL,{}", idx_rp(p)),
+                    _ => unreachable!("Impossible opcode"),
+                },
+                2 => match q {
+                    0 => match p {
+                        0 => "LD (BC),A".to_string(),
+                        1 => "LD (DE),A".to_string(),
+                        2 => "LD (HL+),A".to_string(),
+                        3 => "LD (HL-),A".to_string(),
+                        _ => unreachable!("Impossible opcode"),
+                    },
+                    1 => match p {
+                        0 => "LD A,(BC)".to_string(),
+                        1 => "LD A,(DE)".to_string(),
+                        2 => "LD A,(HL+)".to_string(),
+                        3 => "LD A,(HL-)".to_string(),
+                        _ => unreachable!("Impossible opcode"),
+                    },
+                    _ => unreachable!("Impossible opcode"),
+                },
+                3 => match q {
+                    0 => format!("INC {}", idx_rp(p)),
+                    1 => format!("DEC {}", idx_rp(p)),
+                    _ => unreachable!("Impossible opcode"),
+                },
+                4 => format!("INC {}", idx_r(y)),
+                5 => format!("DEC {}", idx_r(y)),
+                6 => format!("LD {},{}", idx_r(y), d8()),
+                7 => match y {
+                    0 => "RLCA".to_string(),
+                    1 => "RRCA".to_string(),
+                    2 => "RLA".to_string(),
+                    3 => "RRA".to_string(),
+                    4 => "DAA".to_string(),
+                    5 => "CPL".to_string(),
+                    6 => "SCF".to_string(),
+                    7 => "CCF".to_string(),
+                    _ => unreachable!("Impossible opcode"),
+                },
+                _ => unreachable!("Impossible opcode"),
+            },
+            1 => match (z, y) {
+                (6, 6) => "HALT".to_string(),
+                _ => format!("LD {},{}", idx_r(y), idx_r(z)),
+            },
             // FIXME cheating here a bit with idx_alu value
             2 => format!("{} {}", idx_alu(y), idx_r(z)),
             3 => {
@@ -187,40 +174,36 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                             _ => unreachable!("Impossible opcode"),
                         }
                     }
-                    1 => {
-                        match q {
-                            0 => format!("POP {}", idx_rp2(p)),
-                            1 => {
-                                match p {
-                                    0 => "RET".to_string(),
-                                    1 => "RETI".to_string(),
-                                    2 => "JP (HL)".to_string(),
-                                    3 => "LD SP,HL".to_string(),
-                                    _ => unreachable!("Impossible opcode"),
-                                }
-                            }
+                    1 => match q {
+                        0 => format!("POP {}", idx_rp2(p)),
+                        1 => match p {
+                            0 => "RET".to_string(),
+                            1 => "RETI".to_string(),
+                            2 => "JP (HL)".to_string(),
+                            3 => "LD SP,HL".to_string(),
                             _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    2 => {
-                        match y {
-                            0...3 => format!("JP {},{}", idx_cc(y), a16()),
-                            4 => "LD ($FF00+C),A".to_string(),
-                            5 => format!("LD ({}),A", a16()),
-                            6 => "LD A,($FF00+C)".to_string(),
-                            7 => format!("LD A,({})", a16()),
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
+                        },
+                        _ => unreachable!("Impossible opcode"),
+                    },
+                    2 => match y {
+                        0...3 => format!("JP {},{}", idx_cc(y), a16()),
+                        4 => "LD ($FF00+C),A".to_string(),
+                        5 => format!("LD ({}),A", a16()),
+                        6 => "LD A,($FF00+C)".to_string(),
+                        7 => format!("LD A,({})", a16()),
+                        _ => unreachable!("Impossible opcode"),
+                    },
                     3 => {
                         match y {
                             0 => format!("JP {}", a16()),
                             1 => {
                                 // Prefix
                                 prefix();
-                                let (x, y, z) = ((second_byte >> 6) & 0b011,
-                                                 (second_byte >> 3) & 0b111,
-                                                 second_byte & 0b111);
+                                let (x, y, z) = (
+                                    (second_byte >> 6) & 0b011,
+                                    (second_byte >> 3) & 0b111,
+                                    second_byte & 0b111,
+                                );
 
                                 // WARNING: a8, d8, d16, etc. are broken here
                                 match x {
@@ -237,26 +220,20 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                             _ => unreachable!("Impossible opcode"),
                         }
                     }
-                    4 => {
-                        match y {
-                            0...3 => format!("CALL {},{}", idx_cc(y), a16()),
-                            4...7 => illegal_op(first_byte),
+                    4 => match y {
+                        0...3 => format!("CALL {},{}", idx_cc(y), a16()),
+                        4...7 => illegal_op(first_byte),
+                        _ => unreachable!("Impossible opcode"),
+                    },
+                    5 => match q {
+                        0 => format!("PUSH {}", idx_rp2(p)),
+                        1 => match p {
+                            0 => format!("CALL {}", a16()),
+                            1...3 => illegal_op(first_byte),
                             _ => unreachable!("Impossible opcode"),
-                        }
-                    }
-                    5 => {
-                        match q {
-                            0 => format!("PUSH {}", idx_rp2(p)),
-                            1 => {
-                                match p {
-                                    0 => format!("CALL {}", a16()),
-                                    1...3 => illegal_op(first_byte),
-                                    _ => unreachable!("Impossible opcode"),
-                                }
-                            }
-                            _ => unreachable!("Impossible opcode"),
-                        }
-                    }
+                        },
+                        _ => unreachable!("Impossible opcode"),
+                    },
                     6 => format!("{} {}", idx_alu(y), d8()),
                     7 => format!("RST {:02X}H", y * 8),
                     _ => unreachable!("Impossible opcode"),
@@ -312,11 +289,12 @@ pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16
     ret
 }
 
-pub fn binsearch_inst(vec: &[(String, u16)],
-                      desired_pc: u16,
-                      begin: usize,
-                      end: usize)
-                      -> Option<usize> {
+pub fn binsearch_inst(
+    vec: &[(String, u16)],
+    desired_pc: u16,
+    begin: usize,
+    end: usize,
+) -> Option<usize> {
     if end < begin {
         return None;
     } else if end - begin <= 10 {
@@ -360,19 +338,20 @@ fn main() {
     // }
     use std::fs::File;
     use std::io::Read;
-    use clap::{Arg, App};
+    use clap::{App, Arg};
 
     let matches = App::new("disasm")
         .version("0.1")
         .author("spawnedartifact")
         .about("GB z80 disassembler")
-        .arg(Arg::with_name("game")
-                 .index(1)
-                 .value_name("FILE")
-                 .help("Specifies ROM to disassemble")
-                 .takes_value(true))
+        .arg(
+            Arg::with_name("game")
+                .index(1)
+                .value_name("FILE")
+                .help("Specifies ROM to disassemble")
+                .takes_value(true),
+        )
         .get_matches();
-
 
     let file_path = matches.value_of("game").expect("Could not open rom");
     let mut rom = File::open(file_path).expect("Could not open rom file");
@@ -384,7 +363,7 @@ fn main() {
             eprintln!("Could not read ROM file");
             eprintln!("{}", e);
             return ();
-        } 
+        }
     };
 
     disasm_rom(rom_buffer, rom_size);
