@@ -9,10 +9,11 @@ travis-ci = { repository = "MarkMcCaskey/rusty-boy", branch = "master" }
 maintainence = {status = "experimental"}
 
 [features]
-default = []
+default = ["opengl"]
 asm = []
 debugger = []
 vulkan = []
+opengl = ["gl"]
 development = ["debugger"]
 
 [dependencies]
@@ -31,6 +32,8 @@ vulkano = {version = "0.6.2", optional = true}
 vulkano-shader-derive = {version = "0.6.2", optional = true}
 winit = {version = "0.7.6", optional = true}
 vulkano-win = {version = "0.6.2", optional = true}
+
+gl = {version = "^0.10", optional = true}
 
 nom = {version = "^2.2", optional = true}
 ncurses = {version = "5.85.0", optional = true}
