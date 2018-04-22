@@ -178,8 +178,8 @@ pub fn draw_tile_transparent<T>(
             // let px_val = px_color*d;
             // renderer.set_draw_color(Color::RGB(px_val, px_val, px_val));
 
-            let realpx = if flip_x { TILE_SIZE_PX - px } else { px } as u8;
-            let realpy = if flip_y { TILE_SIZE_PX - py } else { py } as u8;
+            let realpx = if flip_x { TILE_SIZE_PX - px - 1} else { px } as u8;
+            let realpy = if flip_y { TILE_SIZE_PX - py - 1} else { py } as u8;
 
             /*if DEBUG_OAM_BG || px_color != 0 {
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
