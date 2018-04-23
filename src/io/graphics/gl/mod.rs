@@ -1,21 +1,15 @@
-use sdl2;
-use sdl2::*;
-use sdl2::rect::Point;
-use sdl2::keyboard::Keycode;
-use sdl2::surface::Surface;
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::video::GLProfile;
+use sdl2::{self, *, keyboard::Keycode, pixels::PixelFormatEnum, rect::Point, surface::Surface,
+           video::GLProfile};
 
 use cpu::Cpu;
-use io::graphics::renderer::Renderer;
-use io::constants::*;
-use super::renderer;
-use io::sound::*;
-use io::applicationsettings::ApplicationSettings;
-use super::renderer::EventResponse;
-use io::graphics::sdl2::input::*;
+use io::{applicationsettings::ApplicationSettings, constants::*,
+         graphics::{renderer::Renderer, sdl2::input::*}, sound::*};
+use super::renderer::{self, EventResponse};
 
-use gl;
+use gl::{self, *};
+
+static GB_VERT_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.vert");
+static GB_FRAG_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.frag");
 
 pub struct GlRenderer {
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
@@ -34,7 +28,6 @@ impl GlRenderer {
         trace!("Opening window");
         let video_subsystem = sdl_context.video()?;
 
-        
         let gl_attr = video_subsystem.gl_attr();
         gl_attr.set_context_profile(GLProfile::Core);
         gl_attr.set_context_version(4, 3);
@@ -66,10 +59,39 @@ impl GlRenderer {
         let ctx = window.gl_create_context()?;
         gl::load_with(|name| video_subsystem.gl_get_proc_address(name) as *const _);
 
+        use std::ffi::CString;
+        let vshader_src: CString =
+            CString::new(GB_VERT_SHADER_SOURCE).expect("Invalid vertex shader source");
+        let fshader_src: CString =
+            CString::new(GB_FRAG_SHADER_SOURCE).expect("Invalid fragment shader source");
+        let vshader_ptr = (&(&GB_VERT_SHADER_SOURCE).as_ptr() as *const *const u8);
+        let fshader_ptr = (&(&GB_FRAG_SHADER_SOURCE).as_ptr() as *const *const u8);
         unsafe {
             gl::ClearColor(0f32, 0f32, 0f32, 1f32);
-        }
+            let vshader_id = gl::CreateShader(VERTEX_SHADER);
+            let fshader_id = gl::CreateShader(FRAGMENT_SHADER);
 
+            gl::ShaderSource(
+                vshader_id,
+                1,
+                vshader_ptr as _,
+                (&(GB_VERT_SHADER_SOURCE.len()) as *const usize) as _,
+            );
+            gl::ShaderSource(
+                fshader_id,
+                1,
+                fshader_ptr as _,
+                (&(GB_FRAG_SHADER_SOURCE.len()) as *const usize) as _,
+            );
+
+            gl::CompileShader(vshader_id);
+            gl::CompileShader(fshader_id);
+            let gb_program_id = gl::CreateProgram();
+            gl::AttachShader(gb_program_id, vshader_id);
+            gl::AttachShader(gb_program_id, fshader_id);
+            gl::LinkProgram(gb_program_id);
+            gl::UseProgram(gb_program_id);
+        }
 
         Ok(Self {
             sdl_context,
@@ -103,7 +125,11 @@ impl GlRenderer {
 
 impl Renderer for GlRenderer {
     fn draw_gameboy(&mut self, gameboy: &Cpu, app_settings: &ApplicationSettings) {
-        unimplemented!();
+        //unsafe { gl::DrawElements(TRIANGLES, , UNSIGNED_SHORT, 0u32 as _) }
+        self.window.gl_swap_window();
+        unsafe {
+            gl::Clear(COLOR_BUFFER_BIT);
+        }
     }
 
     fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
@@ -282,8 +308,7 @@ impl Renderer for GlRenderer {
                             widget.click(mouse_btn, click_point, gameboy);
                             break;
                         }
-                    }*/
-                }
+                    }*/                }
                 Event::MouseWheel { y: _y, .. } => {
                     //self.ui_scale += y as f32;
                     // self.widgets[0].scale += y as f32;
