@@ -12,9 +12,9 @@ extern crate app_dirs;
 extern crate clap;
 #[macro_use]
 extern crate lazy_static;
-extern crate log4rs;
 #[macro_use]
 extern crate log;
+extern crate log4rs;
 #[cfg(feature = "debugger")]
 extern crate ncurses;
 #[cfg(any(feature = "debugger", feature = "asm"))]
@@ -83,12 +83,10 @@ fn main() {
         appstate.handle_events();
         appstate.step();
 
-        let time_diff = time_since_last_frame
-            .to(time::PreciseTime::now())
-            .num_milliseconds();
-        if time_diff < 16 {
+        let time_diff = time_since_last_frame.to(time::PreciseTime::now());
+        if time_diff < time::Duration::milliseconds(16) {
             std::thread::sleep(
-                time::Duration::milliseconds(16 - time_diff)
+                time::Duration::milliseconds(16 - time_diff.num_milliseconds())
                     .to_std()
                     .unwrap(),
             );

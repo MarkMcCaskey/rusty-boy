@@ -54,6 +54,10 @@ impl Drawable for VidRamBGDisplay {
             MEM_DISP_WIDTH,
         );
         draw_objects(renderer, cpu, cpu.scx() as i32, cpu.scy() as i32);
+
+        if cpu.lcdc_window_on() {
+            draw_window_buffer(renderer, cpu, tile_patterns_offset);
+        }
     }
 
     fn click(&mut self, _: sdl2::mouse::MouseButton, _: Point, _: &mut Cpu) {
@@ -178,8 +182,8 @@ pub fn draw_tile_transparent<T>(
             // let px_val = px_color*d;
             // renderer.set_draw_color(Color::RGB(px_val, px_val, px_val));
 
-            let realpx = if flip_x { TILE_SIZE_PX - px - 1} else { px } as u8;
-            let realpy = if flip_y { TILE_SIZE_PX - py - 1} else { py } as u8;
+            let realpx = if flip_x { TILE_SIZE_PX - px - 1 } else { px } as u8;
+            let realpy = if flip_y { TILE_SIZE_PX - py - 1 } else { py } as u8;
 
             /*if DEBUG_OAM_BG || px_color != 0 {
                 let px_pal_col = OBJECT_PALETTE[px_color as usize];
@@ -450,6 +454,55 @@ pub fn draw_objects(
                 screen_offset_y + screen_y as i32,
                 x_flip,
                 y_flip,
+                &mut texture,
+                &mut pixel_buffer,
+                &dst_rect,
+            );
+        }
+    }
+}
+
+/// Draw "sprites" (something gameboy calls "Objects").
+pub fn draw_window_buffer(
+    renderer: &mut sdl2::render::Canvas<Surface>,
+    gameboy: &Cpu,
+    tile_patterns_offset: u16,
+) {
+    let x = gameboy.window_x_pos();
+    let y = gameboy.window_y_pos();
+    let window_tile_data_start = if gameboy.lcdc_tile_map() {
+        0x9C00
+    } else {
+        0x9800
+    };
+
+    let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
+    let texture_creator = renderer.texture_creator();
+    let mut texture = texture_creator
+        .create_texture_streaming(txt_format, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32)
+        .unwrap();
+    texture.set_blend_mode(sdl2::render::BlendMode::None);
+    let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
+    let mut dst_rect = Rect::new(x as i32, y as i32, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
+
+    for i in 0..8 {
+        for j in 0..4 {
+            let screen_x = x as i32 + (j as i32 * TILE_SIZE_PX as i32);
+            let screen_y = y as i32 + (i as i32 * TILE_SIZE_PX as i32);
+            dst_rect.set_x(screen_x);
+            dst_rect.set_y(screen_y);
+            let tile_data = gameboy.mem
+                [(window_tile_data_start + (j * TILE_SIZE_PX as u32) + i as u32) as usize];
+
+            draw_tile_transparent(
+                renderer,
+                gameboy,
+                tile_patterns_offset,
+                tile_data as u16,
+                screen_x as i32,
+                screen_y as i32,
+                false,
+                false,
                 &mut texture,
                 &mut pixel_buffer,
                 &dst_rect,
