@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use self::constants::*;
 use self::memory::*;
 use self::memvis::cpumemvis::*;
-use disasm::*;
+use crate::disasm::*;
 
 #[inline]
 pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
@@ -2305,7 +2305,7 @@ impl Cpu {
     }
 
     pub fn remove_old_events(&mut self) {
-        use io::constants::FADE_DELAY;
+        use crate::io::constants::FADE_DELAY;
 
         let event_logger = match self.mem.logger {
             Some(ref mut logger) => logger,

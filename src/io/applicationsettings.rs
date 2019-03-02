@@ -2,7 +2,7 @@
 
 use app_dirs::*;
 use clap::ArgMatches;
-use io::constants::{APP_INFO, SCALE};
+use crate::io::constants::{APP_INFO, SCALE};
 use std::path::PathBuf;
 
 use log::LevelFilter;

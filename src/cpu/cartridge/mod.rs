@@ -1,7 +1,7 @@
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 
-use cpu::constants::*;
+use crate::cpu::constants::*;
 
 /// A thing that is like a Cartridge
 pub trait Cartridgey {

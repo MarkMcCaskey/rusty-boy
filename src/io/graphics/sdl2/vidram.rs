@@ -1,8 +1,8 @@
 //! Video RAM display
 
-use cpu;
-use cpu::*;
-use io::constants::*;
+use crate::cpu;
+use crate::cpu::*;
+use crate::io::constants::*;
 use sdl2;
 
 use sdl2::pixels::*;

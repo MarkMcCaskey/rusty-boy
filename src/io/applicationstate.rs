@@ -5,13 +5,13 @@
 
 use std;
 
-use cpu;
-use debugger::graphics::*;
-use io::constants::*;
+use crate::cpu;
+use crate::debugger::graphics::*;
+use crate::io::constants::*;
 
-use io::applicationsettings::ApplicationSettings;
-use io::graphics;
-use io::graphics::renderer::Renderer;
+use crate::io::applicationsettings::ApplicationSettings;
+use crate::io::graphics;
+use crate::io::graphics::renderer::Renderer;
 
 use std::num::Wrapping;
 

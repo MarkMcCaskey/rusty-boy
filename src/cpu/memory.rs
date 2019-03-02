@@ -6,9 +6,9 @@ use std::iter::Iterator;
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 
-use cpu::cartridge::*;
-use cpu::constants::*;
-use cpu::memvis::cpumemvis::*;
+use crate::cpu::cartridge::*;
+use crate::cpu::constants::*;
+use crate::cpu::memvis::cpumemvis::*;
 
 pub struct Memory {
     cartridge: Box<Cartridge>,

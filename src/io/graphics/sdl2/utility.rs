@@ -6,7 +6,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::surface::Surface;
 use std::fmt::Debug;
 
-use cpu::Cpu;
+use crate::cpu::Cpu;
 
 /// Saves the current screen to file
 pub fn save_screenshot(renderer: &sdl2::render::Canvas<sdl2::video::Window>, filename: &str) {

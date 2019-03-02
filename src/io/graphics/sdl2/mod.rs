@@ -17,11 +17,11 @@ use self::utility::PositionedFrame;
 use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use super::renderer;
 use super::renderer::EventResponse;
-use cpu::Cpu;
-use io::applicationsettings::ApplicationSettings;
-use io::constants::*;
-use io::graphics::renderer::Renderer;
-use io::sound::*;
+use crate::cpu::Cpu;
+use crate::io::applicationsettings::ApplicationSettings;
+use crate::io::constants::*;
+use crate::io::graphics::renderer::Renderer;
+use crate::io::sound::*;
 
 use self::utility::*;
 

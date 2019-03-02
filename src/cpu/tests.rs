@@ -1,7 +1,7 @@
 #[cfg(test)]
 use super::constants::*;
 #[allow(unused_imports)]
-use cpu::*;
+use crate::cpu::*;
 
 macro_rules! test_op {
     ($func:ident, $method:ident, $input:expr, $output_reg:ident,
@@ -622,9 +622,9 @@ fn test_daa() {
 
 #[test]
 fn segfault() {
-    use cpu::cartridge::*;
+    use crate::cpu::cartridge::*;
     //    let wat = CartridgeSubType::Dummy;
-    let cart = Cartridge::new();
+    let _cart = Cartridge::new();
     //let mem = Memory::new();
     //let cpu = Cpu::new();
 }

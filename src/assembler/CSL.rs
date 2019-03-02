@@ -1,4 +1,4 @@
-use cpu::constants::*;
+use crate::cpu::constants::*;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]

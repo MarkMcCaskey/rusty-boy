@@ -1,5 +1,5 @@
 use app_dirs::AppInfo;
-use cpu::constants::*;
+use crate::cpu::constants::*;
 use sdl2;
 use sdl2::pixels::*;
 

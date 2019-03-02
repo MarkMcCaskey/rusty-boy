@@ -36,7 +36,7 @@ mod dbglanguage {
 
 #[cfg(not(feature = "debugger"))]
 pub mod graphics {
-    use cpu::*;
+    use crate::cpu::*;
     pub struct Debugger {}
 
     #[allow(unused_variables, dead_code)]

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use cpu::constants::*;
+use crate::cpu::constants::*;
 
 pub trait CpuEventLogger {
     fn new(mem: Option<&[u8]>) -> Self;

@@ -9,15 +9,15 @@ use sdl2::surface::Surface;
 use std::num::Wrapping;
 
 use super::utility::Drawable;
-use cpu::constants::CpuState;
-use cpu::constants::MemAddr;
-use io::constants::*;
+use crate::cpu::constants::CpuState;
+use crate::cpu::constants::MemAddr;
+use crate::io::constants::*;
 //use cpu::memvis::cpuCOLOR_DEPTH;
-use cpu::*;
+use crate::cpu::*;
 
-use cpu::memvis::cpumemvis::*;
+use crate::cpu::memvis::cpumemvis::*;
 
-use disasm;
+use crate::disasm;
 
 /// State for the memory visualization system
 pub struct MemVisState {

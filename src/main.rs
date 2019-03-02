@@ -51,8 +51,8 @@ pub mod disasm;
 /// Functionality for making the Gameboy emulator useful
 pub mod io;
 
-use io::applicationsettings::*;
-use io::applicationstate::*;
+use crate::io::applicationsettings::*;
+use crate::io::applicationstate::*;
 
 #[allow(unused_variables)]
 fn main() {
