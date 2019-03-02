@@ -1,6 +1,7 @@
 [package]
 name = "gameboy"
 version = "0.1.1"
+edition = "2018"
 authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 description = "A Gameboy emulator and related tools"
 

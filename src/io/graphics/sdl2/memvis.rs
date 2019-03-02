@@ -1,23 +1,23 @@
 //! Memory visualization
 
 use sdl2;
-use sdl2::rect::{Point, Rect};
-use sdl2::pixels::*;
-use sdl2::surface::Surface;
 use sdl2::mouse::MouseButton;
+use sdl2::pixels::*;
+use sdl2::rect::{Point, Rect};
+use sdl2::surface::Surface;
 
 use std::num::Wrapping;
 
-use io::constants::*;
 use super::utility::Drawable;
-use cpu::constants::MemAddr;
-use cpu::constants::CpuState;
+use crate::cpu::constants::CpuState;
+use crate::cpu::constants::MemAddr;
+use crate::io::constants::*;
 //use cpu::memvis::cpuCOLOR_DEPTH;
-use cpu::*;
+use crate::cpu::*;
 
-use cpu::memvis::cpumemvis::*;
+use crate::cpu::memvis::cpumemvis::*;
 
-use disasm;
+use crate::disasm;
 
 /// State for the memory visualization system
 pub struct MemVisState {
@@ -93,7 +93,8 @@ impl Drawable for MemVisState {
                 MEM_DISP_HEIGHT as u32,
                 memvis_pitch as u32,
                 txt_format,
-            ).unwrap();
+            )
+            .unwrap();
 
             // This determines how fast access fades (actual speed
             // will depend on the frame rate).

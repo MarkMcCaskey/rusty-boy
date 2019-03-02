@@ -1,29 +1,31 @@
-use std::sync::Arc;
-use std::mem;
-use io::graphics::renderer::Renderer;
-use io::applicationsettings::ApplicationSettings;
-use cpu::Cpu;
 use super::renderer;
 use super::renderer::EventResponse;
-use winit;
+use cpu::Cpu;
+use io::applicationsettings::ApplicationSettings;
+use io::graphics::renderer::Renderer;
+use std::mem;
+use std::sync::Arc;
 use vulkano;
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::device::{Device, Queue};
+use vulkano::framebuffer::{Framebuffer, Subpass};
 use vulkano::image::SwapchainImage;
 use vulkano::instance::Instance;
-use vulkano::device::{Device, Queue};
-use vulkano::swapchain;
-use vulkano::swapchain::{AcquireError, PresentMode, SurfaceTransform, Swapchain,
-                         SwapchainCreationError};
-use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::framebuffer::{Framebuffer, Subpass};
+use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
+use vulkano::swapchain;
+use vulkano::swapchain::{
+    AcquireError, PresentMode, SurfaceTransform, Swapchain, SwapchainCreationError,
+};
 use vulkano::sync::{now, GpuFuture};
 use vulkano_win;
 use vulkano_win::VkSurfaceBuild;
+use winit;
 
-use vulkano::framebuffer::{AttachmentsList, EmptySinglePassRenderPassDesc, RenderPass,
-                           RenderPassAbstract};
+use vulkano::framebuffer::{
+    AttachmentsList, EmptySinglePassRenderPassDesc, RenderPass, RenderPassAbstract,
+};
 
 #[derive(Debug, Clone)]
 struct Vertex {
@@ -108,7 +110,8 @@ impl VulkanRenderer {
                 physical.supported_features(),
                 &device_ext,
                 [(queue, 0.5)].iter().cloned(),
-            ).expect("failed to create device")
+            )
+            .expect("failed to create device")
         };
 
         let queue = queues.next().unwrap();
@@ -139,7 +142,8 @@ impl VulkanRenderer {
                 PresentMode::Fifo,
                 true,
                 None,
-            ).expect("failed to create swapchain")
+            )
+            .expect("failed to create swapchain")
         };
 
         // We now create a buffer that will store the shape of our triangle.
@@ -157,9 +161,11 @@ impl VulkanRenderer {
                     Vertex {
                         position: [0.25, -0.1],
                     },
-                ].iter()
-                    .cloned(),
-            ).expect("failed to create buffer")
+                ]
+                .iter()
+                .cloned(),
+            )
+            .expect("failed to create buffer")
         };
 
         mod vs {
@@ -193,32 +199,33 @@ void main() {
 
         let render_pass = Arc::new(
             single_pass_renderpass!(device.clone(),
-        attachments: {
-            // `color` is a custom name we give to the first and only attachment.
-            color: {
-                // `load: Clear` means that we ask the GPU to clear the content of this
-                // attachment at the start of the drawing.
-                load: Clear,
-                // `store: Store` means that we ask the GPU to store the output of the draw
-                // in the actual image. We could also ask it to discard the result.
-                store: Store,
-                // `format: <ty>` indicates the type of the format of the image. This has to
-                // be one of the types of the `vulkano::format` module (or alternatively one
-                // of your structs that implements the `FormatDesc` trait). Here we use the
-                // generic `vulkano::format::Format` enum because we don't know the format in
-                // advance.
-                format: swapchain.format(),
-                // TODO:
-                samples: 1,
-            }
-        },
-        pass: {
-            // We use the attachment named `color` as the one and only color attachment.
-            color: [color],
-            // No depth-stencil attachment is indicated with empty brackets.
-            depth_stencil: {}
-        }
-).unwrap(),
+                    attachments: {
+                        // `color` is a custom name we give to the first and only attachment.
+                        color: {
+                            // `load: Clear` means that we ask the GPU to clear the content of this
+                            // attachment at the start of the drawing.
+                            load: Clear,
+                            // `store: Store` means that we ask the GPU to store the output of the draw
+                            // in the actual image. We could also ask it to discard the result.
+                            store: Store,
+                            // `format: <ty>` indicates the type of the format of the image. This has to
+                            // be one of the types of the `vulkano::format` module (or alternatively one
+                            // of your structs that implements the `FormatDesc` trait). Here we use the
+                            // generic `vulkano::format::Format` enum because we don't know the format in
+                            // advance.
+                            format: swapchain.format(),
+                            // TODO:
+                            samples: 1,
+                        }
+                    },
+                    pass: {
+                        // We use the attachment named `color` as the one and only color attachment.
+                        color: [color],
+                        // No depth-stencil attachment is indicated with empty brackets.
+                        depth_stencil: {}
+                    }
+            )
+            .unwrap(),
         );
 
         let pipeline = Arc::new(
@@ -317,7 +324,10 @@ impl Renderer for VulkanRenderer {
             let dimensions = [self.width, self.height];
 
             let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(
-                    self.device.clone(), self.queue.family()).unwrap()
+                self.device.clone(),
+                self.queue.family(),
+            )
+            .unwrap()
             // Before we can draw, we have to *enter a render pass*. There are two methods to do
             // this: `draw_inline` and `draw_secondary`. The latter is a bit more advanced and is
             // not covered here.
@@ -325,36 +335,42 @@ impl Renderer for VulkanRenderer {
             // The third parameter builds the list of values to clear the attachments with. The API
             // is similar to the list of attachments when building the framebuffers, except that
             // only the attachments that use `load: Clear` appear in the list.
-            .begin_render_pass(self.framebuffers.as_ref().unwrap()[image_num].clone(), false,
-                               vec![[0.0, 0.0, 1.0, 1.0].into()])
-.unwrap()
- // We are now inside the first subpass of the render pass. We add a draw command.
+            .begin_render_pass(
+                self.framebuffers.as_ref().unwrap()[image_num].clone(),
+                false,
+                vec![[0.0, 0.0, 1.0, 1.0].into()],
+            )
+            .unwrap()
+            // We are now inside the first subpass of the render pass. We add a draw command.
             //
             // The last two parameters contain the list of resources to pass to the shaders.
             // Since we used an `EmptyPipeline` object, the objects have to be `()`.
-            .draw(self.pipeline.clone(),
-                  DynamicState {
-                      line_width: None,
-                      // TODO: Find a way to do this without having to
-                      //dynamically allocate a Vec every frame.
-                      viewports: Some(vec![Viewport {
-                          origin: [0.0, 0.0],
-                          dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-                          depth_range: 0.0 .. 1.0,
-                      }]),
-                      scissors: None,
-                  },
-                  vec![self.vertex_buffer.clone()], (), ())
+            .draw(
+                self.pipeline.clone(),
+                DynamicState {
+                    line_width: None,
+                    // TODO: Find a way to do this without having to
+                    //dynamically allocate a Vec every frame.
+                    viewports: Some(vec![Viewport {
+                        origin: [0.0, 0.0],
+                        dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+                        depth_range: 0.0..1.0,
+                    }]),
+                    scissors: None,
+                },
+                vec![self.vertex_buffer.clone()],
+                (),
+                (),
+            )
             .unwrap()
-
             // We leave the render pass by calling `draw_end`. Note that if we had multiple
             // subpasses we could have called `next_inline` (or `next_secondary`) to jump to the
             // next subpass.
             .end_render_pass()
             .unwrap()
-
             // Finish building the command buffer by calling `build`.
-.build().unwrap();
+            .build()
+            .unwrap();
 
             let mut prev_frame_end: Box<GpuFuture> = Box::new(now(self.device.clone()));
 

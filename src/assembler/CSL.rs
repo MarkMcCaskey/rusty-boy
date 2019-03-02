@@ -1,5 +1,5 @@
+use crate::cpu::constants::*;
 use std::collections::HashMap;
-use cpu::constants::*;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {

@@ -2,35 +2,35 @@ macro_rules! setter_unsetter_and_getter {
     ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
      $memory_location:expr) => {
         macro_rules! $name_setter {
-            ($name:ident, $location:expr) => {
-                //TODO: maybe add an option for setting them public?
-                pub fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location] as u8;
+                    ($name:ident, $location:expr) => {
+                        //TODO: maybe add an option for setting them public?
+                        pub fn $name(&mut self) {
+                            let orig_val = self.mem[$memory_location] as u8;
 
-                    self.mem[$memory_location] = (orig_val | $location) as byte;
+                            self.mem[$memory_location] = (orig_val | $location) as byte;
+                        }
+                    }
                 }
-            }
-        }
 
         macro_rules! $name_unsetter {
-            ($name:ident, $location:expr) => {
-                fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location] as u8;
+                    ($name:ident, $location:expr) => {
+                        fn $name(&mut self) {
+                            let orig_val = self.mem[$memory_location] as u8;
 
-                    self.mem[$memory_location] = (orig_val & (!$location)) as byte;
+                            self.mem[$memory_location] = (orig_val & (!$location)) as byte;
+                        }
+                    }
                 }
-            }
-        }
 
         macro_rules! $name_getter {
-            ($name:ident, $location:expr) => {
-                pub fn $name(&self) -> bool{
-                    ((self.mem[$memory_location] as u8) & $location)
-                        == $location
+                    ($name:ident, $location:expr) => {
+                        pub fn $name(&self) -> bool{
+                            ((self.mem[$memory_location] as u8) & $location)
+                                == $location
+                        }
+                    }
                 }
-            }
-        }
-    }
+    };
 }
 
 //NOTE: look into separate sound on/off storage outside of
@@ -61,9 +61,8 @@ macro_rules! even_odd_dispatch {
     ($num:expr, $cpu:ident, $func0:ident, $func1:ident,
      $f0dispfunc:ident, $f1dispfunc:ident, $f0pcincs:expr,
      $f1pcincs:expr) => {
-
         if $num % 2 == 0 {
-            let adjusted_number:u8 = $num / 2;
+            let adjusted_number: u8 = $num / 2;
             $cpu.$func0($f0dispfunc(adjusted_number));
 
             // TODO: Verify this executes it n-1 times
@@ -71,19 +70,19 @@ macro_rules! even_odd_dispatch {
                 $cpu.inc_pc();
             }
         } else {
-            let adjusted_number:u8 = $num / 2;
+            let adjusted_number: u8 = $num / 2;
             $cpu.$func1($f1dispfunc(adjusted_number));
 
             for _ in 1..($f1pcincs) {
                 $cpu.inc_pc();
             }
         }
-    }
+    };
 }
 
 /* Unfortunately, there's just no way to prevent this boiler plate in
 Rust right now... The concat_idents! does not work for new identifiers
-and interpolate_idents! seems to have problems and only supports nightly 
+and interpolate_idents! seems to have problems and only supports nightly
 anyway.
 TODO: fix Rust macro system to allow this or update interpolate_idents
  */

@@ -1,15 +1,15 @@
 //! Stores all settings related to the application from a user perspective
 
-use clap::ArgMatches;
-use std::path::PathBuf;
-use io::constants::{APP_INFO, SCALE};
 use app_dirs::*;
+use clap::ArgMatches;
+use crate::io::constants::{APP_INFO, SCALE};
+use std::path::PathBuf;
 
 use log::LevelFilter;
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
-use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
+use log4rs::encode::pattern::PatternEncoder;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ApplicationSettings {

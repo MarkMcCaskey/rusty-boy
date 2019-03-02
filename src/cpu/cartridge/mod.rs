@@ -1,7 +1,7 @@
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 
-use cpu::constants::*;
+use crate::cpu::constants::*;
 
 /// A thing that is like a Cartridge
 pub trait Cartridgey {
@@ -177,8 +177,7 @@ impl Cartridgey for Cartridge {
                 ram_bank_selector: ref mut rbs,
                 ram_active: ref mut ra,
                 ..
-            }) if index <= 0x7FFF =>
-            {
+            }) if index <= 0x7FFF => {
                 match index {
                     //RAM activation
                     0x0000...0x1FFF => {
@@ -275,15 +274,6 @@ pub enum CartridgeSubType {
         ram_bank: [byte; 0x2000],
     },
     Mbc1 {
-        /*
-        MBC1 has two modes:
-          * 16mbit ROM (with 128 banks), 8KB RAM (1 bank)
-          * 4mbit (with 32 banks), 32KB RAM (4 banks)
-         */
-        //13 bits for 8KB addressing
-        //addressing 16mbit = 2MB, (1kb = 10) (8kb = 13) (16kb = 14)
-        //(2mb = 21)
-        //21bits to index fully, because first 0x4000 address are sep
         memory_model: Mbc1Type,
         //memory_banks: [byte; 0x4000], //(2 << 13) + (2 << 21) - 0x4000],
         memory_banks: Vec<[byte; 0x4000]>,
@@ -483,8 +473,8 @@ impl Index<u16> for Cartridge {
 
 impl Cartridge {
     pub fn load_ram(&mut self, path: &PathBuf) {
-        use std::io::Read;
         use std::fs::File;
+        use std::io::Read;
 
         let mut file = match File::open(path) {
             Ok(f) => f,
@@ -495,16 +485,18 @@ impl Cartridge {
             Some(CartridgeSubType::Mbc1 {
                 ram_banks: ref mut ra,
                 ..
-            }) => for ref mut b in ra {
-                file.read_exact(&mut b[..]).unwrap();
-            },
+            }) => {
+                for ref mut b in ra {
+                    file.read_exact(&mut b[..]).unwrap();
+                }
+            }
             _ => (),
         }
     }
 
     pub fn save_ram(&self, path: &PathBuf) {
-        use std::io::Write;
         use std::fs::File;
+        use std::io::Write;
 
         let mut file = match File::create(path) {
             Ok(f) => f,
@@ -514,12 +506,14 @@ impl Cartridge {
         match self.cart_sub {
             Some(CartridgeSubType::Mbc1 {
                 ram_banks: ref ra, ..
-            }) => for ref b in ra {
-                match file.write(&b[..]) {
-                    Ok(_) => (),
-                    Err(e) => error!("Error saving ram: {:?}", e),
+            }) => {
+                for ref b in ra {
+                    match file.write(&b[..]) {
+                        Ok(_) => (),
+                        Err(e) => error!("Error saving ram: {:?}", e),
+                    }
                 }
-            },
+            }
             _ => (),
         }
     }

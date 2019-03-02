@@ -1,27 +1,27 @@
 pub mod utility;
 
+pub mod input;
 pub mod memvis;
 pub mod vidram;
-pub mod input;
 
 use sdl2;
-use sdl2::*;
-use sdl2::rect::{Point, Rect};
 use sdl2::keyboard::Keycode;
-use sdl2::surface::Surface;
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::rect::{Point, Rect};
+use sdl2::surface::Surface;
+use sdl2::*;
 
-use cpu::Cpu;
-use io::graphics::renderer::Renderer;
-use io::constants::*;
-use self::memvis::MemVisState;
-use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
-use self::utility::PositionedFrame;
 use self::input::*;
+use self::memvis::MemVisState;
+use self::utility::PositionedFrame;
+use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use super::renderer;
-use io::sound::*;
-use io::applicationsettings::ApplicationSettings;
 use super::renderer::EventResponse;
+use crate::cpu::Cpu;
+use crate::io::applicationsettings::ApplicationSettings;
+use crate::io::constants::*;
+use crate::io::graphics::renderer::Renderer;
+use crate::io::sound::*;
 
 use self::utility::*;
 
@@ -226,12 +226,15 @@ impl Renderer for Sdl2Renderer {
 
         let tc = self.canvas.texture_creator();
         let temp_surface = Surface::new(
-            (MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X
+            (MEM_DISP_WIDTH as u32)
+                + SCREEN_BUFFER_SIZE_X
                 + (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
-            (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y
+            (MEM_DISP_HEIGHT as u32)
+                + SCREEN_BUFFER_SIZE_Y
                 + (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
             PixelFormatEnum::RGBA8888,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut temp_canvas = temp_surface.into_canvas().unwrap();
         //FIXME:
@@ -239,7 +242,8 @@ impl Renderer for Sdl2Renderer {
         for ref mut widget in &mut self.widgets {
             widget.draw(&mut temp_canvas, &mut gameboy_copy);
         }
-        let mut texture = tc.create_texture_from_surface(&temp_canvas.into_surface())
+        let mut texture = tc
+            .create_texture_from_surface(&temp_canvas.into_surface())
             .unwrap();
 
         texture.set_blend_mode(sdl2::render::BlendMode::None);
@@ -258,13 +262,13 @@ impl Renderer for Sdl2Renderer {
             .unwrap();
 
         // feature disabled while graphics are being generalized
-            // TODO add a way to enable/disable this while running
-            /*let record_screen = false;
-            if record_screen {
-                save_screenshot(&self.canvas,
-                                format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
-                self.screenshot_frame_num += Wrapping(1);
-            }*/
+        // TODO add a way to enable/disable this while running
+        /*let record_screen = false;
+        if record_screen {
+            save_screenshot(&self.canvas,
+                            format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
+            self.screenshot_frame_num += Wrapping(1);
+        }*/
 
         self.canvas.present();
     }
