@@ -2,9 +2,9 @@
 
 use sdl2;
 use sdl2::pixels::*;
-use std::fmt::Debug;
 use sdl2::rect::{Point, Rect};
 use sdl2::surface::Surface;
+use std::fmt::Debug;
 
 use cpu::Cpu;
 

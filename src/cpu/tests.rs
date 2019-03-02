@@ -7,7 +7,6 @@ macro_rules! test_op {
     ($func:ident, $method:ident, $input:expr, $output_reg:ident,
      $expected_output:expr, $flag_find_value:expr,
      $flag_expected_value:expr, $pre_exec:expr) => {
-
         #[test]
         fn $func() {
             let mut cpu = Cpu::new();
@@ -27,14 +26,13 @@ macro_rules! test_op {
             assert_eq!(cpu.$output_reg, $expected_output);
             assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
         }
-    }
+    };
 }
 
 macro_rules! test_op_no_arg {
     ($func:ident, $method:ident, $output_reg:expr, $input:expr,
      $expected_output:expr, $flag_find_value:expr,
      $flag_expected_value:expr) => {
-
         #[test]
         fn $func() {
             let mut cpu = Cpu::new();
@@ -43,18 +41,18 @@ macro_rules! test_op_no_arg {
             cpu.$method($output_reg);
 
             assert_eq!(
-                cpu.access_register($output_reg).expect("invalid register")
-                    , $expected_output);
+                cpu.access_register($output_reg).expect("invalid register"),
+                $expected_output
+            );
             assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
         }
-    }
+    };
 }
 
 macro_rules! test_op_really_no_arg {
     ($func:ident, $method:ident, $output_reg:expr, $input:expr,
      $expected_output:expr, $flag_find_value:expr,
      $flag_expected_value:expr) => {
-
         #[test]
         fn $func() {
             let mut cpu = Cpu::new();
@@ -63,18 +61,18 @@ macro_rules! test_op_really_no_arg {
             cpu.$method();
 
             assert_eq!(
-                cpu.access_register($output_reg).expect("invalid register")
-                    , $expected_output);
+                cpu.access_register($output_reg).expect("invalid register"),
+                $expected_output
+            );
             assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
         }
-    }
+    };
 }
 
 macro_rules! test_op16 {
     ($func:ident, $method:ident, $input_reg:expr, $output_reg:expr, $input:expr,
      $expected_output:expr, $flag_find_value:expr,
      $flag_expected_value:expr) => {
-
         #[test]
         fn $func() {
             let mut cpu = Cpu::new();
@@ -82,12 +80,10 @@ macro_rules! test_op16 {
             cpu.set_register16($input_reg, $input);
             cpu.$method($input_reg);
 
-            assert_eq!(
-                cpu.access_register16($output_reg)
-                    , $expected_output);
+            assert_eq!(cpu.access_register16($output_reg), $expected_output);
             assert_eq!($flag_find_value(cpu.f), $flag_expected_value);
         }
-    }
+    };
 }
 
 test_op!(

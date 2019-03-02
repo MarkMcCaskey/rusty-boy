@@ -5,13 +5,13 @@
 
 use std;
 
-use debugger::graphics::*;
 use cpu;
+use debugger::graphics::*;
 use io::constants::*;
 
 use io::applicationsettings::ApplicationSettings;
-use io::graphics::renderer::Renderer;
 use io::graphics;
+use io::graphics::renderer::Renderer;
 
 use std::num::Wrapping;
 
@@ -100,7 +100,8 @@ impl ApplicationState {
     //this should be properly abstracted... allow for rebinding too
     pub fn handle_events(&mut self) {
         use self::graphics::renderer::EventResponse;
-        for event in self.renderer
+        for event in self
+            .renderer
             .handle_events(&mut self.gameboy, &self.application_settings)
             .iter()
         {

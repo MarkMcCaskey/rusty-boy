@@ -2,8 +2,8 @@
 //! Contains all "Virtual memory" handling, memory bank controlling, and otherwise
 //! Its behavior is dictated by the cartridge, but is separate
 
-use std::ops::{Index, IndexMut};
 use std::iter::Iterator;
+use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 
 use cpu::cartridge::*;

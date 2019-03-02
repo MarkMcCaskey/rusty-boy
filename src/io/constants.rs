@@ -1,7 +1,7 @@
+use app_dirs::AppInfo;
+use cpu::constants::*;
 use sdl2;
 use sdl2::pixels::*;
-use cpu::constants::*;
-use app_dirs::AppInfo;
 
 pub const RB_SCREEN_WIDTH: u32 = 1400;
 pub const RB_SCREEN_HEIGHT: u32 = 900;
@@ -63,18 +63,19 @@ pub const BORDER_PX: u16 = 1;
 pub const TILE_COLUMNS: u16 = 16;
 
 lazy_static! {
-    pub static ref TILE_PALETTE: [Color; 4] = [Color::RGB(4, 5, 7),
-                                               Color::RGB(235, 135, 140),
-                                               Color::RGB(156, 146, 244),
-                                               Color::RGB(252, 250, 175)];
-
-    pub static ref OBJECT_PALETTE: [Color; 4] = [Color::RGB(0, 0, 0),
-                                                 Color::RGB(174, 124, 9),
-                                                 Color::RGB(248, 184, 0),
-                                                 Color::RGB(248, 240, 240)];
-
+    pub static ref TILE_PALETTE: [Color; 4] = [
+        Color::RGB(4, 5, 7),
+        Color::RGB(235, 135, 140),
+        Color::RGB(156, 146, 244),
+        Color::RGB(252, 250, 175)
+    ];
+    pub static ref OBJECT_PALETTE: [Color; 4] = [
+        Color::RGB(0, 0, 0),
+        Color::RGB(174, 124, 9),
+        Color::RGB(248, 184, 0),
+        Color::RGB(248, 240, 240)
+    ];
     pub static ref NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 2, 255);
-
 }
 
 pub const SCREEN_BUFFER_SIZE_X: u32 = 256;
