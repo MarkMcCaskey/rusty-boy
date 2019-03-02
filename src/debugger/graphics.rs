@@ -2,8 +2,8 @@ use ncurses::*;
 // use std::collections::HashMap;
 use super::super::disasm::*;
 use super::language::*;
-use cpu::constants::*;
-use cpu::*;
+use crate::cpu::constants::*;
+use crate::cpu::*;
 use std::collections::BTreeSet;
 
 //#[cfg(feature = "debugger")]
