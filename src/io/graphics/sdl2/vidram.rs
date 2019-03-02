@@ -1,15 +1,15 @@
 //! Video RAM display
 
-use sdl2;
-use io::constants::*;
 use cpu;
 use cpu::*;
+use io::constants::*;
+use sdl2;
 
+use sdl2::pixels::*;
 use sdl2::rect::Point;
 use sdl2::rect::Rect;
-use sdl2::pixels::*;
-use sdl2::surface::Surface;
 use sdl2::render::Texture;
+use sdl2::surface::Surface;
 
 use super::utility::Drawable;
 
@@ -126,11 +126,11 @@ pub fn draw_tile(
             let tile_index = ((py * TILE_SIZE_PX) + (px)) * 4;
             // TODO: verify this order is correct outside of Linux...
             /*unsafe {
-                *pixel_buffer.get_unchecked_mut((tile_index + 0) as usize) = 255;
-                *pixel_buffer.get_unchecked_mut((tile_index + 1) as usize) = gval;
-                *pixel_buffer.get_unchecked_mut((tile_index + 2) as usize) = bval;
-                *pixel_buffer.get_unchecked_mut((tile_index + 3) as usize) = rval;
-        }*/
+                    *pixel_buffer.get_unchecked_mut((tile_index + 0) as usize) = 255;
+                    *pixel_buffer.get_unchecked_mut((tile_index + 1) as usize) = gval;
+                    *pixel_buffer.get_unchecked_mut((tile_index + 2) as usize) = bval;
+                    *pixel_buffer.get_unchecked_mut((tile_index + 3) as usize) = rval;
+            }*/
             pixel_buffer[tile_index as usize] = 255;
             pixel_buffer[(tile_index + 1) as usize] = gval;
             pixel_buffer[(tile_index + 2) as usize] = bval;
@@ -310,7 +310,7 @@ pub fn draw_background_buffer(
                     renderer,
                     gameboy,
                     TILE_PATTERN_TABLE_2_START, // reposition origin
-                    add_u16_i8(128u16, (tile_index as i8)), // index is signed 8bit
+                    add_u16_i8(128u16, tile_index as i8), // index is signed 8bit
                     //use 0 instead because it's rendering to its
                     // own surface
                     &mut texture,
