@@ -1,6 +1,5 @@
-use serde::*;
 use nom;
-use nom::{hex_digit, space, hex_u32, le_u16};
+use nom::*;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum ShowableThing {
