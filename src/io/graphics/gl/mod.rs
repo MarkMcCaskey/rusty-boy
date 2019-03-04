@@ -1,8 +1,8 @@
 use sdl2::{self, *, keyboard::Keycode, pixels::PixelFormatEnum, rect::Point, surface::Surface,
            video::GLProfile};
 
-use cpu::Cpu;
-use io::{applicationsettings::ApplicationSettings, constants::*,
+use crate::cpu::Cpu;
+use crate::io::{applicationsettings::ApplicationSettings, constants::*,
          graphics::{renderer::Renderer, sdl2::input::*}, sound::*};
 use super::renderer::{self, EventResponse};
 
@@ -60,12 +60,12 @@ impl GlRenderer {
         gl::load_with(|name| video_subsystem.gl_get_proc_address(name) as *const _);
 
         use std::ffi::CString;
-        let vshader_src: CString =
+        let _vshader_src: CString =
             CString::new(GB_VERT_SHADER_SOURCE).expect("Invalid vertex shader source");
-        let fshader_src: CString =
+        let _fshader_src: CString =
             CString::new(GB_FRAG_SHADER_SOURCE).expect("Invalid fragment shader source");
-        let vshader_ptr = (&(&GB_VERT_SHADER_SOURCE).as_ptr() as *const *const u8);
-        let fshader_ptr = (&(&GB_FRAG_SHADER_SOURCE).as_ptr() as *const *const u8);
+        let vshader_ptr = &(&GB_VERT_SHADER_SOURCE).as_ptr() as *const *const u8;
+        let fshader_ptr = &(&GB_FRAG_SHADER_SOURCE).as_ptr() as *const *const u8;
         unsafe {
             gl::ClearColor(0f32, 0f32, 0f32, 1f32);
             let vshader_id = gl::CreateShader(VERTEX_SHADER);
@@ -124,7 +124,7 @@ impl GlRenderer {
 }
 
 impl Renderer for GlRenderer {
-    fn draw_gameboy(&mut self, gameboy: &Cpu, app_settings: &ApplicationSettings) {
+    fn draw_gameboy(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
         //unsafe { gl::DrawElements(TRIANGLES, , UNSIGNED_SHORT, 0u32 as _) }
         self.window.gl_swap_window();
         unsafe {
@@ -297,10 +297,10 @@ impl Renderer for GlRenderer {
                     }
                 }
                 Event::MouseButtonDown {
-                    x, y, mouse_btn, ..
+                    x, y, mouse_btn: _, ..
                 } => {
                     // Transform screen coordinates in UI coordinates
-                    let click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
+                    let _click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
 
                     // Find clicked widget
                     /*for widget in &mut self.widgets {
