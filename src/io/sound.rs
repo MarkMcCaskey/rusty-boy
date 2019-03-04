@@ -97,7 +97,8 @@ impl AudioCallback for GBSound {
         for x in out.iter_mut() {
             // FIXME is just adding them is the right way to do it?
             // Maybe for floats it is?
-            let val = self.channel1.generate_sample() + self.channel2.generate_sample()
+            let val = self.channel1.generate_sample()
+                + self.channel2.generate_sample()
                 + self.channel3.generate_sample();
             *x = val;
             // TODO mix other channels here

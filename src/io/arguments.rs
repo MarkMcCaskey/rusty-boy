@@ -5,7 +5,8 @@ use clap::{App, Arg, ArgMatches};
 
 // Parses command line arguments
 pub fn read_arguments<'input>() -> ArgMatches<'input> {
-    let app_builder = App::new("rusty-boy")
+    #[allow(unused_mut)]
+    let mut app_builder = App::new("rusty-boy")
         .version("-0.1")
         .author("Mark McCaskey, spawnedartifact, and friends")
         .about("Kappa")
@@ -37,7 +38,7 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
 
     #[cfg(feature = "debugger")]
     {
-        app_builder.arg(
+        app_builder = app_builder.arg(
             Arg::with_name("debug")
                 .short("d")
                 .multiple(true)
@@ -49,7 +50,7 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
 
     #[cfg(feature = "vulkan")]
     {
-        app_builder.arg(
+        app_builder = app_builder.arg(
             Arg::with_name("vulkan")
                 .short("v")
                 .long("vulkan")

@@ -85,7 +85,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
 
         fn idx_alu(i: u8) -> &'static str {
             [
-                "ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP"
+                "ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP",
             ][i as usize]
         };
 
@@ -289,42 +289,6 @@ pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16
     ret
 }
 
-pub fn binsearch_inst(
-    vec: &[(String, u16)],
-    desired_pc: u16,
-    begin: usize,
-    end: usize,
-) -> Option<usize> {
-    if end < begin {
-        return None;
-    } else if end - begin <= 10 {
-        for (x, &(_, b)) in vec.iter().enumerate().take(end + 1).skip(begin) {
-            //            let (_, b) = vec[x];
-            if b == desired_pc {
-                return Some(x);
-            }
-        }
-        return None;
-    }
-
-    let search = if (end + begin) % 2 == 0 {
-        (end + begin) / 2
-    } else {
-        ((end + begin) / 2) + 1
-    };
-
-    let (_, b) = vec[search];
-
-    if b == desired_pc {
-        Some(search)
-    } else if b > desired_pc {
-        binsearch_inst(vec, desired_pc, begin, (search + 1) as usize)
-    } else {
-        // if b > desired_pc {
-        binsearch_inst(vec, desired_pc, (search - 1) as usize, end)
-    }
-}
-
 #[allow(dead_code)]
 fn main() {
     // // Print "[prefix] opcode size mnemonic" table
@@ -336,9 +300,9 @@ fn main() {
     //     let (mnemonic, size) = pp_opcode(0xCB, i, 0x02, 0x2FFF);
     //     println!("0xCB 0x{:02X} {} {:?}", i, size, mnemonic);
     // }
+    use clap::{App, Arg};
     use std::fs::File;
     use std::io::Read;
-    use clap::{App, Arg};
 
     let matches = App::new("disasm")
         .version("0.1")

@@ -1,9 +1,9 @@
 use ncurses::*;
 // use std::collections::HashMap;
-use super::language::*;
-use cpu::*;
-use cpu::constants::*;
 use super::super::disasm::*;
+use super::language::*;
+use crate::cpu::constants::*;
+use crate::cpu::*;
 use std::collections::BTreeSet;
 
 //#[cfg(feature = "debugger")]
@@ -115,7 +115,8 @@ impl Debugger {
                 cpu.dispatch_opcode();
             }
             // numbers and letters
-            v @ 0x20...0x7F => self.input_buffer
+            v @ 0x20...0x7F => self
+                .input_buffer
                 .push_str(String::from_utf8(vec![v as u8]).unwrap().as_ref()),
             // This shouldn't need to be handled
             // KEY_RESIZE => (),
@@ -249,12 +250,9 @@ impl Debugger {
         let mut y = 0;
         getmaxyx(self.asm_win, &mut y, &mut x);
 
-        let cur_pc = cpu.pc; //
-        let ar_max = self.dissassembled_rom.len() - 1;
-        let idx = match binsearch_inst(&self.dissassembled_rom, cur_pc, 0, ar_max as usize) {
-            Some(i) => i as u16,
-            None => 0, //handle case of invalid instruction
-        };
+        let idx = self.dissassembled_rom[..]
+            .binary_search_by(|(_, addr)| addr.cmp(&cpu.pc))
+            .unwrap_or(0) as u16;
 
         if idx > 7 {
             for i in 0..7 {
@@ -317,7 +315,8 @@ impl Debugger {
                     "({:X}): {:X}",
                     watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize],
                     cpu.mem[(watchpoints[(i - WATCHPOINT_Y_OFFSET) as usize]) as usize]
-                ).as_ref(),
+                )
+                .as_ref(),
             );
         }
     }
@@ -330,7 +329,8 @@ impl Debugger {
                 "{:4}: 0x{:02X}",
                 name,
                 cpu.access_register(reg).expect("invalid register")
-            ).as_ref(),
+            )
+            .as_ref(),
         );
     }
 
@@ -374,7 +374,8 @@ impl Debugger {
                     addr,
                     cpu.mem[(addr + 1) as usize],
                     cpu.mem[addr as usize]
-                ).as_ref(),
+                )
+                .as_ref(),
             );
         }
     }
@@ -437,10 +438,10 @@ impl Debugger {
                 format!("Removing watchpoint at 0x{:X}", addr)
             }
             DebuggerAction::SetBreakPoint { addr } => {
-                let ar_max = self.dissassembled_rom.len() - 1;
-                let bp = binsearch_inst(&self.dissassembled_rom, addr, 0, ar_max as usize);
+                let bp =
+                    self.dissassembled_rom[..].binary_search_by(|(_, needle)| needle.cmp(&addr)); //addr.cmp(needle));
 
-                if let Some(inst) = bp {
+                if let Ok(inst) = bp {
                     self.breakpoints.insert(addr);
                     format!("Setting breakpoint at 0x{:X} ({})", addr, inst)
                 } else {

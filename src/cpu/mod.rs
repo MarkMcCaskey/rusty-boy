@@ -4,19 +4,19 @@
 
 #[macro_use]
 mod macros;
-mod tests;
-pub mod constants;
 pub mod cartridge;
+pub mod constants;
 pub mod memory;
 pub mod memvis;
+mod tests;
 
 use std::num::Wrapping;
 use std::path::PathBuf;
 
-use disasm::*;
 use self::constants::*;
 use self::memory::*;
 use self::memvis::cpumemvis::*;
+use crate::disasm::*;
 
 #[inline]
 pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
@@ -598,9 +598,9 @@ impl Cpu {
                     for k in 0..4 {
                         //multiply offset by tile size
                         tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as i16)
-                                                               + ((tile_pointer as i16) * 0x40))
-                                                               as usize]
-                            as u8) >> (k * 2))
+                            + ((tile_pointer as i16) * 0x40))
+                            as usize] as u8)
+                            >> (k * 2))
                             & 0x3;
                     }
                 }
@@ -612,9 +612,9 @@ impl Cpu {
                     for k in 0..4 {
                         //multiply offset by tile size
                         tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as MemAddr)
-                                                               + ((tile_pointer as MemAddr) * 0x40))
-                                                               as usize]
-                            as byte) >> (k * 2))
+                            + ((tile_pointer as MemAddr) * 0x40))
+                            as usize] as byte)
+                            >> (k * 2))
                             & 0x3;
                     }
                 }
@@ -997,7 +997,8 @@ impl Cpu {
     }
 
     fn ldna16(&mut self, n: CpuRegister16) {
-        let val = self.access_register(CpuRegister::A)
+        let val = self
+            .access_register(CpuRegister::A)
             .expect("Invalid register");
         let addr = self.access_register16(n);
 
@@ -1005,7 +1006,8 @@ impl Cpu {
     }
 
     fn ldna16c(&mut self, b1: u8, b2: u8) {
-        let val = self.access_register(CpuRegister::A)
+        let val = self
+            .access_register(CpuRegister::A)
             .expect("Invalid register");
         self.set_mem(byte_to_u16(b1, b2), val);
     }
@@ -1057,7 +1059,7 @@ impl Cpu {
 
     fn ldhna(&mut self, n: u8) {
         let val = self.a;
-        self.set_mem((0xFF00u16 + (n as u16)), val);
+        self.set_mem(0xFF00u16 + (n as u16), val);
     }
 
     fn ldhan(&mut self, n: u8) {
@@ -1296,26 +1298,26 @@ impl Cpu {
     }
 
     /*
-         * Explanation for stream:
-         *
-         * xxx1 xxxx xxxx
-         * xxx0 xxxx xxxx
-         *
-         * 0xFF + 0xFF
-         * 0x1FE
-         *
-         * 0xEFF + 0xEFF
-         * 0xFFE
-       
-         * One bit adder:
-         * Circuit with three inputs and two outputs
-         * (diagram does not include carry as input)
-         * n1 + n2 = s c
-         * 0  + 0  = 0 0
-         * 0  + 1  = 1 0
-         * 1  + 0  = 1 0
-         * 1  + 1  = 0 1
-         */
+    * Explanation for stream:
+    *
+    * xxx1 xxxx xxxx
+    * xxx0 xxxx xxxx
+    *
+    * 0xFF + 0xFF
+    * 0x1FE
+    *
+    * 0xEFF + 0xEFF
+    * 0xFFE
+
+    * One bit adder:
+    * Circuit with three inputs and two outputs
+    * (diagram does not include carry as input)
+    * n1 + n2 = s c
+    * 0  + 0  = 0 0
+    * 0  + 1  = 1 0
+    * 1  + 0  = 1 0
+    * 1  + 1  = 0 1
+    */
 
     fn add_hl(&mut self, reg: CpuRegister16) {
         let old_z = (self.f & ZL) == ZL;
@@ -1386,7 +1388,8 @@ impl Cpu {
 
     fn swap(&mut self, reg: CpuRegister) {
         //Potentially can bitmask hl which is 16bit value
-        let val = self.access_register(reg)
+        let val = self
+            .access_register(reg)
             .expect("couldn't access register value") as u8;
         let top = val & 0xF0u8;
         let bot = val & 0x0Fu8;
@@ -1825,9 +1828,9 @@ impl Cpu {
     Opcodes are prefixed or unprefixed
     1. [prefix byte,] opcode [,displacement byte] [,immediate data]
     2. prefix byte, prefix byte, displacement byte, opcode
-   
+
     ASSUMPTION: Gameboy only uses the CB prefix codes of the Z80
-   
+
     Returned value is number of cycles that the instruction took
      */
     pub fn dispatch_opcode(&mut self) -> u8 {
@@ -1955,105 +1958,121 @@ impl Cpu {
             //unprefixed instruction
             match x {
                 0 => match z {
-                        0 =>
-                            match y {
-                                0        => self.nop(), //0x00
-                                1        => {
-                                    self.ldnnsp(second_byte, third_byte);
-                                    self.inc_pc();
-                                    self.inc_pc();
-                                    inst_time = 20;
-                                }, //0x08
-                                2        => self.stop(), //0x10
-                                3        => {
-                                    self.jrn(second_byte as i8);
-                                    self.inc_pc();
-                                    inst_time = 8;
-                                },  //0x18
-                                v @ 4...7 => {
-                                    inst_time = 8 + if
-                                        self.jrccn(cc_dispatch(v-4),
-                                                   second_byte as i8) {4}
-                                    else {0};
-                                    self.inc_pc();
-                                },  //0x20, 0x28, 0x30, 0x38
-                                _        => unreachable!(uf),
-                            },
-
-                        1 =>  //00yy y001
-                        {
-                            inst_time = if y % 2 == 0 {
-                                self.ldnnn16(cpu16_dispatch(y/2),
-                                             second_byte, third_byte);
-                                self.inc_pc();
-                                self.inc_pc();
-                                12
-                            } else {
-                                self.add_hl(cpu16_dispatch(y/2));
-                                8
-                            };
-                        },
-
-                        2 => //00yy y010
-                        {
-                            match y {
-                                0 | 2 => self.ldna16(cpu16_dispatch(y/2)),
-                                1 | 3 => self.ldan16(cpu16_dispatch(y/2)),
-                                4 => self.ldihla(),
-                                5 => self.ldiahl(),
-                                6 => self.lddhla(),
-                                7 => self.lddahl(),
-                                _ => unreachable!(uf),
-                            }
-                            inst_time = 8;
-                        },
-
-                        3 => //00yy y011
-                        {
-                            even_odd_dispatch!(y, self, inc16, dec16, cpu16_dispatch,
-                                               cpu16_dispatch, 1, 1);
-                            inst_time = 8;
-                        },
-
-                        4 => //00yy y100
-                        {
-                            self.inc(cpu_dispatch(y));
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {4};
-                        },
-
-                        5 =>
-                        {
-                            self.dec(cpu_dispatch(y));
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {4};
-                        },
-
-                        6 =>
-                        {
-                            self.ldnnn(cpu_dispatch(y), second_byte);
+                    0 => match y {
+                        0 => self.nop(), //0x00
+                        1 => {
+                            self.ldnnsp(second_byte, third_byte);
                             self.inc_pc();
-                            inst_time =
-                                if cpu_dispatch(y) == CpuRegister::HL {
-                                    12} else {8};
-                        },
-
-                        7 => match y { //00yy y111
-                            0 => self.rlca(),
-                            1 => self.rrca(),
-                            2 => self.rla(),
-                            3 => self.rra(),
-                            4 => self.daa(),
-                            5 => self.cpl(),
-                            6 => self.scf(),
-                            7 => self.ccf(),
-                            _ => unreachable!(uf),
-                        },
-
+                            self.inc_pc();
+                            inst_time = 20;
+                        } //0x08
+                        2 => self.stop(), //0x10
+                        3 => {
+                            self.jrn(second_byte as i8);
+                            self.inc_pc();
+                            inst_time = 8;
+                        } //0x18
+                        v @ 4...7 => {
+                            inst_time = 8 + if self.jrccn(cc_dispatch(v - 4), second_byte as i8) {
+                                4
+                            } else {
+                                0
+                            };
+                            self.inc_pc();
+                        } //0x20, 0x28, 0x30, 0x38
                         _ => unreachable!(uf),
-                    }, //end x=0
+                    },
+
+                    1 =>
+                    //00yy y001
+                    {
+                        inst_time = if y % 2 == 0 {
+                            self.ldnnn16(cpu16_dispatch(y / 2), second_byte, third_byte);
+                            self.inc_pc();
+                            self.inc_pc();
+                            12
+                        } else {
+                            self.add_hl(cpu16_dispatch(y / 2));
+                            8
+                        };
+                    }
+
+                    2 =>
+                    //00yy y010
+                    {
+                        match y {
+                            0 | 2 => self.ldna16(cpu16_dispatch(y / 2)),
+                            1 | 3 => self.ldan16(cpu16_dispatch(y / 2)),
+                            4 => self.ldihla(),
+                            5 => self.ldiahl(),
+                            6 => self.lddhla(),
+                            7 => self.lddahl(),
+                            _ => unreachable!(uf),
+                        }
+                        inst_time = 8;
+                    }
+
+                    3 =>
+                    //00yy y011
+                    {
+                        even_odd_dispatch!(
+                            y,
+                            self,
+                            inc16,
+                            dec16,
+                            cpu16_dispatch,
+                            cpu16_dispatch,
+                            1,
+                            1
+                        );
+                        inst_time = 8;
+                    }
+
+                    4 =>
+                    //00yy y100
+                    {
+                        self.inc(cpu_dispatch(y));
+                        inst_time = if cpu_dispatch(y) == CpuRegister::HL {
+                            12
+                        } else {
+                            4
+                        };
+                    }
+
+                    5 => {
+                        self.dec(cpu_dispatch(y));
+                        inst_time = if cpu_dispatch(y) == CpuRegister::HL {
+                            12
+                        } else {
+                            4
+                        };
+                    }
+
+                    6 => {
+                        self.ldnnn(cpu_dispatch(y), second_byte);
+                        self.inc_pc();
+                        inst_time = if cpu_dispatch(y) == CpuRegister::HL {
+                            12
+                        } else {
+                            8
+                        };
+                    }
+
+                    7 => match y {
+                        //00yy y111
+                        0 => self.rlca(),
+                        1 => self.rrca(),
+                        2 => self.rla(),
+                        3 => self.rra(),
+                        4 => self.daa(),
+                        5 => self.cpl(),
+                        6 => self.scf(),
+                        7 => self.ccf(),
+                        _ => unreachable!(uf),
+                    },
+
+                    _ => unreachable!(uf),
+                }, //end x=0
 
                 1 => match (z, y) {
                     (6, 6) => self.halt(),
@@ -2286,7 +2305,7 @@ impl Cpu {
     }
 
     pub fn remove_old_events(&mut self) {
-        use io::constants::FADE_DELAY;
+        use crate::io::constants::FADE_DELAY;
 
         let event_logger = match self.mem.logger {
             Some(ref mut logger) => logger,

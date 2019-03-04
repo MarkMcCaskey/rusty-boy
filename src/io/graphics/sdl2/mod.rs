@@ -1,41 +1,43 @@
 pub mod utility;
 
+pub mod input;
 pub mod memvis;
 pub mod vidram;
-pub mod input;
 
 use sdl2;
-use sdl2::*;
-use sdl2::rect::{Point, Rect};
 use sdl2::keyboard::Keycode;
-use sdl2::surface::Surface;
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::rect::{Point, Rect};
+use sdl2::surface::Surface;
+use sdl2::*;
 
-use cpu::Cpu;
-use io::graphics::renderer::Renderer;
-use io::constants::*;
-use self::memvis::MemVisState;
-use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
-use self::utility::PositionedFrame;
 use self::input::*;
+use self::memvis::MemVisState;
+use self::utility::PositionedFrame;
+use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use super::renderer;
-use io::sound::*;
-use io::applicationsettings::ApplicationSettings;
 use super::renderer::EventResponse;
+use crate::cpu::Cpu;
+use crate::io::applicationsettings::ApplicationSettings;
+use crate::io::constants::*;
+use crate::io::graphics::renderer::Renderer;
+use crate::io::sound::*;
 
 use self::utility::*;
 
 pub struct Sdl2Renderer {
-    sdl_context: Sdl, //  sdl_sound: sdl2::audio,
+    sdl_context: Sdl,
+    sound_system: sdl2::audio::AudioDevice<GBSound>,
     canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     widgets: Vec<PositionedFrame>,
+    sound_cycles: u64,
 }
 
 impl Sdl2Renderer {
     pub fn new(app_settings: &ApplicationSettings) -> Result<Self, String> {
         let sdl_context = sdl2::init()?;
-        setup_audio(&sdl_context)?;
+        let sound_system = setup_audio(&sdl_context)?;
         let controller = setup_controller_subsystem(&sdl_context);
 
         // Set up graphics and window
@@ -130,9 +132,11 @@ impl Sdl2Renderer {
 
         Ok(Sdl2Renderer {
             sdl_context,
+            sound_system,
             canvas: renderer,
             controller,
             widgets,
+            sound_cycles: 0,
         })
     }
 
@@ -179,15 +183,15 @@ impl Renderer for Sdl2Renderer {
             Err(_) => error!("Could not set render scale"),
         }
 
-        // Sound is disabled while graphics code is being generalized
-            // Sound will be generalized after
-/*        let sound_upper_limit =
-            ((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
+        let freq1 = ((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
+        //info!("CH1 freq {:?}; {:?}", freq1, freq2);
+        let sound_upper_limit = freq1;
+        //((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
 
         if self.sound_cycles >= sound_upper_limit {
             self.sound_cycles -= sound_upper_limit;
 
-            if gameboy.get_sound1() || self.gameboy.get_sound2() {
+            if gameboy.get_sound1() || gameboy.get_sound2() {
                 self.sound_system.resume();
             } else {
                 self.sound_system.pause();
@@ -196,22 +200,21 @@ impl Renderer for Sdl2Renderer {
             let mut sound_system = self.sound_system.lock();
             // TODO move this to channel.update() or something
             sound_system.channel1.wave_duty = gameboy.channel1_wave_pattern_duty();
-            let channel1_freq = 4194304.0 /
-                                (4.0 * 8.0 * (2048.0 - gameboy.channel1_frequency() as f32));
+            let channel1_freq =
+                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel1_frequency() as f32));
             sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
 
             // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
-            let channel2_freq = 4194304.0 /
-                                (4.0 * 8.0 * (2048.0 - gameboy.channel2_frequency() as f32));
+            let channel2_freq =
+                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
 
-            let channel3_freq = 4194304.0 /
-                                (4.0 * 8.0 * (2048.0 - gameboy.channel3_frequency() as f32));
+            let channel3_freq =
+                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel3_frequency() as f32));
             sound_system.channel3.shift_amount = gameboy.channel3_shift_amount();
             sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
             sound_system.channel3.wave_ram = gameboy.channel3_wave_pattern_ram();
-
-        }*/
+        }
 
         // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
         // TODO make this variable based on whether it's GB, SGB, etc.
@@ -223,12 +226,15 @@ impl Renderer for Sdl2Renderer {
 
         let tc = self.canvas.texture_creator();
         let temp_surface = Surface::new(
-            (MEM_DISP_WIDTH as u32) + SCREEN_BUFFER_SIZE_X
+            (MEM_DISP_WIDTH as u32)
+                + SCREEN_BUFFER_SIZE_X
                 + (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
-            (MEM_DISP_HEIGHT as u32) + SCREEN_BUFFER_SIZE_Y
+            (MEM_DISP_HEIGHT as u32)
+                + SCREEN_BUFFER_SIZE_Y
                 + (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
             PixelFormatEnum::RGBA8888,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut temp_canvas = temp_surface.into_canvas().unwrap();
         //FIXME:
@@ -236,7 +242,8 @@ impl Renderer for Sdl2Renderer {
         for ref mut widget in &mut self.widgets {
             widget.draw(&mut temp_canvas, &mut gameboy_copy);
         }
-        let mut texture = tc.create_texture_from_surface(&temp_canvas.into_surface())
+        let mut texture = tc
+            .create_texture_from_surface(&temp_canvas.into_surface())
             .unwrap();
 
         texture.set_blend_mode(sdl2::render::BlendMode::None);
@@ -255,13 +262,13 @@ impl Renderer for Sdl2Renderer {
             .unwrap();
 
         // feature disabled while graphics are being generalized
-            // TODO add a way to enable/disable this while running
-            /*let record_screen = false;
-            if record_screen {
-                save_screenshot(&self.canvas,
-                                format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
-                self.screenshot_frame_num += Wrapping(1);
-            }*/
+        // TODO add a way to enable/disable this while running
+        /*let record_screen = false;
+        if record_screen {
+            save_screenshot(&self.canvas,
+                            format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
+            self.screenshot_frame_num += Wrapping(1);
+        }*/
 
         self.canvas.present();
     }
