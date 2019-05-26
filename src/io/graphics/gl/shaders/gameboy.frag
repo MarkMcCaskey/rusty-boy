@@ -1,7 +1,11 @@
 #version 430 core
 
-in vec4 frag_rgba;
+in VS_OUTPUT {
+   vec3 Color;
+} IN;
+
+out vec4 Color;
 
 void main() { 
-	gl_FragColor = vec(1,0,1,1);
+     Color = vec4(IN.Color, 1.0f);
 }

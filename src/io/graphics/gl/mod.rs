@@ -1,12 +1,20 @@
-use sdl2::{self, *, keyboard::Keycode, pixels::PixelFormatEnum, rect::Point, surface::Surface,
-           video::GLProfile};
+pub mod util;
 
-use crate::cpu::Cpu;
-use crate::io::{applicationsettings::ApplicationSettings, constants::*,
-         graphics::{renderer::Renderer, sdl2::input::*}, sound::*};
+use sdl2::{
+    self, keyboard::Keycode, pixels::PixelFormatEnum, rect::Point, surface::Surface,
+    video::GLProfile, *,
+};
+
 use super::renderer::{self, EventResponse};
+use crate::cpu::Cpu;
+use crate::io::{
+    applicationsettings::ApplicationSettings,
+    constants::*,
+    graphics::{renderer::Renderer, sdl2::input::*},
+    sound::*,
+};
 
-use gl::{self, *};
+use gl::{self, types::*, *};
 
 static GB_VERT_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.vert");
 static GB_FRAG_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.frag");
@@ -15,7 +23,10 @@ pub struct GlRenderer {
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
     ctx: sdl2::video::GLContext,
     window: sdl2::video::Window,
+    gb_program: util::Program,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
+    num_tiles: i32,
+    gb_vao: u32,
 }
 
 impl GlRenderer {
@@ -32,16 +43,15 @@ impl GlRenderer {
         gl_attr.set_context_profile(GLProfile::Core);
         gl_attr.set_context_version(4, 3);
 
+        let (window_width, window_height) = if app_settings.memvis_mode {
+            (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT)
+        } else {
+            (
+                ((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
+                ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32,
+            )
+        };
         let window = {
-            let (window_width, window_height) = if app_settings.memvis_mode {
-                (RB_SCREEN_WIDTH, RB_SCREEN_HEIGHT)
-            } else {
-                (
-                    ((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
-                    ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32,
-                )
-            };
-
             match video_subsystem
                 .window(
                     app_settings.rom_file_name.as_str(),
@@ -58,46 +68,118 @@ impl GlRenderer {
         };
         let ctx = window.gl_create_context()?;
         gl::load_with(|name| video_subsystem.gl_get_proc_address(name) as *const _);
-
-        use std::ffi::CString;
-        let _vshader_src: CString =
-            CString::new(GB_VERT_SHADER_SOURCE).expect("Invalid vertex shader source");
-        let _fshader_src: CString =
-            CString::new(GB_FRAG_SHADER_SOURCE).expect("Invalid fragment shader source");
-        let vshader_ptr = &(&GB_VERT_SHADER_SOURCE).as_ptr() as *const *const u8;
-        let fshader_ptr = &(&GB_FRAG_SHADER_SOURCE).as_ptr() as *const *const u8;
+        window.gl_set_context_to_current().unwrap();
         unsafe {
+            gl::Enable(gl::DEBUG_OUTPUT);
+            gl::DebugMessageCallback(dbg_msg, std::ptr::null_mut());
+        }
+
+        info!("Here");
+        use std::ffi::CString;
+        let vshader_src: CString =
+            CString::new(GB_VERT_SHADER_SOURCE).expect("Invalid vertex shader source");
+        let fshader_src: CString =
+            CString::new(GB_FRAG_SHADER_SOURCE).expect("Invalid fragment shader source");
+        let gb_program = unsafe {
+            gl::Viewport(0, 0, window_width as i32, window_height as i32);
             gl::ClearColor(0f32, 0f32, 0f32, 1f32);
-            let vshader_id = gl::CreateShader(VERTEX_SHADER);
-            let fshader_id = gl::CreateShader(FRAGMENT_SHADER);
 
-            gl::ShaderSource(
-                vshader_id,
-                1,
-                vshader_ptr as _,
-                (&(GB_VERT_SHADER_SOURCE.len()) as *const usize) as _,
+            let gb_program = util::Program::from_shaders(&[
+                util::Shader::from_vert_source(&vshader_src)?,
+                util::Shader::from_frag_source(&fshader_src)?,
+            ])?;
+            gl::UseProgram(gb_program.id());
+            gb_program
+        };
+
+        let mut verts: Vec<f32> = vec![];
+        let num_tiles = 32;
+        let num_tilesf = num_tiles as f32;
+        for i in 0..num_tiles {
+            for j in 0..num_tiles {
+                let bot_right_x = (((i as f32) / num_tilesf) - 0.5) * 2.;
+                let bot_right_y = (((j as f32) / num_tilesf) - 0.5) * 2.;
+                verts.push(dbg!(bot_right_x));
+                verts.push(bot_right_y);
+                verts.push(1.);
+                verts.push(0.);
+                verts.push(0.);
+
+                verts.push(dbg!(bot_right_x + (1.0 / num_tilesf * 2.)));
+                verts.push(bot_right_y);
+                verts.push(0.);
+                verts.push(1.);
+                verts.push(0.);
+
+                verts.push(bot_right_x + (1.0 / num_tilesf));
+                verts.push(bot_right_y + (1.0 / num_tilesf * 2.));
+                verts.push(0.);
+                verts.push(0.);
+                verts.push(1.);
+            }
+        }
+        let mut vao = 0;
+        let mut vbo = 0;
+
+        unsafe {
+            // Create a Vertex Buffer Object and copy the vertex data to it
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (verts.len() * std::mem::size_of::<f32>()) as GLsizeiptr,
+                verts.as_ptr() as *const GLvoid,
+                gl::STATIC_DRAW,
             );
-            gl::ShaderSource(
-                fshader_id,
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+
+            // Create Vertex Array Object
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+
+            // Specify the layout of the vertex data
+            /* let pos_attr = gl::GetAttribLocation(
+                self.gb_program.id(),
+                CString::new("position").unwrap().as_ptr(),
+            );*/
+            gl::EnableVertexAttribArray(0); //pos_attr as GLuint);
+            gl::VertexAttribPointer(
+                0, //dbg!(pos_attr) as GLuint,
+                2,
+                gl::FLOAT,
+                gl::FALSE as GLboolean,
+                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                std::ptr::null(),
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(
                 1,
-                fshader_ptr as _,
-                (&(GB_FRAG_SHADER_SOURCE.len()) as *const usize) as _,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
             );
 
-            gl::CompileShader(vshader_id);
-            gl::CompileShader(fshader_id);
-            let gb_program_id = gl::CreateProgram();
-            gl::AttachShader(gb_program_id, vshader_id);
-            gl::AttachShader(gb_program_id, fshader_id);
-            gl::LinkProgram(gb_program_id);
-            gl::UseProgram(gb_program_id);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl::BindVertexArray(0);
+
+            /*gl::BindFragDataLocation(
+                self.gb_program.id(),
+                0,
+                CString::new("out_color").unwrap().as_ptr(),
+            );*/
         }
 
         Ok(Self {
             sdl_context,
             controller,
             window,
+            gb_program,
             ctx,
+            num_tiles,
+            gb_vao: vao,
         })
     }
 
@@ -125,11 +207,15 @@ impl GlRenderer {
 
 impl Renderer for GlRenderer {
     fn draw_gameboy(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
-        //unsafe { gl::DrawElements(TRIANGLES, , UNSIGNED_SHORT, 0u32 as _) }
-        self.window.gl_swap_window();
+        info!("In draw");
         unsafe {
+            // Use shader program
+            gl::UseProgram(self.gb_program.id());
+            gl::BindVertexArray(self.gb_vao);
             gl::Clear(COLOR_BUFFER_BIT);
+            gl::DrawArrays(gl::TRIANGLES, 0, self.num_tiles * self.num_tiles * 3);
         }
+        self.window.gl_swap_window();
     }
 
     fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
@@ -308,7 +394,8 @@ impl Renderer for GlRenderer {
                             widget.click(mouse_btn, click_point, gameboy);
                             break;
                         }
-                    }*/                }
+                    }*/
+                }
                 Event::MouseWheel { y: _y, .. } => {
                     //self.ui_scale += y as f32;
                     // self.widgets[0].scale += y as f32;
@@ -331,4 +418,26 @@ pub fn display_coords_to_ui_point(ui_scale: f32, x: i32, y: i32) -> Point {
     let s_x = (x as f32 / ui_scale) as i32;
     let s_y = (y as f32 / ui_scale) as i32;
     Point::new(s_x, s_y)
+}
+
+extern "system" fn dbg_msg(
+    src: u32,
+    ty: u32,
+    id: GLuint,
+    sev: GLuint,
+    len: GLsizei,
+    msg: *const i8,
+    user_param: *mut std::ffi::c_void,
+) {
+    unsafe {
+        println!(
+            "{} {} {} {} {} {}",
+            src,
+            ty,
+            id,
+            sev,
+            len,
+            std::ffi::CStr::from_ptr(msg).to_str().unwrap().to_string()
+        );
+    }
 }

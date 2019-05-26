@@ -59,5 +59,16 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
         );
     }
 
+    #[cfg(feature = "opengl")]
+    {
+        app_builder = app_builder.arg(
+            Arg::with_name("opengl")
+                .short("g")
+                .long("opengl")
+                .help("Runs graphics on the GPU with OpenGL")
+                .takes_value(false),
+        );
+    }
+
     app_builder.get_matches()
 }

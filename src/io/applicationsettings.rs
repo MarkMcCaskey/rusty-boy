@@ -1,8 +1,8 @@
 //! Stores all settings related to the application from a user perspective
 
+use crate::io::constants::{APP_INFO, SCALE};
 use app_dirs::*;
 use clap::ArgMatches;
-use crate::io::constants::{APP_INFO, SCALE};
 use std::path::PathBuf;
 
 use log::LevelFilter;
@@ -19,6 +19,7 @@ pub struct ApplicationSettings {
     pub memvis_mode: bool,
     pub debugger_on: bool,
     pub vulkan_mode: bool,
+    pub gl_mode: bool,
     config_path: Option<PathBuf>,
     pub data_path: Option<PathBuf>,
     pub ui_scale: f32,
@@ -35,6 +36,7 @@ impl ApplicationSettings {
         let trace_mode = arguments.is_present("trace");
         let memvis_mode = arguments.is_present("visualize");
         let vulkan_mode = arguments.is_present("vulkan");
+        let gl_mode = arguments.is_present("opengl");
 
         // Set up logging
         let stdout = ConsoleAppender::builder()
@@ -91,6 +93,7 @@ impl ApplicationSettings {
             trace_mode,
             memvis_mode,
             vulkan_mode,
+            gl_mode,
             config_path,
             data_path,
             debugger_on: should_debugger,
