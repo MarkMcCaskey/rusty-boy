@@ -14,7 +14,7 @@ default = ["opengl"]
 asm = ["nom"]
 debugger = ["ncurses", "nom"]
 vulkan = []
-opengl = ["gl"]
+opengl = ["gl", "rusty-boy-derive"]
 development = ["debugger"]
 
 [dependencies]
@@ -28,7 +28,9 @@ serde_derive = "^1.0.0"
 app_dirs = "^1.1.1"
 time = "^0.1"
 lazy_static = "^1.0"
+bmp = "0.4"
 
+rusty-boy-derive = { path = "lib/rusty-boy-derive", optional = true }
 vulkano = {version = "0.6.2", optional = true}
 vulkano-shader-derive = {version = "0.6.2", optional = true}
 winit = {version = "0.7.6", optional = true}

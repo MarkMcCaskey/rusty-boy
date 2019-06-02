@@ -111,6 +111,12 @@ impl Program {
     pub fn id(&self) -> gl::types::GLuint {
         self.id
     }
+
+    pub fn use_program(&self) {
+        unsafe {
+            gl::UseProgram(self.id);
+        }
+    }
 }
 
 impl Drop for Program {

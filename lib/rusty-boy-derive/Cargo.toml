@@ -1,0 +1,13 @@
+[package]
+name = "rusty-boy-derive"
+version = "0.1.1"
+authors = ["Mark McCaskey"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+quote = "0.6"
+syn = "0.15"
+
+[lib]
+proc-macro = true

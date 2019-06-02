@@ -14,19 +14,53 @@ use crate::io::{
     sound::*,
 };
 
-use gl::{self, types::*, *};
+use gl::{self, types::*};
+use rusty_boy_derive::VertexAttribPointers;
+use util::*;
 
 static GB_VERT_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.vert");
 static GB_FRAG_SHADER_SOURCE: &'static str = include_str!("shaders/gameboy.frag");
+
+fn hsv_to_rgb(h: u32, s: u32, v: u32) -> u32 {
+    if s == 0 {
+        return v | (v << 8) | (v << 16);
+    }
+    let region = h / 43;
+    let remainder = (h - region * 43) * 6;
+
+    let p = (v * (255 - s)) >> 8;
+    let q = (v * (255 - ((s * remainder) >> 8))) >> 8;
+    let t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
+    match region {
+        0 => v << 24 | t << 16 | p << 8,
+        1 => q << 24 | v << 16 | p << 8,
+        2 => p << 24 | v << 16 | t << 8,
+        3 => p << 24 | q << 16 | v << 8,
+        4 => t << 24 | p << 16 | v << 8,
+        _ => v << 24 | p << 16 | q << 8,
+    }
+}
 
 pub struct GlRenderer {
     sdl_context: Sdl, //  sdl_sound: sdl2::audio,
     ctx: sdl2::video::GLContext,
     window: sdl2::video::Window,
-    gb_program: util::Program,
+    gb_program: Program,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     num_tiles: i32,
-    gb_vao: u32,
+    gb_vao: VertexArray,
+    background_texture: Texture,
+}
+
+#[derive(VertexAttribPointers, Copy, Clone, Debug)]
+#[repr(C, packed)]
+struct GbScreenVertex {
+    #[location = 0]
+    pos: data::f32_f32,
+    #[location = 1]
+    color: data::f32_f32_f32,
+    #[location = 2]
+    texcoord: data::f32_f32,
 }
 
 impl GlRenderer {
@@ -84,93 +118,100 @@ impl GlRenderer {
             gl::Viewport(0, 0, window_width as i32, window_height as i32);
             gl::ClearColor(0f32, 0f32, 0f32, 1f32);
 
-            let gb_program = util::Program::from_shaders(&[
-                util::Shader::from_vert_source(&vshader_src)?,
-                util::Shader::from_frag_source(&fshader_src)?,
+            let gb_program = Program::from_shaders(&[
+                Shader::from_vert_source(&vshader_src)?,
+                Shader::from_frag_source(&fshader_src)?,
             ])?;
             gl::UseProgram(gb_program.id());
             gb_program
         };
 
-        let mut verts: Vec<f32> = vec![];
+        let mut verts: Vec<GbScreenVertex> = vec![];
+        let mut indices: Vec<u16> = vec![];
         let num_tiles = 32;
         let num_tilesf = num_tiles as f32;
+        let mut counter = 0;
         for i in 0..num_tiles {
             for j in 0..num_tiles {
-                let bot_right_x = (((i as f32) / num_tilesf) - 0.5) * 2.;
-                let bot_right_y = (((j as f32) / num_tilesf) - 0.5) * 2.;
-                verts.push(dbg!(bot_right_x));
-                verts.push(bot_right_y);
-                verts.push(1.);
-                verts.push(0.);
-                verts.push(0.);
+                let denormal_br_x = ((i as f32) / num_tilesf);
+                let denormal_br_y = ((j as f32) / num_tilesf);
+                let bot_right_x = (denormal_br_x - 0.5) * 2.;
+                let bot_right_y = (denormal_br_y - 0.5) * 2.;
 
-                verts.push(dbg!(bot_right_x + (1.0 / num_tilesf * 2.)));
-                verts.push(bot_right_y);
-                verts.push(0.);
-                verts.push(1.);
-                verts.push(0.);
+                verts.push(GbScreenVertex {
+                    pos: (bot_right_x, bot_right_y).into(),
+                    color: (1., 0., 0.).into(),
+                    texcoord: (denormal_br_x, denormal_br_y).into(),
+                });
+                verts.push(GbScreenVertex {
+                    pos: (bot_right_x + (1.0 / num_tilesf * 2.), bot_right_y).into(),
+                    color: (0., 1., 0.).into(),
+                    texcoord: (denormal_br_x + (1.0 / num_tilesf), denormal_br_y).into(),
+                });
+                verts.push(GbScreenVertex {
+                    pos: (
+                        bot_right_x + (1.0 / num_tilesf * 2.),
+                        bot_right_y + (1.0 / num_tilesf * 2.),
+                    )
+                        .into(),
+                    color: (0., 0., 1.).into(),
+                    texcoord: (
+                        denormal_br_x + (1.0 / num_tilesf),
+                        denormal_br_y + (1.0 / num_tilesf),
+                    )
+                        .into(),
+                });
+                verts.push(GbScreenVertex {
+                    pos: (bot_right_x, bot_right_y + (1.0 / num_tilesf * 2.)).into(),
+                    color: (0., 1., 1.).into(),
+                    texcoord: (denormal_br_x, denormal_br_y + (1.0 / num_tilesf)).into(),
+                });
 
-                verts.push(bot_right_x + (1.0 / num_tilesf));
-                verts.push(bot_right_y + (1.0 / num_tilesf * 2.));
-                verts.push(0.);
-                verts.push(0.);
-                verts.push(1.);
+                indices.push(counter);
+                indices.push(counter + 1);
+                indices.push(counter + 2);
+                indices.push(counter);
+                indices.push(counter + 2);
+                indices.push(counter + 3);
+                counter += 4;
             }
         }
-        let mut vao = 0;
-        let mut vbo = 0;
+        let vbo = ArrayBuffer::new();
+        vbo.bind();
+        vbo.static_draw_data(&verts);
+        vbo.unbind();
+        let vao = VertexArray::new();
+        vao.bind();
+        vbo.bind();
+        GbScreenVertex::vertex_attrib_pointers();
+        let ibo = ElementArrayBuffer::new();
+        ibo.bind();
+        ibo.static_draw_data(&indices);
+        vbo.unbind();
+        vao.unbind();
+        const TEX_X: i32 = 256;
+        const TEX_Y: i32 = 256;
+        let texture = Texture::new(TEX_X, TEX_Y);
+        texture.bind();
+        /*let mut pixels = [0u32; (TEX_X * TEX_Y) as usize];
+        for i in 0..TEX_X {
+            for j in 0..TEX_Y {
+                pixels[((i * TEX_Y) + j) as usize] = hsv_to_rgb(i as u32, j as u32, 255); //0x00A00000 | (i as u32) | ((j as u32) << 8); //((i as f32) / 255.) / ((j as f32) / 255.);
+            }
+        }*/
+        let img = bmp::open(concat!(env!("CARGO_MANIFEST_DIR"), "/test.bmp")).unwrap();
+        let mut pixels = [0u32; (TEX_X * TEX_Y) as usize];
 
-        unsafe {
-            // Create a Vertex Buffer Object and copy the vertex data to it
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (verts.len() * std::mem::size_of::<f32>()) as GLsizeiptr,
-                verts.as_ptr() as *const GLvoid,
-                gl::STATIC_DRAW,
-            );
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-
-            // Create Vertex Array Object
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-            // Specify the layout of the vertex data
-            /* let pos_attr = gl::GetAttribLocation(
-                self.gb_program.id(),
-                CString::new("position").unwrap().as_ptr(),
-            );*/
-            gl::EnableVertexAttribArray(0); //pos_attr as GLuint);
-            gl::VertexAttribPointer(
-                0, //dbg!(pos_attr) as GLuint,
-                2,
-                gl::FLOAT,
-                gl::FALSE as GLboolean,
-                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                std::ptr::null(),
-            );
-            gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (5 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
-            );
-
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl::BindVertexArray(0);
-
-            /*gl::BindFragDataLocation(
-                self.gb_program.id(),
-                0,
-                CString::new("out_color").unwrap().as_ptr(),
-            );*/
+        for i in 0..TEX_X {
+            for j in 0..TEX_Y {
+                let pix = img.get_pixel(j as u32, i as u32);
+                let val = (pix.r as u32) << 24 | (pix.g as u32) << 16 | (pix.b as u32) << 8 | 0xFF;
+                pixels[((i * TEX_Y) + j) as usize] = val;
+            }
         }
+
+        texture.upload_pixels(&pixels);
+        texture.unbind();
 
         Ok(Self {
             sdl_context,
@@ -180,6 +221,7 @@ impl GlRenderer {
             ctx,
             num_tiles,
             gb_vao: vao,
+            background_texture: texture,
         })
     }
 
@@ -208,13 +250,22 @@ impl GlRenderer {
 impl Renderer for GlRenderer {
     fn draw_gameboy(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
         info!("In draw");
+        // Use shader program
+        self.gb_program.use_program();
+        self.gb_vao.bind();
+        self.background_texture.bind();
         unsafe {
-            // Use shader program
-            gl::UseProgram(self.gb_program.id());
-            gl::BindVertexArray(self.gb_vao);
-            gl::Clear(COLOR_BUFFER_BIT);
-            gl::DrawArrays(gl::TRIANGLES, 0, self.num_tiles * self.num_tiles * 3);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::DrawElements(
+                gl::TRIANGLES,
+                self.num_tiles * self.num_tiles * 6,
+                gl::UNSIGNED_SHORT,
+                std::ptr::null(),
+            );
+            //gl::DrawArrays(gl::TRIANGLE_STRIP, 0, self.num_tiles * self.num_tiles * 4);
         }
+        self.gb_vao.unbind();
+        self.background_texture.unbind();
         self.window.gl_swap_window();
     }
 
