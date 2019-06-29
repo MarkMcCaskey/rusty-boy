@@ -17,16 +17,17 @@ vulkan = []
 development = ["debugger"]
 
 [dependencies]
+app_dirs = "^1.1.1"
 clap = "^2.31"
-sdl2 = "^0.31"
-log = "^0.4.1"
+gameboy-rom = "0.2"
+lazy_static = "^1.0"
+log = "0.4"
 log4rs = "^0.8.0"
 rand = "^0.4.2"
+sdl2 = "^0.31"
 serde = "^1.0.0"
 serde_derive = "^1.0.0"
-app_dirs = "^1.1.1"
 time = "^0.1"
-lazy_static = "^1.0"
 
 vulkano = {version = "0.6.2", optional = true}
 vulkano-shader-derive = {version = "0.6.2", optional = true}
