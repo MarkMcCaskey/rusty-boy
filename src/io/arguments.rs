@@ -29,6 +29,13 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
                 .takes_value(false),
         )
         .arg(
+            Arg::with_name("debug")
+                .multiple(true)
+                .long("debug")
+                .help("Runs with debug logging on")
+                .takes_value(false),
+        )
+        .arg(
             Arg::with_name("visualize")
                 .short("z")
                 .long("visualize")

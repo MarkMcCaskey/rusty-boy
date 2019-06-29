@@ -76,7 +76,7 @@ impl Memory {
     }
 
     pub fn load(&mut self, input_file: &str) {
-        *self.cartridge = Cartridge::load(input_file);
+        *self.cartridge = Cartridge::load(input_file).expect("Could not load ROM");
     }
 
     pub fn load_saved_ram(&mut self, data_path: PathBuf, game_name: &str) {

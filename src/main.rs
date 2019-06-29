@@ -24,7 +24,6 @@ extern crate sdl2;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate time;
 #[cfg(feature = "vulkan")]
 #[macro_use]
 extern crate vulkano;
@@ -79,7 +78,6 @@ fn main() {
         }
     };
 
-    use time;
     loop {
         let time_since_last_frame = time::PreciseTime::now();
         appstate.handle_events();
