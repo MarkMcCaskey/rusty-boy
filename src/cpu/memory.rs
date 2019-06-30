@@ -10,16 +10,21 @@ use crate::cpu::cartridge::*;
 use crate::cpu::constants::*;
 use crate::cpu::memvis::cpumemvis::*;
 
+#[derive(Clone)]
 pub struct Memory {
     cartridge: Box<Cartridge>,
 
     /// 8kb video ram
     /// 0x8000-0x9FFF
-    video_ram: [byte; 0x2000],
+    pub video_ram: [[byte; 0x2000]; 2],
+
+    pub gbc_vram_bank: u8,
 
     /// 8kb internal ram
     /// 0xC000-0xDFFF (second half needs to be switchable in CBG)
-    internal_ram: [byte; 0x2000],
+    internal_ram: [[byte; 0x1000]; 8],
+
+    pub gbc_wram_bank: u8,
 
     /// unusable values
     /// 0xFEA0-0xFF00
@@ -56,8 +61,8 @@ impl Memory {
     pub fn new() -> Memory {
         Memory {
             cartridge: Box::new(Cartridge::new()),
-            video_ram: [0u8; 0x2000],
-            internal_ram: [0u8; 0x2000],
+            video_ram: [[0u8; 0x2000]; 2],
+            internal_ram: [[0u8; 0x1000]; 8],
             empty: [0u8; 0x6F],
             oam: [0u8; 0xA0],
             io_ports: [0u8; 0x80],
@@ -65,6 +70,9 @@ impl Memory {
             interrupt_flag: 0,
             iterator_index: 0,
             logger: Some(DeqCpuEventLogger::new(None)),
+            // default to 1 so normal gameboy works as expected
+            gbc_wram_bank: 1,
+            gbc_vram_bank: 0,
         }
     }
 
@@ -97,14 +105,28 @@ impl Memory {
         self.cartridge.save_ram(&data_path);
     }
 
+    pub fn gbc_mode(&self) -> bool {
+        self.cartridge.gbc
+    }
+
+    pub fn sgb_mode(&self) -> bool {
+        self.cartridge.sgb
+    }
+
+    pub fn set_gbc_mode(&mut self) {
+        self.gbc_wram_bank = 0;
+    }
+
     pub fn initialize_logger(&mut self) {
         let mut mem_buffer: [byte; 0x1_0000] = [0u8; 0x1_0000];
         for index in 0..0xFFFF {
             mem_buffer[index] = match index {
                 0x0000...0x7FFF | 0xA000...0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
-                0x8000...0x9FFF => self.video_ram[index - 0x8000],
-                0xC000...0xDFFF => self.internal_ram[index - 0xC000],
-                0xE000...0xFDFF => self.internal_ram[index - 0xE000],
+                0x8000...0x9FFF => self.video_ram[self.gbc_vram_bank as usize][index - 0x8000],
+                0xC000...0xCFFF => self.internal_ram[0][index - 0xC000],
+                0xD000...0xDFFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
+                0xE000...0xEFFF => self.internal_ram[0][index - 0xE000],
+                0xF000...0xFDFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
                 0xFE00...0xFE9F => self.oam[index - 0xFE00],
                 0xFEA0...0xFEFF => self.empty[index - 0xFEA0],
                 0xFF00...0xFF7F => self.io_ports[index - 0xFF00],
@@ -116,7 +138,7 @@ impl Memory {
         self.logger = Some(DeqCpuEventLogger::new(Some(&mem_buffer[..])));
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, sgb_mode: bool) {
         self[0xFF05] = 0x00;
         self[0xFF06] = 0x00;
         self[0xFF07] = 0x00;
@@ -137,7 +159,7 @@ impl Memory {
         self[0xFF23] = 0xBF;
         self[0xFF24] = 0x77;
         self[0xFF25] = 0xF3;
-        self[0xFF26] = 0xF1; //F1 for GB // TODOA:
+        self[0xFF26] = if sgb_mode { 0xF0 } else { 0xF1 };
         self[0xFF40] = 0x91;
         self[0xFF42] = 0x00;
         self[0xFF43] = 0x00;
@@ -158,9 +180,31 @@ impl Index<usize> for Memory {
         //TODO: figure out why it's being indexed too high
         match index % 0x1_0000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.index(index as u16), //self.cartridge[index as u16],
-            0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked(index - 0x8000) },
-            0xC000...0xDFFF => unsafe { self.internal_ram.get_unchecked(index - 0xC000) },
-            0xE000...0xFDFF => unsafe { self.internal_ram.get_unchecked(index - 0xE000) },
+            0x8000...0x9FFF => unsafe {
+                self.video_ram
+                    .get_unchecked(self.gbc_vram_bank as usize)
+                    .get_unchecked(index - 0x8000)
+            },
+            0xC000...0xCFFF => unsafe {
+                self.internal_ram
+                    .get_unchecked(0)
+                    .get_unchecked(index - 0xC000)
+            },
+            0xD000...0xDFFF => unsafe {
+                self.internal_ram
+                    .get_unchecked(self.gbc_wram_bank as usize)
+                    .get_unchecked(index - 0xD000)
+            },
+            0xE000...0xEFFF => unsafe {
+                self.internal_ram
+                    .get_unchecked(self.gbc_wram_bank as usize)
+                    .get_unchecked(index - 0xE000)
+            },
+            0xF000...0xFDFF => unsafe {
+                self.internal_ram
+                    .get_unchecked(self.gbc_wram_bank as usize)
+                    .get_unchecked(index - 0xF000)
+            },
             0xFE00...0xFE9F => unsafe { self.oam.get_unchecked(index - 0xFE00) },
             0xFEA0...0xFEFF => unsafe { self.empty.get_unchecked(index - 0xFEA0) },
             0xFF00...0xFF7F => unsafe { self.io_ports.get_unchecked(index - 0xFF00) },
@@ -175,9 +219,15 @@ impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
         match index % 0x1_0000 {
             0x0000...0x7FFF | 0xA000...0xBFFF => &mut self.cartridge[index as u16],
-            0x8000...0x9FFF => unsafe { self.video_ram.get_unchecked_mut(index - 0x8000) },
-            0xC000...0xDFFF => &mut self.internal_ram[index - 0xC000],
-            0xE000...0xFDFF => &mut self.internal_ram[index - 0xE000],
+            0x8000...0x9FFF => unsafe {
+                self.video_ram
+                    .get_unchecked_mut(self.gbc_vram_bank as usize)
+                    .get_unchecked_mut(index - 0x8000)
+            },
+            0xC000...0xCFFF => &mut self.internal_ram[0][index - 0xC000],
+            0xD000...0xDFFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
+            0xE000...0xEFFF => &mut self.internal_ram[0][index - 0xE000],
+            0xF000...0xFDFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
             0xFE00...0xFE9F => &mut self.oam[index - 0xFE00],
             0xFEA0...0xFEFF => &mut self.empty[index - 0xFEA0],
             0xFF00...0xFF7F => &mut self.io_ports[index - 0xFF00],
@@ -197,51 +247,6 @@ impl Iterator for Memory {
             Some(self[(self.iterator_index - 1) as usize])
         } else {
             None
-        }
-    }
-}
-
-impl Clone for Memory {
-    fn clone(&self) -> Memory {
-        trace!("Cloning memory");
-
-        let mut vram: [u8; 0x2000] = [0u8; 0x2000];
-        let mut iram: [u8; 0x2000] = [0u8; 0x2000];
-        let mut oam: [u8; 0xA0] = [0u8; 0xA0];
-        let mut hram: [u8; 0x80] = [0u8; 0x80];
-        let mut io_ports: [u8; 0x80] = [0u8; 0x80];
-
-        for (i, &vram_val) in self.video_ram.iter().enumerate().take(0x2000) {
-            vram[i] = vram_val;
-        }
-
-        for (i, &internal_ram_val) in self.internal_ram.iter().enumerate().take(0x2000) {
-            iram[i] = internal_ram_val;
-        }
-
-        for (i, &oam_val) in self.oam.iter().enumerate().take(0xA0) {
-            oam[i] = oam_val;
-        }
-
-        for (i, &hram_val) in self.hram.iter().enumerate().take(0x80) {
-            hram[i] = hram_val;
-        }
-
-        for (i, &io_port_val) in self.io_ports.iter().enumerate().take(0x80) {
-            io_ports[i] = io_port_val;
-        }
-
-        Memory {
-            cartridge: self.cartridge.clone(),
-            video_ram: vram,
-            internal_ram: iram,
-            empty: [0u8; 0x6F],
-            oam: oam,
-            io_ports: io_ports,
-            hram: hram,
-            interrupt_flag: self.interrupt_flag,
-            iterator_index: self.iterator_index,
-            logger: self.logger.clone(),
         }
     }
 }

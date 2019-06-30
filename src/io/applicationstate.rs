@@ -126,6 +126,22 @@ impl ApplicationState {
     pub fn step(&mut self) {
         //TODO optimize here (quite a bit; need to reduce branches and
         // allow for more consecutive instructions to be executed)
+        let (cycles_per_vblank, cycles_per_hsync, cycles_per_second, cycles_per_divider_step) =
+            if self.gameboy.gbc_mode && self.gameboy.double_speed {
+                (
+                    CPU_CYCLES_PER_VBLANK * 2,
+                    CYCLES_PER_HSYNC * 2,
+                    CPU_CYCLES_PER_SECOND * 2,
+                    CPU_CYCLES_PER_DIVIDER_STEP * 2,
+                )
+            } else {
+                (
+                    CPU_CYCLES_PER_VBLANK,
+                    CYCLES_PER_HSYNC,
+                    CPU_CYCLES_PER_SECOND,
+                    CPU_CYCLES_PER_DIVIDER_STEP,
+                )
+            };
         'steploop: loop {
             let current_op_time = if self.gameboy.state != cpu::constants::CpuState::Crashed {
                 self.gameboy.dispatch_opcode() as u64
@@ -137,16 +153,16 @@ impl ApplicationState {
 
             // FF04 (DIV) Divider Register stepping
             self.div_timer_cycles += current_op_time;
-            if self.div_timer_cycles >= CPU_CYCLES_PER_DIVIDER_STEP {
+            if self.div_timer_cycles >= cycles_per_divider_step {
                 self.gameboy.inc_div();
-                self.div_timer_cycles -= CPU_CYCLES_PER_DIVIDER_STEP;
+                self.div_timer_cycles -= cycles_per_divider_step;
             }
 
             // FF05 (TIMA) Timer counter stepping
             self.timer_cycles += current_op_time;
             let timer_hz = self.gameboy.timer_frequency_hz();
             let cpu_cycles_per_timer_counter_step =
-                (CPU_CYCLES_PER_SECOND as f64 / (timer_hz as f64)) as u64;
+                (cycles_per_second as f64 / (timer_hz as f64)) as u64;
             if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
                 //           std::thread::sleep_ms(16);
                 // trace!("Incrementing the timer!");
@@ -164,11 +180,11 @@ impl ApplicationState {
                         break;
                     }
                     self.gameboy.inc_ly();
-                    self.prev_hsync_cycles += CYCLES_PER_HSYNC;
+                    self.prev_hsync_cycles += cycles_per_hsync;
                 }
             }
 
-            if (self.cycle_count - self.prev_time) >= CPU_CYCLES_PER_VBLANK {
+            if (self.cycle_count - self.prev_time) >= cycles_per_vblank {
                 /*//check for new controller every frame
                 self.load_controller_if_none_exist();*/
 
