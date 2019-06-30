@@ -62,6 +62,10 @@ pub struct Cpu {
     /// TODO: document this
     pub cycles: CycleCount,
     interrupt_next_inst: bool,
+    pub gbc_mode: bool,
+    sgb_mode: bool,
+    /// for CGB, run at double speed
+    pub double_speed: bool,
 }
 
 /// Used for save-states and reverting to old CPU on resets
@@ -86,6 +90,9 @@ impl Clone for Cpu {
             //event_logger: self.event_logger.clone(),
             cycles: self.cycles,
             interrupt_next_inst: false,
+            gbc_mode: self.gbc_mode,
+            sgb_mode: self.sgb_mode,
+            double_speed: false,
         }
     }
 }
@@ -118,6 +125,9 @@ impl Cpu {
             //event_logger: None,//Some(DeqCpuEventLogger::new(None)),
             cycles: 0,
             interrupt_next_inst: false,
+            gbc_mode: false,
+            sgb_mode: false,
+            double_speed: false,
         };
 
         // The reset state is the default state of the CPU
@@ -129,7 +139,7 @@ impl Cpu {
     /// Sets the CPU to as it would be after the boot rom has executed
     pub fn reset(&mut self) {
         self.state = CpuState::Normal;
-        self.a = 0x01; //for GB/SGB (GBP & GBC need different values)
+        self.a = if self.gbc_mode { 0x11 } else { 0x01 }; // gameboy pocket needs 0xFF
         self.b = 0;
         self.c = 0;
         self.d = 0;
@@ -142,7 +152,7 @@ impl Cpu {
         self.cycles = 0;
 
         info!("reset");
-        self.mem.reset();
+        self.mem.reset(self.sgb_mode);
 
         self.set_bc(0x0013);
         self.set_de(0x00D8);
@@ -678,7 +688,51 @@ impl Cpu {
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
         }
         //signal dma is over (GBC ONLY)
-        // self.mem[0xFF55] = 1;
+        if self.gbc_mode {
+            self.mem[0xFF55] = 1;
+        }
+    }
+
+    /// GBC only
+    fn vram_dma(&mut self, suspend_resume_mode: bool) {
+        if suspend_resume_mode {
+            unimplemented!("suspend resume VRAM DMA");
+        }
+        let src_addr = ((self.mem[0xFF51] as MemAddr) << 8 | (self.mem[0xFF52] as MemAddr)) & !0xF;
+        let dest_addr =
+            ((self.mem[0xFF53] as MemAddr) << 8 | (self.mem[0xFF54] as MemAddr)) & 0x0FF0;
+
+        let chunks_to_copy = {
+            let cc = self.mem[0xFF55] & 0x7F;
+            if cc == 0 {
+                0
+            } else {
+                cc - 1
+            }
+        };
+        debug!(
+            "VRAM DMA from 0x{:X} to 0x{:X}, {} chunks",
+            src_addr,
+            dest_addr,
+            chunks_to_copy + 1
+        );
+
+        let bank = if self.mem.gbc_vram_bank > 1 {
+            0
+        } else {
+            self.mem.gbc_vram_bank as usize
+        };
+        for i in 0..(chunks_to_copy as u16 + 1) {
+            //number of values to be copied
+            for j in 0..16 {
+                let val = self.mem[(src_addr + (i * 16) + j) as usize];
+                unsafe {
+                    self.mem.video_ram.get_unchecked_mut(bank)
+                        [(dest_addr + (i * 16) + j) as usize] = val;
+                }
+            }
+        }
+        self.mem[0xFF55] = 1;
     }
 
     pub fn bgp(&self) -> (byte, byte, byte, byte) {
@@ -936,7 +990,29 @@ impl Cpu {
                 self.mem[0xFF46] = value;
                 self.dma();
             }
-            //switchable ram bank
+            0xFF4F => {
+                self.mem[0xFF4F] = value;
+                if self.gbc_mode {
+                    self.mem.gbc_vram_bank = value & 1;
+                }
+            }
+            // GBC DMA
+            // Missing suspend-resume DMA
+            0xFF55 => {
+                self.mem[0xFF55] = value;
+                if self.gbc_mode {
+                    self.vram_dma((value >> 7) != 0);
+                }
+            }
+            // cgb wram bank
+            0xFF70 => {
+                self.mem[0xFF70] = value;
+                if self.gbc_mode {
+                    trace!("Switching to WRAM bank {}", value & 0x7);
+                    self.mem.gbc_wram_bank = value & 0x7;
+                }
+            }
+            //switchable ram bank;
             /*i @ 0xA000...0xC000 => {
                 self.mem.write_ram_value(i as u16, value);
             }*/
@@ -1459,7 +1535,14 @@ impl Cpu {
 
     fn stop(&mut self) {
         debug!("STOP");
-        self.state = CpuState::Stop;
+        if self.gbc_mode {
+            // maybe track the state and check if in "waiting for speed switch" state
+            let speed_mode = (self.mem[0xFF4D] & 1) == 1;
+            self.double_speed = speed_mode;
+            self.mem[0xFF4D] = (speed_mode as u8) << 7;
+        } else {
+            self.state = CpuState::Stop;
+        }
     }
 
     fn di(&mut self) {
@@ -2285,6 +2368,12 @@ impl Cpu {
     pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
         trace!("Loading ROM");
         self.mem.load(file_path);
+        self.gbc_mode = self.mem.gbc_mode();
+        if self.gbc_mode {
+            self.mem.set_gbc_mode();
+        }
+        self.sgb_mode = self.mem.gbc_mode();
+        self.reset();
 
         // load RAM if it exists
         if let Some(data_location) = data_path {

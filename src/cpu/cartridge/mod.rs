@@ -34,6 +34,8 @@ pub struct Cartridge {
     /// it's safe to assume that the size of this vec is at least 0x4000
     entire_rom_data: Vec<u8>,
     cart_sub: Option<CartridgeSubType>,
+    pub gbc: bool,
+    pub sgb: bool,
 }
 
 impl Cartridgey for Cartridge {
@@ -65,6 +67,8 @@ impl Cartridgey for Cartridge {
 
         match rom_header.rom_type {
             RomType::RomOnly | RomType::RomRam | RomType::RomRamBattery => Ok(Cartridge {
+                gbc: rom_header.gameboy_color,
+                sgb: rom_header.super_gameboy,
                 entire_rom_data: rom_buffer,
                 cart_sub: Some(CartridgeSubType::RomOnly {
                     ram_bank: [0u8; 0x2000],
@@ -76,11 +80,13 @@ impl Cartridgey for Cartridge {
                 Ok(Cartridge {
                     cart_sub: Some(CartridgeSubType::Mbc1 {
                         memory_model: Mbc1Type::SixteenEight,
-                        ram_banks: vec![[0; 0x2000]; rom_header.ram_banks as usize],
+                        ram_banks: vec![[0; RAM_BANK_SIZE]; rom_header.ram_banks as usize],
                         ram_active: false,
                         mem_bank_selector: 1,
                         ram_bank_selector: 0,
                     }),
+                    gbc: rom_header.gameboy_color,
+                    sgb: rom_header.super_gameboy,
                     entire_rom_data: rom_buffer,
                 })
             }
@@ -93,11 +99,34 @@ impl Cartridgey for Cartridge {
 
                 Ok(Cartridge {
                     cart_sub: Some(CartridgeSubType::Mbc3 {
-                        ram_banks: vec![[0; 0x2000]; rom_header.ram_banks as usize],
+                        ram_banks: vec![[0; RAM_BANK_SIZE]; rom_header.ram_banks as usize],
                         ram_active: false,
                         mem_bank_selector: 1,
                         ram_bank_selector: 0,
                     }),
+                    gbc: rom_header.gameboy_color,
+                    sgb: rom_header.super_gameboy,
+                    entire_rom_data: rom_buffer,
+                })
+            }
+            RomType::Mbc5
+            | RomType::Mbc5Ram
+            | RomType::Mbc5RamBattery
+            | RomType::Mbc5Rumble
+            | RomType::Mbc5RumbleSram
+            | RomType::Mbc5RumbleSramBattery => {
+                const RAM_BANK_SIZE: usize = 0x2000;
+                debug_assert!(RAM_BANK_SIZE == rom_header.ram_bank_size as usize);
+
+                Ok(Cartridge {
+                    cart_sub: Some(CartridgeSubType::Mbc5 {
+                        ram_banks: vec![[0; RAM_BANK_SIZE]; rom_header.ram_banks as usize],
+                        ram_active: false,
+                        mem_bank_selector: 1,
+                        ram_bank_selector: 0,
+                    }),
+                    gbc: rom_header.gameboy_color,
+                    sgb: rom_header.super_gameboy,
                     entire_rom_data: rom_buffer,
                 })
             }
@@ -125,6 +154,7 @@ impl Cartridgey for Cartridge {
                 mem_bank_selector: ref mut mbs,
                 ram_bank_selector: ref mut rbs,
                 ram_active: ref mut ra,
+                ram_banks: ref rb,
                 ..
             }) if index <= 0x7FFF => {
                 match index {
@@ -157,20 +187,23 @@ impl Cartridgey for Cartridge {
                         }
                         Mbc1Type::SixteenEight => {
                             *mbs &= !(0x3 << 5);
-                            *mbs &= ((value & 0x3) as u32) << 5;
+                            *mbs |= ((value & 0x3) as u32) << 4;
+                            *mbs %= rb.len() as u32;
                             if *mbs == 0 {
                                 *mbs = 1;
                             }
-                            debug!("MBC1 16-8: selecting RAM bank {}", *mbs);
+                            debug!("MBC1 16-8: selecting ROM bank {}", *mbs);
                         }
                     },
                     // cartridge memory model select
                     0x6000...0x7FFF => {
                         *mm = if (index & 1) == 1 {
                             debug!("MBC1: Switching to 4-32 mode");
+                            // swap bits of mbs and rbs here
                             Mbc1Type::FourThirtytwo
                         } else {
                             debug!("MBC1: Switching to 16-8 mode");
+                            // swap bits here
                             Mbc1Type::SixteenEight
                         }
                     }
@@ -211,9 +244,48 @@ impl Cartridgey for Cartridge {
                     ),
                 }
             }
+            Some(CartridgeSubType::Mbc5 {
+                mem_bank_selector: ref mut mbs,
+                ram_bank_selector: ref mut rbs,
+                ram_active: ref mut ra,
+                ..
+            }) => match index {
+                0x0000...0x1FFF => {
+                    let ram_active = (value & 0xA) == 0xA;
+                    if ram_active {
+                        debug!("MBC5: set RAM to active");
+                    } else {
+                        debug!("MBC5: set RAM to inactive");
+                    }
 
+                    *ra = ram_active;
+                }
+                // bank select 1
+                0x2000...0x2FFF => {
+                    *mbs &= !0xFF;
+                    *mbs |= value as u32;
+                    debug!("MBC5: Switching to ROM bank {}", *mbs);
+                }
+                // bank select 2
+                0x3000...0x3FFF => {
+                    *mbs &= !0x100;
+                    *mbs |= (value as u32 & 1) << 8;
+                    debug!("MBC5: Switching to ROM bank {}", *mbs);
+                }
+                // ram select
+                0x4000...0x5FFF => {
+                    *rbs &= !0xF;
+                    *rbs |= value as u32 & 0xF;
+                    debug!("MBC5: Switching to RAM bank {}", *rbs);
+                }
+                _ => debug!(
+                    "Out of bounds write in MBC5: writing 0x{:X} to 0x:{:X}",
+                    value, index
+                ),
+            },
             Some(CartridgeSubType::RomOnly { .. }) | None | _ => self[index] = value,
         }
+
         //panic!("This cartridge type does not provide RAM")
     }
 }
@@ -238,6 +310,12 @@ pub enum CartridgeSubType {
         //memory_banks: Vec<[byte; 0x4000]>,
         ram_banks: Vec<[byte; 0x2000]>,
         ram_active: bool, //unsure if this is needed
+        mem_bank_selector: u32,
+        ram_bank_selector: u32,
+    },
+    Mbc5 {
+        ram_banks: Vec<[byte; 0x2000]>,
+        ram_active: bool,
         mem_bank_selector: u32,
         ram_bank_selector: u32,
     },
@@ -368,6 +446,10 @@ impl Index<u16> for Cartridge {
                     let adjusted_bank_selector = (bank_selector as usize) - 1;
                     &self.entire_rom_data[(adjusted_bank_selector * 0x4000) + ind as usize]
                 }
+                Some(CartridgeSubType::Mbc5 {
+                    mem_bank_selector: bank_selector,
+                    ..
+                }) => &self.entire_rom_data[(bank_selector as usize * 0x4000) + ind as usize],
 
                 _ => panic!("Indexing {:X}", ind),
             },
@@ -401,6 +483,13 @@ impl Index<u16> for Cartridge {
                     /*Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
                         panic!("Ram is not active")
                     }*/
+                    Some(CartridgeSubType::Mbc5 {
+                        ram_banks: ref ram_vec,
+                        ram_bank_selector: rbs,
+                        ..
+                    }) => unsafe {
+                        ram_vec[rbs as usize].get_unchecked((ind as u32 - 0xA000) as usize)
+                    },
                     _ => panic!("at switchable ram bank"),
                 }
             }
@@ -516,6 +605,8 @@ impl Cartridge {
         Cartridge {
             entire_rom_data: vec![0; 0x4000],
             cart_sub: None,
+            gbc: false,
+            sgb: false,
         }
     }
 

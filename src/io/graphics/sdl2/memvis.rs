@@ -410,7 +410,7 @@ where
 
 fn print_address_info(pc: MemAddr, cpu: &Cpu) {
     let pc = pc as usize;
-    let mem = cpu.mem.clone();
+    let ref mem = cpu.mem;
     let b1 = mem[pc + 1];
     let b2 = mem[pc + 2];
     let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
