@@ -64,7 +64,14 @@ impl ApplicationState {
             Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
         };
 
-        #[cfg(not(feature = "vulkan"))]
+        #[cfg(feature = "opengl")]
+        let renderer: Box<Renderer> = if dbg!(app_settings.gl_mode) {
+            Box::new(graphics::gl::GlRenderer::new(&app_settings)?)
+        } else {
+            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
+        };
+
+        #[cfg(not(any(feature = "vulkan", feature = "opengl")))]
         let renderer: Box<Renderer> = Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();

@@ -34,6 +34,8 @@ extern crate vulkano_shader_derive;
 extern crate vulkano_win;
 #[cfg(feature = "vulkan")]
 extern crate winit;
+#[cfg(feature = "opengl")]
+extern crate gl;
 
 /// Simple Gameboy-flavored Z80 assembler
 pub mod assembler;

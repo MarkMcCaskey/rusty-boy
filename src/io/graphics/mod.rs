@@ -1,3 +1,5 @@
+#[cfg(feature = "opengl")]
+pub mod gl;
 pub mod renderer;
 pub mod sdl2;
 #[cfg(feature = "vulkan")]

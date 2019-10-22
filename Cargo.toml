@@ -10,14 +10,16 @@ travis-ci = { repository = "MarkMcCaskey/rusty-boy", branch = "master" }
 maintainence = {status = "experimental"}
 
 [features]
-default = []
+default = ["opengl"]
 asm = ["nom"]
 debugger = ["ncurses", "nom"]
 vulkan = []
+opengl = ["gl", "rusty-boy-derive"]
 development = ["debugger"]
 
 [dependencies]
 app_dirs = "^1.1.1"
+bmp = "0.4"
 clap = "^2.31"
 gameboy-rom = "0.2"
 lazy_static = "^1.0"
@@ -29,10 +31,13 @@ serde = "^1.0.0"
 serde_derive = "^1.0.0"
 time = "^0.1"
 
+rusty-boy-derive = { path = "lib/rusty-boy-derive", optional = true }
 vulkano = {version = "0.6.2", optional = true}
 vulkano-shader-derive = {version = "0.6.2", optional = true}
 winit = {version = "0.7.6", optional = true}
 vulkano-win = {version = "0.6.2", optional = true}
+
+gl = {version = "^0.12", optional = true}
 
 nom = {version = "^2.2", optional = true}
 ncurses = {version = "^5.85.0", optional = true}
