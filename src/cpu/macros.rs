@@ -2,34 +2,34 @@ macro_rules! setter_unsetter_and_getter {
     ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
      $memory_location:expr) => {
         macro_rules! $name_setter {
-                    ($name:ident, $location:expr) => {
-                        //TODO: maybe add an option for setting them public?
-                        pub fn $name(&mut self) {
-                            let orig_val = self.mem[$memory_location] as u8;
+                            ($name:ident, $location:expr) => {
+                                //TODO: maybe add an option for setting them public?
+                                pub fn $name(&mut self) {
+                                    let orig_val = self.mem[$memory_location] as u8;
 
-                            self.mem[$memory_location] = (orig_val | $location) as byte;
+                                    self.mem[$memory_location] = (orig_val | $location) as byte;
+                                }
+                            }
                         }
-                    }
-                }
 
         macro_rules! $name_unsetter {
-                    ($name:ident, $location:expr) => {
-                        fn $name(&mut self) {
-                            let orig_val = self.mem[$memory_location] as u8;
+                            ($name:ident, $location:expr) => {
+                                pub fn $name(&mut self) {
+                                    let orig_val = self.mem[$memory_location] as u8;
 
-                            self.mem[$memory_location] = (orig_val & (!$location)) as byte;
+                                    self.mem[$memory_location] = (orig_val & (!$location)) as byte;
+                                }
+                            }
                         }
-                    }
-                }
 
         macro_rules! $name_getter {
-                    ($name:ident, $location:expr) => {
-                        pub fn $name(&self) -> bool{
-                            ((self.mem[$memory_location] as u8) & $location)
-                                == $location
+                            ($name:ident, $location:expr) => {
+                                pub fn $name(&self) -> bool{
+                                    ((self.mem[$memory_location] as u8) & $location)
+                                        == $location
+                                }
+                            }
                         }
-                    }
-                }
     };
 }
 

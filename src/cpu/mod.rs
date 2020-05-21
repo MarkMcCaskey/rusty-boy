@@ -507,7 +507,7 @@ impl Cpu {
     // Pretty sure this is wrong
     // get_interrupt_enabled!(get_interrupts_enabled, 0x1F);
 
-    fn get_interrupts_enabled(&self) -> bool {
+    pub fn get_interrupts_enabled(&self) -> bool {
         self.ime
     }
 
@@ -585,6 +585,14 @@ impl Cpu {
 
     pub fn window_y_pos(&self) -> u8 {
         self.mem[0xFF4A]
+    }
+
+    pub fn get_nth_background_tile(&self, n: u8) -> MemAddr {
+        if self.lcdc_bg_tile_map() {
+            0x8000 + ((n as u16) * 16)
+        } else {
+            ((0x9000u16 as i16) + ((n as i8 as i16) * 16)) as u16 //
+        }
     }
 
     pub fn get_background_tiles(&self) -> [[byte; 64]; (32 * 32)] {
@@ -912,7 +920,26 @@ impl Cpu {
         if let Some(ref mut logger) = self.mem.logger {
             logger.log_read(self.cycles, address);
         }
-        self.mem[address as usize]
+        let address = address as usize;
+        // TODO: make responsibility for where logic on memory access happens more clear
+        match address {
+            v @ DISPLAY_RAM_START...DISPLAY_RAM_END => {
+                if self.mem[STAT_ADDR] & 3 == 3 {
+                    error!("CPU cannot read address {} at this time", v);
+                    0xFF
+                } else {
+                    self.mem[address]
+                }
+            }
+            v @ OAM_START...OAM_END => match self.mem[STAT_ADDR] & 3 {
+                0b10 | 0b11 => {
+                    error!("CPU cannot read address {} while the OAM is in use", v);
+                    0xFF
+                }
+                _ => self.mem[address],
+            },
+            _ => self.mem[address],
+        }
     }
 
     #[inline]
@@ -933,7 +960,7 @@ impl Cpu {
             v @ DISPLAY_RAM_START...DISPLAY_RAM_END => {
                 // If in OAM and Display ram are both in use
                 if self.mem[STAT_ADDR] & 3 == 3 {
-                    error!("CPU cannot access address {} at this time", v);
+                    error!("CPU cannot write to address {} at this time", v);
                 } else {
                     self.mem[v] = value as byte;
                 }
@@ -942,7 +969,7 @@ impl Cpu {
                 //if OAM is in use
                 match self.mem[STAT_ADDR] & 3 {
                     0b10 | 0b11 => {
-                        error!("CPU cannot access address {} while the OAM is in use", v);
+                        error!("CPU cannot write to address {} while the OAM is in use", v);
                     }
                     _ => self.mem[v] = value as byte,
                 }

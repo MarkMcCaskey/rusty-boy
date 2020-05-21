@@ -8,7 +8,7 @@ pub enum EventResponse {
 }
 
 pub trait Renderer {
-    fn draw_gameboy(&mut self, _: &Cpu, _: &ApplicationSettings);
+    fn draw_gameboy(&mut self, _: &mut Cpu, _: &ApplicationSettings) -> usize;
     fn draw_memory_visualization(&mut self, _: &Cpu, _: &ApplicationSettings);
     fn handle_events(&mut self, _: &mut Cpu, _: &ApplicationSettings) -> Vec<EventResponse>;
 }

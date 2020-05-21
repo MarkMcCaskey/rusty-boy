@@ -56,16 +56,18 @@ impl ApplicationState {
         } else {
             None
         };
+        use crate::io::dr_sdl2;
 
         #[cfg(feature = "vulkan")]
         let renderer: Box<Renderer> = if app_settings.vulkan_mode {
             Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
         } else {
-            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?)
+            Box::new(dr_sdl2::Sdl2Renderer::new(&app_settings)?)
         };
 
         #[cfg(not(feature = "vulkan"))]
-        let renderer: Box<Renderer> = Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
+        let renderer: Box<Renderer> = Box::new(dr_sdl2::Sdl2Renderer::new(&app_settings)?);
+        //Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();
 
@@ -195,8 +197,10 @@ impl ApplicationState {
                 let cycle_count = self.cycle_count;
                 self.prev_time = cycle_count;
 
-                self.renderer
-                    .draw_gameboy(&self.gameboy, &self.application_settings);
+                let draw_cycles = self
+                    .renderer
+                    .draw_gameboy(&mut self.gameboy, &self.application_settings);
+                self.cycle_count += draw_cycles as u64;
                 //for memory visualization
                 self.gameboy.remove_old_events();
                 break 'steploop;

@@ -17,6 +17,8 @@ pub struct VidRamBGDisplay {
     pub tile_data_select: TileDataSelect,
 }
 
+const TOP_Y: i32 = 1;
+
 /// Display for backround screen buffer
 impl Drawable for VidRamBGDisplay {
     fn get_initial_size(&self) -> (u32, u32) {
@@ -58,6 +60,8 @@ impl Drawable for VidRamBGDisplay {
         if cpu.lcdc_window_on() {
             draw_window_buffer(renderer, cpu, tile_patterns_offset);
         }
+
+        draw_screen_border(renderer, cpu, MEM_DISP_WIDTH, TOP_Y);
     }
 
     fn click(&mut self, _: sdl2::mouse::MouseButton, _: Point, _: &mut Cpu) {
@@ -254,7 +258,6 @@ pub fn draw_background_buffer(
     screen_offset_x: i32,
 ) {
     // TODO implement proper windows/widgets
-    const TOP_Y: i32 = 1;
     let screen_offset_y = TOP_Y;
 
     let txt_format = sdl2::pixels::PixelFormatEnum::RGBA8888;
@@ -321,8 +324,6 @@ pub fn draw_background_buffer(
         }
         _ => panic!("Wrong tile data select"),
     };
-
-    draw_screen_border(renderer, gameboy, screen_offset_x, TOP_Y);
 }
 
 /// Draw rectangle showing values of SCX and SCY registers,
@@ -335,16 +336,10 @@ fn draw_screen_border<T>(
 ) where
     T: sdl2::render::RenderTarget,
 {
-    renderer.set_draw_color(Color::RGB(255, 255, 255));
+    renderer.set_draw_color(Color::RGB(0xFF, 0xFF, 0x00));
     let scx: u8 = gameboy.scx();
     let scy: u8 = gameboy.scy();
 
-    renderer.set_clip_rect(Some(Rect::new(
-        screen_offset_x,
-        screen_offset_y,
-        SCREEN_BUFFER_SIZE_X,
-        SCREEN_BUFFER_SIZE_Y,
-    )));
     // Draw 9 versions to do wrap around
     // FIXME is this inefficient/dumb and there is a better way? probably.
     for x in -1..2 {
@@ -363,6 +358,17 @@ fn draw_screen_border<T>(
     }
     renderer.set_clip_rect(None);
 }
+
+/*fn draw_screen_wrapped<T>(
+    renderer: &mut sdl2::render::Canvas<T>,
+    gameboy: &Cpu,
+    screen_offset_x: i32,
+    screen_offset_y: i32,
+) where
+    T: sdl2::render::RenderTarget,
+{
+    renderer.surface().blit
+}*/
 
 /// Draw "sprites" (something gameboy calls "Objects").
 pub fn draw_objects(
@@ -485,10 +491,10 @@ pub fn draw_window_buffer(
     let mut pixel_buffer = [0u8; (TILE_SIZE_PX * TILE_SIZE_PX * 4) as usize];
     let mut dst_rect = Rect::new(x as i32, y as i32, TILE_SIZE_PX as u32, TILE_SIZE_PX as u32);
 
-    for i in 0..8 {
-        for j in 0..4 {
-            let screen_x = x as i32 + (j as i32 * TILE_SIZE_PX as i32);
-            let screen_y = y as i32 + (i as i32 * TILE_SIZE_PX as i32);
+    for i in 0..32 {
+        for j in 0..32 {
+            let screen_x = x as i32 + (i as i32 * TILE_SIZE_PX as i32);
+            let screen_y = y as i32 + (j as i32 * TILE_SIZE_PX as i32);
             dst_rect.set_x(screen_x);
             dst_rect.set_y(screen_y);
             let tile_data = gameboy.mem
