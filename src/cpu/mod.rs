@@ -1968,19 +1968,23 @@ impl Cpu {
         let next_pc = (Wrapping(old_pc) + Wrapping(inst_len as u16)).0;
         match inst_len {
             1 => {
-                trace!("Running {:02x}    :  -> 0x{:04X}: {:<20}",
-                       first_byte,
-                       self.pc,
-                       inst_name)
+                trace!(
+                    "Running {:02x}    :  -> 0x{:04X}: {:<20}",
+                    first_byte,
+                    self.pc,
+                    inst_name
+                )
             }
             2 => {
-                trace!("Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
-                       first_byte,
-                       second_byte,
-                       self.pc,
-                       inst_name,
-                       second_byte,
-                       next_pc)
+                trace!(
+                    "Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
+                    first_byte,
+                    second_byte,
+                    self.pc,
+                    inst_name,
+                    second_byte,
+                    next_pc
+                )
             }
             3 => {
                 trace!("Running {:02x}{:02x}{:02x}:  -> 0x{:04X}: {:<20} 0x{:02X} 0x{:02X}  ; next 0x{:04X}",

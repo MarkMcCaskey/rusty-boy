@@ -65,7 +65,8 @@ impl ApplicationState {
         };
 
         #[cfg(not(feature = "vulkan"))]
-        let renderer: Box<dyn Renderer> = Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
+        let renderer: Box<dyn Renderer> =
+            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();
 
