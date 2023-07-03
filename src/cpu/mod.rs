@@ -587,8 +587,8 @@ impl Cpu {
         self.mem[0xFF4A]
     }
 
-    pub fn get_background_tiles(&self) -> [[byte; 64]; (32 * 32)] {
-        let mut tiles = [[0u8; 64]; (32 * 32)];
+    pub fn get_background_tiles(&self) -> [[byte; 64]; 32 * 32] {
+        let mut tiles = [[0u8; 64]; 32 * 32];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {
             0x8000
         } else {
@@ -930,7 +930,7 @@ impl Cpu {
         let address = address as usize;
 
         match address {
-            v @ DISPLAY_RAM_START...DISPLAY_RAM_END => {
+            v @ DISPLAY_RAM_START..=DISPLAY_RAM_END => {
                 // If in OAM and Display ram are both in use
                 if self.mem[STAT_ADDR] & 3 == 3 {
                     error!("CPU cannot access address {} at this time", v);
@@ -938,7 +938,7 @@ impl Cpu {
                     self.mem[v] = value as byte;
                 }
             }
-            v @ OAM_START...OAM_END => {
+            v @ OAM_START..=OAM_END => {
                 //if OAM is in use
                 match self.mem[STAT_ADDR] & 3 {
                     0b10 | 0b11 => {
@@ -947,7 +947,7 @@ impl Cpu {
                     _ => self.mem[v] = value as byte,
                 }
             }
-            ad @ 0xE000...0xFE00 | ad @ 0xC000...0xDE00 => {
+            ad @ 0xE000..=0xFE00 | ad @ 0xC000..=0xDE00 => {
                 self.mem[ad] = value;
                 self.mem[ad ^ (0xE000 - 0xC000)] = value;
             }
@@ -2017,7 +2017,7 @@ impl Cpu {
                         5 => self.sra(cpu_dispatch(z)),
                         6 => self.swap(cpu_dispatch(z)),
                         7 => self.srl(cpu_dispatch(z)),
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     }
                 }
 
@@ -2027,7 +2027,7 @@ impl Cpu {
 
                 3 => self.set(y, cpu_dispatch(z)),
 
-                _ => unreachable!(uf),
+                _ => unreachable!("{}", uf),
             }
 
             inst_time = if CpuRegister::HL == cpu_dispatch(z) {
@@ -2055,7 +2055,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 8;
                         } //0x18
-                        v @ 4...7 => {
+                        v @ 4..=7 => {
                             inst_time = 8 + if self.jrccn(cc_dispatch(v - 4), second_byte as i8) {
                                 4
                             } else {
@@ -2063,7 +2063,7 @@ impl Cpu {
                             };
                             self.inc_pc();
                         } //0x20, 0x28, 0x30, 0x38
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     1 =>
@@ -2090,7 +2090,7 @@ impl Cpu {
                             5 => self.ldiahl(),
                             6 => self.lddhla(),
                             7 => self.lddahl(),
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         }
                         inst_time = 8;
                     }
@@ -2151,10 +2151,10 @@ impl Cpu {
                         5 => self.cpl(),
                         6 => self.scf(),
                         7 => self.ccf(),
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
-                    _ => unreachable!(uf),
+                    _ => unreachable!("{}", uf),
                 }, //end x=0
 
                 1 => match (z, y) {
@@ -2179,7 +2179,7 @@ impl Cpu {
                            5 => self.xor(cpu_dispatch(z)),
                            6 => self.or(cpu_dispatch(z)),
                            7 => self.cp(cpu_dispatch(z)),
-                           _ => unreachable!(uf),
+                           _ => unreachable!("{}", uf),
                        };
                     //TODO: double check the line below
                     inst_time = if z == 6 { 8 } else { 4 };
@@ -2190,7 +2190,7 @@ impl Cpu {
                 {
 
                     0 => match y {
-                        v @ 0...3 => inst_time = if
+                        v @ 0..=3 => inst_time = if
                             self.retcc(cc_dispatch(v)) {20} else {8},
                         4 => {
                             self.ldhna(second_byte);
@@ -2212,7 +2212,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 12;
                         },
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     1 => if y % 2 == 0 { //11yy y001
@@ -2236,12 +2236,12 @@ impl Cpu {
                                 self.ldsphl();
                                 inst_time = 8;
                             },
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         }
                     },
 
                     2 => match y {
-                        v @ 0...3 => { // 11yy y010
+                        v @ 0..=3 => { // 11yy y010
                             let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                             inst_time = if
                                 self.jpccnn(cc_dispatch(v),
@@ -2269,7 +2269,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 16;
                         },
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     3 => match y { //11yy y011
@@ -2291,7 +2291,7 @@ impl Cpu {
 
                     4 => {
                         match y {
-                            0...3 => {
+                            0..=3 => {
                                 let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                                 inst_time =
                                     if self.callccnn(cc_dispatch(y),
@@ -2333,7 +2333,7 @@ impl Cpu {
                             5 => self.xor(CpuRegister::Num(second_byte as byte)),
                             6 => self.or(CpuRegister::Num(second_byte as byte)),
                             7 => self.cp(CpuRegister::Num(second_byte as byte)),
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         };
                         inst_time = 8;
                         self.inc_pc();
@@ -2344,7 +2344,7 @@ impl Cpu {
                         inst_time = 16;
                     },
 
-                    _ => unreachable!(uf),
+                    _ => unreachable!("{}", uf),
                 }
                 }
                 _ => panic!("The impossible happened!"),

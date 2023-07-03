@@ -71,7 +71,7 @@ pub struct PositionedFrame {
     /// Position and size
     pub rect: Rect,
     pub scale: f32,
-    pub vis: Box<Drawable>,
+    pub vis: Box<dyn Drawable>,
 }
 
 impl PositionedFrame {

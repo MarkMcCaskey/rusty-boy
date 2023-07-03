@@ -159,7 +159,7 @@ impl Cartridgey for Cartridge {
             }) if index <= 0x7FFF => {
                 match index {
                     //RAM activation
-                    0x0000...0x1FFF => {
+                    0x0000..=0x1FFF => {
                         let ram_active = (value & 0xA) == 0xA;
                         if ram_active {
                             debug!("MBC1: set RAM to active");
@@ -170,7 +170,7 @@ impl Cartridgey for Cartridge {
                         *ra = ram_active;
                     }
                     // bank select
-                    0x2000...0x3FFF => {
+                    0x2000..=0x3FFF => {
                         let rom_bank = if (value & 0x1F) == 0 {
                             1
                         } else {
@@ -180,7 +180,7 @@ impl Cartridgey for Cartridge {
                         *mbs = rom_bank
                     }
                     // TODO: selecting MSBs of ROM bank in 16/8 mode
-                    0x4000...0x5FFF => match *mm {
+                    0x4000..=0x5FFF => match *mm {
                         Mbc1Type::FourThirtytwo => {
                             debug!("MBC1 4-32: selecting ROM bank {}", value & 0x3);
                             *rbs = (value & 0x3) as u32;
@@ -196,7 +196,7 @@ impl Cartridgey for Cartridge {
                         }
                     },
                     // cartridge memory model select
-                    0x6000...0x7FFF => {
+                    0x6000..=0x7FFF => {
                         *mm = if (index & 1) == 1 {
                             debug!("MBC1: Switching to 4-32 mode");
                             // swap bits of mbs and rbs here
@@ -218,7 +218,7 @@ impl Cartridgey for Cartridge {
             }) => {
                 match index {
                     //RAM activation
-                    0x0000...0x1FFF => {
+                    0x0000..=0x1FFF => {
                         let ram_active = (value & 0xA) == 0xA;
                         if ram_active {
                             debug!("MBC3: set RAM to active");
@@ -229,7 +229,7 @@ impl Cartridgey for Cartridge {
                         *ra = ram_active;
                     }
                     // bank select
-                    0x2000...0x3FFF => {
+                    0x2000..=0x3FFF => {
                         let rom_bank = if (value & 0x7F) == 0 {
                             1
                         } else {
@@ -250,7 +250,7 @@ impl Cartridgey for Cartridge {
                 ram_active: ref mut ra,
                 ..
             }) => match index {
-                0x0000...0x1FFF => {
+                0x0000..=0x1FFF => {
                     let ram_active = (value & 0xA) == 0xA;
                     if ram_active {
                         debug!("MBC5: set RAM to active");
@@ -261,19 +261,19 @@ impl Cartridgey for Cartridge {
                     *ra = ram_active;
                 }
                 // bank select 1
-                0x2000...0x2FFF => {
+                0x2000..=0x2FFF => {
                     *mbs &= !0xFF;
                     *mbs |= value as u32;
                     debug!("MBC5: Switching to ROM bank {}", *mbs);
                 }
                 // bank select 2
-                0x3000...0x3FFF => {
+                0x3000..=0x3FFF => {
                     *mbs &= !0x100;
                     *mbs |= (value as u32 & 1) << 8;
                     debug!("MBC5: Switching to ROM bank {}", *mbs);
                 }
                 // ram select
-                0x4000...0x5FFF => {
+                0x4000..=0x5FFF => {
                     *rbs &= !0xF;
                     *rbs |= value as u32 & 0xF;
                     debug!("MBC5: Switching to RAM bank {}", *rbs);
@@ -334,12 +334,12 @@ impl IndexMut<u16> for Cartridge {
     fn index_mut(&mut self, ind: u16) -> &mut byte {
         trace!("indexmut: {:X}", ind);
         match ind {
-            0x0000...0x3FFF => {
+            0x0000..=0x3FFF => {
                 // constructor guarantees this to be true
                 debug_assert!(self.entire_rom_data.len() >= 0x4000);
                 unsafe { self.entire_rom_data.get_unchecked_mut(ind as usize) }
             }
-            0x4000...0x7FFF => {
+            0x4000..=0x7FFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly { .. }) => {
                         // TODO: investigate generated code and remove bounds checks/verify this
@@ -361,12 +361,12 @@ impl IndexMut<u16> for Cartridge {
                 }
             }
             // Video RAM:
-            0x8000...0x9FFF => {
+            0x8000..=0x9FFF => {
                 //TODO: block needs to handle if reads should be blocked
                 panic!("At access video ram");
             }
             // switchable RAM bank
-            0xA000...0xBFFF => {
+            0xA000..=0xBFFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly {
                         ram_bank: ref mut rambank,
@@ -416,12 +416,12 @@ impl Index<u16> for Cartridge {
 
     fn index<'a>(&'a self, ind: u16) -> &'a byte {
         match ind {
-            0x0000...0x3FFF => {
+            0x0000..=0x3FFF => {
                 // constructor guarantees this to be true
                 debug_assert!(self.entire_rom_data.len() >= 0x4000);
                 unsafe { self.entire_rom_data.get_unchecked(ind as usize) }
             }
-            0x4000...0x7FFF => match self.cart_sub {
+            0x4000..=0x7FFF => match self.cart_sub {
                 Some(CartridgeSubType::RomOnly { .. }) => &self.entire_rom_data[ind as usize],
                 Some(CartridgeSubType::Mbc1 {
                     memory_model: Mbc1Type::SixteenEight,
@@ -454,12 +454,12 @@ impl Index<u16> for Cartridge {
                 _ => panic!("Indexing {:X}", ind),
             },
             // Video RAM:
-            0x8000...0x9FFF => {
+            0x8000..=0x9FFF => {
                 //TODO: block needs to handle if reads should be blocked
                 panic!("At access video ram");
             }
             // switchable RAM bank
-            0xA000...0xBFFF => {
+            0xA000..=0xBFFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly {
                         ram_bank: ref rambank,
