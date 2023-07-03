@@ -24,10 +24,14 @@ jobs:
           profile: minimal
           override: true
           components: rustfmt, clippy
-      - name: Lint
+      - name: Check
         run: |
           cargo check
+      - name: Formatting
+        run: |
           cargo fmt --all -- --check
+      - name: Clippy
+        run: |
           cargo clippy
       - name: Assert no files have changed
         run: |

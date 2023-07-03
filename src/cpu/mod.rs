@@ -222,6 +222,7 @@ impl Cpu {
             0x9800
         };
 
+        #[allow(clippy::if_same_then_else)]
         let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
             //subtractive; 0 at 0x8800
         } else {
@@ -1930,6 +1931,7 @@ impl Cpu {
         let z = first_byte & 0x7;
 
         //First check if CPU is in a running state
+        #[allow(clippy::if_same_then_else)]
         if self.state == CpuState::Halt {
             //TODO: Needs extra handling with interupts
             return inst_time; //unsure of this

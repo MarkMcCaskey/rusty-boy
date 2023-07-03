@@ -65,6 +65,7 @@ macro_rules! even_odd_dispatch {
             $cpu.$func0($f0dispfunc(adjusted_number));
 
             // TODO: Verify this executes it n-1 times
+            #[allow(clippy::reversed_empty_ranges)]
             for _ in 1..($f0pcincs) {
                 $cpu.inc_pc();
             }
@@ -72,6 +73,7 @@ macro_rules! even_odd_dispatch {
             let adjusted_number: u8 = $num / 2;
             $cpu.$func1($f1dispfunc(adjusted_number));
 
+            #[allow(clippy::reversed_empty_ranges)]
             for _ in 1..($f1pcincs) {
                 $cpu.inc_pc();
             }
