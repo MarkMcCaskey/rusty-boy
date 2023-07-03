@@ -116,7 +116,10 @@ impl ApplicationState {
                         .save_ram(self.application_settings.data_path.clone());
                     std::process::exit(0);
                 }
-                _ => unimplemented!(),
+                EventResponse::Reset => {
+                    info!("Resetting gameboy");
+                    self.gameboy.reset();
+                }
             }
         }
     }
