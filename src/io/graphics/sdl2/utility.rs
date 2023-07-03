@@ -38,9 +38,9 @@ where
 {
     pub fn new(rect: sdl2::rect::Rect, values: Vec<S>) -> Toggle<S> {
         Toggle {
-            rect: rect,
+            rect,
             current: 0,
-            values: values,
+            values,
         }
     }
     pub fn click(&mut self) {

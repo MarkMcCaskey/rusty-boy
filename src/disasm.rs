@@ -5,7 +5,7 @@ extern crate clap;
 use std::num::Wrapping;
 
 #[allow(unknown_lints)]
-#[allow(many_single_char_names)]
+#[allow(clippy::many_single_char_names)]
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
@@ -326,7 +326,7 @@ fn main() {
         Err(e) => {
             eprintln!("Could not read ROM file");
             eprintln!("{}", e);
-            return ();
+            return;
         }
     };
 

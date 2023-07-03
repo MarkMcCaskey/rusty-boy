@@ -1,16 +1,16 @@
 //! ncurses-based TUI interactive debugger
 #[allow(
     unknown_lints,
-    useless_attribute,
-    needless_lifetimes,
-    match_same_arms,
+    clippy::useless_attribute,
+    clippy::needless_lifetimes,
+    clippy::match_same_arms,
     cyclomatic_complexity,
-    clone_on_copy,
-    type_complexity,
+    clippy::clone_on_copy,
+    clippy::type_complexity,
     dead_code,
     unused_comparisons,
     unused_label,
-    absurd_extreme_comparisons
+    clippy::absurd_extreme_comparisons
 )]
 #[cfg(feature = "debugger")]
 pub mod graphics;

@@ -87,13 +87,11 @@ impl Memory {
         *self.cartridge = Cartridge::load(input_file).expect("Could not load ROM");
     }
 
-    pub fn load_saved_ram(&mut self, data_path: PathBuf, game_name: &str) {
-        let mut path = data_path.clone();
-
+    pub fn load_saved_ram(&mut self, mut path: PathBuf, game_name: &str) {
         path.push(game_name);
         path.set_extension("savedgame");
 
-        self.cartridge.load_ram(&mut path);
+        self.cartridge.load_ram(&path);
     }
 
     pub fn save_ram(&self, data_path: PathBuf, game_name: &str) {

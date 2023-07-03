@@ -63,7 +63,7 @@ fn main() {
                 "Fatal error: could not initialize application settings: {}",
                 e
             );
-            return ();
+            return;
         }
     };
 
@@ -72,7 +72,7 @@ fn main() {
         Ok(apst) => apst,
         Err(e) => {
             eprintln!("Fatal error: could not create Gameboy: {}", e);
-            return ();
+            return;
         }
     };
 

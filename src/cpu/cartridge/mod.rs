@@ -327,8 +327,6 @@ pub enum Mbc1Type {
     FourThirtytwo,
 }
 
-const REF_ZERO: &'static u8 = &0;
-
 //for reading and writing
 impl IndexMut<u16> for Cartridge {
     fn index_mut(&mut self, ind: u16) -> &mut byte {
@@ -554,7 +552,7 @@ impl Cartridge {
             Some(CartridgeSubType::Mbc1 {
                 ram_banks: ref ra, ..
             }) => {
-                for ref b in ra {
+                for b in ra {
                     match file.write(&b[..]) {
                         Ok(_) => (),
                         Err(e) => error!("Error saving ram: {:?}", e),
