@@ -140,7 +140,7 @@ pub fn draw_tile(
     texture
         .update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize)
         .unwrap();
-    renderer.copy(&texture, None, Some(*dst_rect)).unwrap();
+    renderer.copy(texture, None, Some(*dst_rect)).unwrap();
 }
 
 // TODO cache tiles into texture and use blending options (?) to make
@@ -209,7 +209,7 @@ pub fn draw_tile_transparent<T>(
     texture
         .update(None, &pixel_buffer[..], (TILE_SIZE_PX * 4) as usize)
         .unwrap();
-    renderer.copy(&texture, None, Some(*dst_rect)).unwrap();
+    renderer.copy(texture, None, Some(*dst_rect)).unwrap();
 }
 
 /// This is the dumbest and straightforward code for displaying Tile
@@ -280,7 +280,7 @@ pub fn draw_background_buffer(
                 let tile_x = tile % SCREEN_BUFFER_TILES_X;
                 let tile_y = tile / SCREEN_BUFFER_TILES_Y;
 
-                dst_rect.set_x(0 + (tile_x * TILE_SIZE_PX as u32) as i32);
+                dst_rect.set_x((tile_x * TILE_SIZE_PX as u32) as i32);
                 dst_rect.set_y(screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
 
                 draw_tile(
@@ -303,7 +303,7 @@ pub fn draw_background_buffer(
                 let tile_x = tile % SCREEN_BUFFER_TILES_X;
                 let tile_y = tile / SCREEN_BUFFER_TILES_Y;
 
-                dst_rect.set_x(0 + (tile_x * TILE_SIZE_PX as u32) as i32);
+                dst_rect.set_x((tile_x * TILE_SIZE_PX as u32) as i32);
                 dst_rect.set_y(screen_offset_y + (tile_y * TILE_SIZE_PX as u32) as i32);
 
                 draw_tile(
@@ -487,20 +487,20 @@ pub fn draw_window_buffer(
 
     for i in 0..8 {
         for j in 0..4 {
-            let screen_x = x as i32 + (j as i32 * TILE_SIZE_PX as i32);
-            let screen_y = y as i32 + (i as i32 * TILE_SIZE_PX as i32);
+            let screen_x = x as i32 + (j * TILE_SIZE_PX as i32);
+            let screen_y = y as i32 + (i * TILE_SIZE_PX as i32);
             dst_rect.set_x(screen_x);
             dst_rect.set_y(screen_y);
-            let tile_data = gameboy.mem
-                [(window_tile_data_start + (j * TILE_SIZE_PX as u32) + i as u32) as usize];
+            let tile_data =
+                gameboy.mem[(window_tile_data_start + (j * TILE_SIZE_PX as i32) + i) as usize];
 
             draw_tile_transparent(
                 renderer,
                 gameboy,
                 tile_patterns_offset,
                 tile_data as u16,
-                screen_x as i32,
-                screen_y as i32,
+                screen_x,
+                screen_y,
                 false,
                 false,
                 &mut texture,

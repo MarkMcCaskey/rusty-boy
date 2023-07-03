@@ -38,9 +38,9 @@ where
 {
     pub fn new(rect: sdl2::rect::Rect, values: Vec<S>) -> Toggle<S> {
         Toggle {
-            rect: rect,
+            rect,
             current: 0,
-            values: values,
+            values,
         }
     }
     pub fn click(&mut self) {
@@ -71,7 +71,7 @@ pub struct PositionedFrame {
     /// Position and size
     pub rect: Rect,
     pub scale: f32,
-    pub vis: Box<Drawable>,
+    pub vis: Box<dyn Drawable>,
 }
 
 impl PositionedFrame {

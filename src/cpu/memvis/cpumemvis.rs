@@ -108,7 +108,7 @@ impl CpuEventLogger for DeqCpuEventLogger {
         let log_jumps = true;
         if log_jumps {
             self.events_deq.push_back(EventLogEntry {
-                timestamp: timestamp,
+                timestamp,
                 event: CpuEvent::Jump { from: src, to: dst },
             });
         }

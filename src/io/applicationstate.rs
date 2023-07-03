@@ -35,7 +35,7 @@ pub struct ApplicationState {
     _screenshot_frame_num: Wrapping<u64>,
     //ui_offset: Point, // TODO whole interface pan
     application_settings: ApplicationSettings,
-    renderer: Box<Renderer>,
+    renderer: Box<dyn Renderer>,
     //    texture_creator: TextureCreator<WindowContext>,
 }
 
@@ -65,7 +65,8 @@ impl ApplicationState {
         };
 
         #[cfg(not(feature = "vulkan"))]
-        let renderer: Box<Renderer> = Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
+        let renderer: Box<dyn Renderer> =
+            Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();
 
@@ -115,7 +116,10 @@ impl ApplicationState {
                         .save_ram(self.application_settings.data_path.clone());
                     std::process::exit(0);
                 }
-                _ => unimplemented!(),
+                EventResponse::Reset => {
+                    info!("Resetting gameboy");
+                    self.gameboy.reset();
+                }
             }
         }
     }

@@ -20,7 +20,7 @@ use crate::disasm::*;
 
 #[inline]
 pub fn byte_to_u16(low_byte: u8, high_byte: u8) -> u16 {
-    (((high_byte as u8) as u16) << 8) | ((low_byte as u8) as u16)
+    ((high_byte as u16) << 8) | (low_byte as u16)
 }
 
 #[inline]
@@ -222,6 +222,7 @@ impl Cpu {
             0x9800
         };
 
+        #[allow(clippy::if_same_then_else)]
         let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
             //subtractive; 0 at 0x8800
         } else {
@@ -254,7 +255,7 @@ impl Cpu {
     }
 
     pub fn channel1_sweep_shift(&self) -> u8 {
-        (self.mem[0xFF10] & 0x7) as u8
+        self.mem[0xFF10] & 0x7
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
@@ -268,11 +269,11 @@ impl Cpu {
     }
 
     pub fn channel1_sound_length(&self) -> u8 {
-        (self.mem[0xFF11] & 0x3F) as u8
+        self.mem[0xFF11] & 0x3F
     }
 
     pub fn channel1_envelope_initial_volume(&self) -> u8 {
-        ((self.mem[0xFF12] >> 4) & 0xF) as u8
+        (self.mem[0xFF12] >> 4) & 0xF
     }
 
     pub fn channel1_envelope_increasing(&self) -> bool {
@@ -280,7 +281,7 @@ impl Cpu {
     }
 
     pub fn channel1_envelope_sweep(&self) -> u8 {
-        (self.mem[0xFF12] & 0x7) as u8
+        self.mem[0xFF12] & 0x7
     }
 
     pub fn channel1_frequency(&self) -> u16 {
@@ -299,15 +300,15 @@ impl Cpu {
     }
 
     pub fn channel2_wave_pattern_duty(&self) -> u8 {
-        ((self.mem[0xFF16] >> 6) & 0x3) as u8
+        (self.mem[0xFF16] >> 6) & 0x3
     }
 
     pub fn channel2_sound_length(&self) -> u8 {
-        (self.mem[0xFF16] & 0x3F) as u8
+        self.mem[0xFF16] & 0x3F
     }
 
     pub fn channel2_envelope_initial_volume(&self) -> u8 {
-        ((self.mem[0xFF17] >> 4) & 0xF) as u8
+        (self.mem[0xFF17] >> 4) & 0xF
     }
 
     pub fn channel2_envelope_increasing(&self) -> bool {
@@ -339,7 +340,7 @@ impl Cpu {
     }
 
     pub fn channel3_sound_length(&self) -> u8 {
-        self.mem[0xFF1B] as u8
+        self.mem[0xFF1B]
     }
 
     pub fn channel3_output_level(&self) {
@@ -375,7 +376,7 @@ impl Cpu {
     pub fn channel3_wave_pattern_ram(&self) -> [u8; 32] {
         let mut ret = [0u8; 32];
         for i in 0..32 {
-            ret[i] = ((self.mem[0xFF30 + (i / 2)] >> ((i % 2) * 4)) & 0xF) as u8;
+            ret[i] = (self.mem[0xFF30 + (i / 2)] >> ((i % 2) * 4)) & 0xF;
         }
 
         ret
@@ -587,8 +588,8 @@ impl Cpu {
         self.mem[0xFF4A]
     }
 
-    pub fn get_background_tiles(&self) -> [[byte; 64]; (32 * 32)] {
-        let mut tiles = [[0u8; 64]; (32 * 32)];
+    pub fn get_background_tiles(&self) -> [[byte; 64]; 32 * 32] {
+        let mut tiles = [[0u8; 64]; 32 * 32];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {
             0x8000
         } else {
@@ -603,7 +604,7 @@ impl Cpu {
 
         if tile_map_base_addr == 0x9C00 {
             for j in 0..(32 * 32) {
-                let tile_pointer = self.mem[(tile_map_base_addr + j) as usize];
+                let tile_pointer = self.mem[tile_map_base_addr + j];
                 for i in 0..16 {
                     for k in 0..4 {
                         //multiply offset by tile size
@@ -617,7 +618,7 @@ impl Cpu {
             }
         } else {
             for j in 0..(32 * 32) {
-                let tile_pointer = self.mem[(tile_map_base_addr + j) as usize] as u8;
+                let tile_pointer = self.mem[tile_map_base_addr + j];
                 for i in 0..16 {
                     for k in 0..4 {
                         //multiply offset by tile size
@@ -659,7 +660,7 @@ impl Cpu {
     }
 
     pub fn lyc(&self) -> u8 {
-        self.mem[0xFF45] as u8
+        self.mem[0xFF45]
     }
 
     fn lyc_compare(&mut self) {
@@ -739,7 +740,7 @@ impl Cpu {
         let v4 = ((self.mem[0xFF47] >> 6) & 0x3) as byte;
         let v3 = ((self.mem[0xFF47] >> 4) & 0x3) as byte;
         let v2 = ((self.mem[0xFF47] >> 2) & 0x3) as byte;
-        let v1 = ((self.mem[0xFF47] >> 0) & 0x3) as byte;
+        let v1 = (self.mem[0xFF47] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
@@ -748,7 +749,7 @@ impl Cpu {
         let v4 = ((self.mem[0xFF48] >> 6) & 0x3) as byte;
         let v3 = ((self.mem[0xFF48] >> 4) & 0x3) as byte;
         let v2 = ((self.mem[0xFF48] >> 2) & 0x3) as byte;
-        let v1 = ((self.mem[0xFF48] >> 0) & 0x3) as byte;
+        let v1 = (self.mem[0xFF48] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
@@ -757,17 +758,17 @@ impl Cpu {
         let v4 = ((self.mem[0xFF49] >> 6) & 0x3) as byte;
         let v3 = ((self.mem[0xFF49] >> 4) & 0x3) as byte;
         let v2 = ((self.mem[0xFF49] >> 2) & 0x3) as byte;
-        let v1 = ((self.mem[0xFF49] >> 0) & 0x3) as byte;
+        let v1 = (self.mem[0xFF49] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
 
     pub fn wy(&self) -> u8 {
-        self.mem[0xFF4A] as u8
+        self.mem[0xFF4A]
     }
 
     pub fn wx(&self) -> u8 {
-        self.mem[0xFF4B] as u8
+        self.mem[0xFF4B]
     }
 
     //input register for joypad
@@ -798,7 +799,7 @@ impl Cpu {
         let mut name_data: Vec<u8> = vec![];
         for i in 0..16 {
             if self.mem[0x134 + i] != 0 {
-                name_data.push(self.mem[0x134 + i] as u8);
+                name_data.push(self.mem[0x134 + i]);
             }
         }
         match String::from_utf8(name_data) {
@@ -808,7 +809,7 @@ impl Cpu {
     }
 
     pub fn get_cartridge_type(&self) -> u8 {
-        self.mem[0x147] as u8
+        self.mem[0x147]
     }
 
     fn enable_interrupts(&mut self) {
@@ -930,7 +931,7 @@ impl Cpu {
         let address = address as usize;
 
         match address {
-            v @ DISPLAY_RAM_START...DISPLAY_RAM_END => {
+            v @ DISPLAY_RAM_START..=DISPLAY_RAM_END => {
                 // If in OAM and Display ram are both in use
                 if self.mem[STAT_ADDR] & 3 == 3 {
                     error!("CPU cannot access address {} at this time", v);
@@ -938,7 +939,7 @@ impl Cpu {
                     self.mem[v] = value as byte;
                 }
             }
-            v @ OAM_START...OAM_END => {
+            v @ OAM_START..=OAM_END => {
                 //if OAM is in use
                 match self.mem[STAT_ADDR] & 3 {
                     0b10 | 0b11 => {
@@ -947,7 +948,7 @@ impl Cpu {
                     _ => self.mem[v] = value as byte,
                 }
             }
-            ad @ 0xE000...0xFE00 | ad @ 0xC000...0xDE00 => {
+            ad @ 0xE000..=0xFE00 | ad @ 0xC000..=0xDE00 => {
                 self.mem[ad] = value;
                 self.mem[ad ^ (0xE000 - 0xC000)] = value;
             }
@@ -1164,11 +1165,8 @@ impl Cpu {
         let old_sp = self.sp;
         let addr = byte_to_u16(b1, b2);
         // TODO function to write word (16 bit) to memory
-        self.set_mem(addr, old_sp as byte & 0xFFu8);
-        self.set_mem(
-            addr.wrapping_add(1),
-            ((old_sp >> 8) as byte & 0xFFu8) as byte,
-        );
+        self.set_mem(addr, old_sp as u8);
+        self.set_mem(addr.wrapping_add(1), (old_sp >> 8) as u8);
     }
 
     // fn pushnn(&mut self, nn: CpuRegister16) {
@@ -1218,7 +1216,7 @@ impl Cpu {
                 CpuRegister16::AF => self.af() as i32,
                 CpuRegister16::Num(i) => i as i32,
             },
-        ) as i32
+        )
     }
 
     fn reg_or_const(&mut self, reg: CpuRegister) -> i8 {
@@ -1234,7 +1232,7 @@ impl Cpu {
     fn addspn(&mut self, n: i8) {
         let old_sp = self.sp;
         let new_sp = add_u16_i8(self.sp, n);
-        self.sp = new_sp as u16;
+        self.sp = new_sp;
 
         self.set_flags(
             false,
@@ -1277,7 +1275,7 @@ impl Cpu {
 
     fn sub(&mut self, reg: CpuRegister) {
         let old_a = self.a as i8;
-        let old_b = self.reg_or_const(reg) as i8;
+        let old_b = self.reg_or_const(reg);
         let new_a = old_a.wrapping_sub(old_b) as u8;
         self.a = new_a;
 
@@ -1293,7 +1291,7 @@ impl Cpu {
 
     fn sbc(&mut self, reg: CpuRegister) {
         let old_a = self.a as i8;
-        let old_b = self.reg_or_const(reg) as i8;
+        let old_b = self.reg_or_const(reg);
         let cf = ((self.f & CL) >> 4) as i8;
 
         let new_a = old_a.wrapping_sub(old_b).wrapping_sub(cf) as u8;
@@ -1466,7 +1464,7 @@ impl Cpu {
         //Potentially can bitmask hl which is 16bit value
         let val = self
             .access_register(reg)
-            .expect("couldn't access register value") as u8;
+            .expect("couldn't access register value");
         let top = val & 0xF0u8;
         let bot = val & 0x0Fu8;
         self.set_register(reg, (((top >> 4) & 0xF) | (bot << 4)) as byte);
@@ -1524,9 +1522,7 @@ impl Cpu {
         self.f = old_flags | CL;
     }
 
-    fn nop(&self) {
-        ()
-    }
+    fn nop(&self) {}
 
     fn halt(&mut self) {
         debug!("HALT");
@@ -1652,7 +1648,7 @@ impl Cpu {
     }
 
     fn srl(&mut self, reg: CpuRegister) {
-        let reg_val = self.access_register(reg).expect("invalid register") as u8;
+        let reg_val = self.access_register(reg).expect("invalid register");
         let old_bit0 = reg_val & 1;
 
         self.set_register(reg, (reg_val >> 1) as byte);
@@ -1753,7 +1749,7 @@ impl Cpu {
         let first_half = ((nn >> 8) & 0xFF) as byte;
         let second_half = (nn & 0xFF) as byte;
 
-        let mut sp_idx = Wrapping(self.sp as u16);
+        let mut sp_idx = Wrapping(self.sp);
         sp_idx -= Wrapping(1);
         self.set_mem(sp_idx.0, first_half);
         sp_idx -= Wrapping(1);
@@ -1829,10 +1825,10 @@ impl Cpu {
         //     panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
         // }
         (
-            self.mem[self.pc as usize] as u8,
-            self.mem[(self.pc as usize) + 1] as u8,
-            self.mem[(self.pc as usize) + 2] as u8,
-            self.mem[(self.pc as usize) + 3] as u8,
+            self.mem[self.pc as usize],
+            self.mem[(self.pc as usize) + 1],
+            self.mem[(self.pc as usize) + 2],
+            self.mem[(self.pc as usize) + 3],
         )
     }
 
@@ -1842,7 +1838,7 @@ impl Cpu {
 
     fn handle_interrupts(&mut self) {
         if !self.get_interrupts_enabled() {
-            return ();
+            return;
         }
         if self.state == CpuState::Halt {
             self.state = CpuState::Normal;
@@ -1930,6 +1926,7 @@ impl Cpu {
         let z = first_byte & 0x7;
 
         //First check if CPU is in a running state
+        #[allow(clippy::if_same_then_else)]
         if self.state == CpuState::Halt {
             //TODO: Needs extra handling with interupts
             return inst_time; //unsure of this
@@ -1968,19 +1965,23 @@ impl Cpu {
         let next_pc = (Wrapping(old_pc) + Wrapping(inst_len as u16)).0;
         match inst_len {
             1 => {
-                trace!("Running {:02x}    :  -> 0x{:04X}: {:<20}",
-                       first_byte,
-                       self.pc,
-                       inst_name)
+                trace!(
+                    "Running {:02x}    :  -> 0x{:04X}: {:<20}",
+                    first_byte,
+                    self.pc,
+                    inst_name
+                )
             }
             2 => {
-                trace!("Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
-                       first_byte,
-                       second_byte,
-                       self.pc,
-                       inst_name,
-                       second_byte,
-                       next_pc)
+                trace!(
+                    "Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
+                    first_byte,
+                    second_byte,
+                    self.pc,
+                    inst_name,
+                    second_byte,
+                    next_pc
+                )
             }
             3 => {
                 trace!("Running {:02x}{:02x}{:02x}:  -> 0x{:04X}: {:<20} 0x{:02X} 0x{:02X}  ; next 0x{:04X}",
@@ -2017,7 +2018,7 @@ impl Cpu {
                         5 => self.sra(cpu_dispatch(z)),
                         6 => self.swap(cpu_dispatch(z)),
                         7 => self.srl(cpu_dispatch(z)),
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     }
                 }
 
@@ -2027,7 +2028,7 @@ impl Cpu {
 
                 3 => self.set(y, cpu_dispatch(z)),
 
-                _ => unreachable!(uf),
+                _ => unreachable!("{}", uf),
             }
 
             inst_time = if CpuRegister::HL == cpu_dispatch(z) {
@@ -2055,7 +2056,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 8;
                         } //0x18
-                        v @ 4...7 => {
+                        v @ 4..=7 => {
                             inst_time = 8 + if self.jrccn(cc_dispatch(v - 4), second_byte as i8) {
                                 4
                             } else {
@@ -2063,7 +2064,7 @@ impl Cpu {
                             };
                             self.inc_pc();
                         } //0x20, 0x28, 0x30, 0x38
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     1 =>
@@ -2090,7 +2091,7 @@ impl Cpu {
                             5 => self.ldiahl(),
                             6 => self.lddhla(),
                             7 => self.lddahl(),
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         }
                         inst_time = 8;
                     }
@@ -2151,10 +2152,10 @@ impl Cpu {
                         5 => self.cpl(),
                         6 => self.scf(),
                         7 => self.ccf(),
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
-                    _ => unreachable!(uf),
+                    _ => unreachable!("{}", uf),
                 }, //end x=0
 
                 1 => match (z, y) {
@@ -2179,7 +2180,7 @@ impl Cpu {
                            5 => self.xor(cpu_dispatch(z)),
                            6 => self.or(cpu_dispatch(z)),
                            7 => self.cp(cpu_dispatch(z)),
-                           _ => unreachable!(uf),
+                           _ => unreachable!("{}", uf),
                        };
                     //TODO: double check the line below
                     inst_time = if z == 6 { 8 } else { 4 };
@@ -2190,7 +2191,7 @@ impl Cpu {
                 {
 
                     0 => match y {
-                        v @ 0...3 => inst_time = if
+                        v @ 0..=3 => inst_time = if
                             self.retcc(cc_dispatch(v)) {20} else {8},
                         4 => {
                             self.ldhna(second_byte);
@@ -2212,7 +2213,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 12;
                         },
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     1 => if y % 2 == 0 { //11yy y001
@@ -2236,12 +2237,12 @@ impl Cpu {
                                 self.ldsphl();
                                 inst_time = 8;
                             },
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         }
                     },
 
                     2 => match y {
-                        v @ 0...3 => { // 11yy y010
+                        v @ 0..=3 => { // 11yy y010
                             let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                             inst_time = if
                                 self.jpccnn(cc_dispatch(v),
@@ -2269,7 +2270,7 @@ impl Cpu {
                             self.inc_pc();
                             inst_time = 16;
                         },
-                        _ => unreachable!(uf),
+                        _ => unreachable!("{}", uf),
                     },
 
                     3 => match y { //11yy y011
@@ -2291,7 +2292,7 @@ impl Cpu {
 
                     4 => {
                         match y {
-                            0...3 => {
+                            0..=3 => {
                                 let const_val = (second_byte as u16) | ((third_byte as u16) << 8);
                                 inst_time =
                                     if self.callccnn(cc_dispatch(y),
@@ -2333,7 +2334,7 @@ impl Cpu {
                             5 => self.xor(CpuRegister::Num(second_byte as byte)),
                             6 => self.or(CpuRegister::Num(second_byte as byte)),
                             7 => self.cp(CpuRegister::Num(second_byte as byte)),
-                            _ => unreachable!(uf),
+                            _ => unreachable!("{}", uf),
                         };
                         inst_time = 8;
                         self.inc_pc();
@@ -2344,7 +2345,7 @@ impl Cpu {
                         inst_time = 16;
                     },
 
-                    _ => unreachable!(uf),
+                    _ => unreachable!("{}", uf),
                 }
                 }
                 _ => panic!("The impossible happened!"),
