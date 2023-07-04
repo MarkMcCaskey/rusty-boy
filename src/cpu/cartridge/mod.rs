@@ -402,10 +402,9 @@ impl IndexMut<u16> for Cartridge {
                         } else {
                             &mut self.dummy_value
                         }
-                    },
+                    }
                     Some(CartridgeSubType::Mbc1 {
-                        ram_active: false,
-                        ..
+                        ram_active: false, ..
                     }) => &mut self.dummy_value,
                     _ => panic!("at switchable ram bank"),
                 }
@@ -456,7 +455,11 @@ impl Index<u16> for Cartridge {
                     num_rom_banks,
                     ..
                 }) => {
-                    let adjusted_bank_selector = if bank_selector == 0 { 1 } else { bank_selector as usize } - 1;
+                    let adjusted_bank_selector = if bank_selector == 0 {
+                        1
+                    } else {
+                        bank_selector as usize
+                    } - 1;
                     let m = (0x4000 * num_rom_banks as usize) - 1;
                     let idx = ((adjusted_bank_selector * 0x4000) + ind as usize) & m;
                     &self.entire_rom_data[idx]
@@ -466,14 +469,22 @@ impl Index<u16> for Cartridge {
                     mem_bank_selector: bank_selector,
                     ..
                 }) => {
-                    let adjusted_bank_selector = if bank_selector == 0 { 1 } else { bank_selector as usize } - 1;
+                    let adjusted_bank_selector = if bank_selector == 0 {
+                        1
+                    } else {
+                        bank_selector as usize
+                    } - 1;
                     &self.entire_rom_data[(adjusted_bank_selector * 0x4000) + ind as usize]
                 }
                 Some(CartridgeSubType::Mbc3 {
                     mem_bank_selector: bank_selector,
                     ..
                 }) => {
-                    let adjusted_bank_selector = if bank_selector == 0 { 1 } else { bank_selector as usize } - 1;
+                    let adjusted_bank_selector = if bank_selector == 0 {
+                        1
+                    } else {
+                        bank_selector as usize
+                    } - 1;
                     &self.entire_rom_data[(adjusted_bank_selector * 0x4000) + ind as usize]
                 }
                 Some(CartridgeSubType::Mbc5 {
@@ -506,7 +517,7 @@ impl Index<u16> for Cartridge {
                         } else {
                             &NO_RAM_BUS_NOISE
                         }
-                    },
+                    }
                     Some(CartridgeSubType::Mbc3 {
                         ram_banks: ref ram_vec,
                         ram_bank_selector: rbs,
@@ -526,9 +537,7 @@ impl Index<u16> for Cartridge {
                     },
                     Some(CartridgeSubType::Mbc1 {
                         ram_active: false, ..
-                    }) => {
-                        &NO_RAM_BUS_NOISE
-                    },
+                    }) => &NO_RAM_BUS_NOISE,
                     _ => panic!("at switchable ram bank"),
                 }
             }

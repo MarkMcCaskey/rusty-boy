@@ -699,7 +699,8 @@ impl Cpu {
         if suspend_resume_mode {
             unimplemented!("suspend resume VRAM DMA");
         }
-        let src_addr = ((self.mem[0xFF51_u16] as MemAddr) << 8 | (self.mem[0xFF52_u16] as MemAddr)) & !0xF;
+        let src_addr =
+            ((self.mem[0xFF51_u16] as MemAddr) << 8 | (self.mem[0xFF52_u16] as MemAddr)) & !0xF;
         let dest_addr =
             ((self.mem[0xFF53_u16] as MemAddr) << 8 | (self.mem[0xFF54_u16] as MemAddr)) & 0x0FF0;
 
@@ -1942,8 +1943,8 @@ impl Cpu {
         }
 
         /*println!("PC:{:x} SP:{:x} A:{:x} F:{:x} B:{:x} C:{:x} D:{:x} E:{:x} H:{:x} L:{:x}",
-        self.pc, self.sp, self.a, self.f, self.b, self.c, self.d, self.e, self.h, self.l
-    );*/
+            self.pc, self.sp, self.a, self.f, self.b, self.c, self.d, self.e, self.h, self.l
+        );*/
         trace!("REG: A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} Z:{} N:{} H:{} C:{} (SP):{:02X}{:02X} (HL):{:02X}",
                self.a,
                self.b,
@@ -2034,7 +2035,7 @@ impl Cpu {
                         8
                     };
                     inst_time_set = true;
-                },
+                }
 
                 2 => self.res(y, cpu_dispatch(z)),
 
@@ -2049,7 +2050,7 @@ impl Cpu {
                 } else {
                     8
                 };
-        }
+            }
 
             self.inc_pc();
         } else {

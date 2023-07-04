@@ -188,30 +188,18 @@ impl Index<u16> for Memory {
         match index {
             0x0000..=0x7FFF | 0xA000..=0xBFFF => self.cartridge.index(index), //self.cartridge[index as u16],
             0x8000..=0x9FFF => {
-                &self.video_ram
-                    [self.gbc_vram_bank as usize]
-                    [(index - 0x8000) as usize]
-            },
-            0xC000..=0xCFFF => {
-                &self.internal_ram
-                    [0]
-                    [(index - 0xC000) as usize]
-            },
+                &self.video_ram[self.gbc_vram_bank as usize][(index - 0x8000) as usize]
+            }
+            0xC000..=0xCFFF => &self.internal_ram[0][(index - 0xC000) as usize],
             0xD000..=0xDFFF => {
-                &self.internal_ram
-                    [self.gbc_wram_bank as usize]
-                    [(index - 0xD000) as usize]
-            },
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xD000) as usize]
+            }
             0xE000..=0xEFFF => {
-                &self.internal_ram
-                    [self.gbc_wram_bank as usize]
-                    [(index - 0xE000) as usize]
-            },
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xE000) as usize]
+            }
             0xF000..=0xFDFF => {
-                &self.internal_ram
-                    [self.gbc_wram_bank as usize]
-                    [(index - 0xF000) as usize]
-            },
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xF000) as usize]
+            }
             0xFE00..=0xFE9F => &self.oam[(index - 0xFE00) as usize],
             0xFEA0..=0xFEFF => &self.empty[(index - 0xFEA0) as usize],
             0xFF00..=0xFF7F => &self.io_ports[(index - 0xFF00) as usize],
@@ -257,7 +245,7 @@ impl IndexMut<usize> for Memory {
                     }
                     _ => &mut self.io_ports[index - 0xFF00],
                 }
-            },
+            }
             0xFF80..=0xFFFE => &mut self.hram[index - 0xFF80],
             0xFFFF => &mut self.interrupt_flag,
             _ => panic!("Address out of bounds!"),
