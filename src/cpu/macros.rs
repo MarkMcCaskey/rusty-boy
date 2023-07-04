@@ -5,7 +5,7 @@ macro_rules! setter_unsetter_and_getter {
             ($name:ident, $location:expr) => {
                 //TODO: maybe add an option for setting them public?
                 pub fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location] as u8;
+                    let orig_val = self.mem[$memory_location as u16] as u8;
 
                     self.mem[$memory_location] = (orig_val | $location) as byte;
                 }
@@ -15,7 +15,7 @@ macro_rules! setter_unsetter_and_getter {
         macro_rules! $name_unsetter {
             ($name:ident, $location:expr) => {
                 fn $name(&mut self) {
-                    let orig_val = self.mem[$memory_location] as u8;
+                    let orig_val = self.mem[$memory_location as u16] as u8;
 
                     self.mem[$memory_location] = (orig_val & (!$location)) as byte;
                 }
@@ -25,7 +25,7 @@ macro_rules! setter_unsetter_and_getter {
         macro_rules! $name_getter {
             ($name:ident, $location:expr) => {
                 pub fn $name(&self) -> bool {
-                    ((self.mem[$memory_location] as u8) & $location) == $location
+                    ((self.mem[$memory_location as u16] as u8) & $location) == $location
                 }
             };
         }

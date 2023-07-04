@@ -181,7 +181,7 @@ impl Cpu {
     /// This needs to be called 16384 (~16779 on SGB) times a second
     ///
     pub fn inc_div(&mut self) {
-        let old_val = self.mem[0xFF04];
+        let old_val = self.mem[0xFF04_u16];
         self.mem[0xFF04] = old_val.wrapping_add(1);
     }
 
@@ -189,7 +189,7 @@ impl Cpu {
     /// writing to 0xFF07
     pub fn timer_frequency_hz(&self) -> u32 {
         // NOTE these values differ for SGB
-        match self.mem[0xFF07] & 0x3 {
+        match self.mem[0xFF07_u16] & 0x3 {
             0 => 4096,
             1 => 262_144,
             2 => 65_536,
@@ -247,19 +247,19 @@ impl Cpu {
 
     /* sound */
     pub fn channel1_sweep_time(&self) -> f32 {
-        (((self.mem[0xFF10] >> 4) & 0x7) as f32) / 128.0
+        (((self.mem[0xFF10_u16] >> 4) & 0x7) as f32) / 128.0
     }
 
     pub fn channel1_sweep_increase(&self) -> bool {
-        ((self.mem[0xFF10] >> 3) & 1) == 0
+        ((self.mem[0xFF10_u16] >> 3) & 1) == 0
     }
 
     pub fn channel1_sweep_shift(&self) -> u8 {
-        self.mem[0xFF10] & 0x7
+        self.mem[0xFF10_u16] & 0x7
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
-        match (self.mem[0xFF11] >> 6) & 0x3 {
+        match (self.mem[0xFF11_u16] >> 6) & 0x3 {
             0 => 0.125,
             1 => 0.25,
             2 => 0.5,
@@ -269,24 +269,24 @@ impl Cpu {
     }
 
     pub fn channel1_sound_length(&self) -> u8 {
-        self.mem[0xFF11] & 0x3F
+        self.mem[0xFF11_u16] & 0x3F
     }
 
     pub fn channel1_envelope_initial_volume(&self) -> u8 {
-        (self.mem[0xFF12] >> 4) & 0xF
+        (self.mem[0xFF12_u16] >> 4) & 0xF
     }
 
     pub fn channel1_envelope_increasing(&self) -> bool {
-        ((self.mem[0xFF12] >> 3) & 0x1) == 1
+        ((self.mem[0xFF12_u16] >> 3) & 0x1) == 1
     }
 
     pub fn channel1_envelope_sweep(&self) -> u8 {
-        self.mem[0xFF12] & 0x7
+        self.mem[0xFF12_u16] & 0x7
     }
 
     pub fn channel1_frequency(&self) -> u16 {
-        let lower = self.mem[0xFF13];
-        let higher = self.mem[0xFF14] & 0x7;
+        let lower = self.mem[0xFF13_u16];
+        let higher = self.mem[0xFF14_u16] & 0x7;
         byte_to_u16(lower, higher)
     }
 
@@ -296,32 +296,32 @@ impl Cpu {
     }
 
     pub fn channel1_restart_sound(&self) -> bool {
-        ((self.mem[0xFF14] >> 7) & 1) == 1
+        ((self.mem[0xFF14_u16] >> 7) & 1) == 1
     }
 
     pub fn channel2_wave_pattern_duty(&self) -> u8 {
-        (self.mem[0xFF16] >> 6) & 0x3
+        (self.mem[0xFF16_u16] >> 6) & 0x3
     }
 
     pub fn channel2_sound_length(&self) -> u8 {
-        self.mem[0xFF16] & 0x3F
+        self.mem[0xFF16_u16] & 0x3F
     }
 
     pub fn channel2_envelope_initial_volume(&self) -> u8 {
-        (self.mem[0xFF17] >> 4) & 0xF
+        (self.mem[0xFF17_u16] >> 4) & 0xF
     }
 
     pub fn channel2_envelope_increasing(&self) -> bool {
-        ((self.mem[0xFF17] >> 3) & 0x1) == 1
+        ((self.mem[0xFF17_u16] >> 3) & 0x1) == 1
     }
 
     pub fn channel2_envelope_sweep(&self) -> u8 {
-        self.mem[0xFF17] & 0x7
+        self.mem[0xFF17_u16] & 0x7
     }
 
     pub fn channel2_frequency(&self) -> u16 {
-        let lower = self.mem[0xFF18];
-        let higher = self.mem[0xFF19] & 0x7;
+        let lower = self.mem[0xFF18_u16];
+        let higher = self.mem[0xFF19_u16] & 0x7;
 
         byte_to_u16(lower, higher)
     }
@@ -332,15 +332,15 @@ impl Cpu {
     }
 
     pub fn channel2_restart_sound(&self) -> bool {
-        ((self.mem[0xFF19] >> 7) & 1) == 1
+        ((self.mem[0xFF19_u16] >> 7) & 1) == 1
     }
 
     pub fn channel3_on(&self) -> bool {
-        ((self.mem[0xFF1A] >> 7) & 1) == 1
+        ((self.mem[0xFF1A_u16] >> 7) & 1) == 1
     }
 
     pub fn channel3_sound_length(&self) -> u8 {
-        self.mem[0xFF1B]
+        self.mem[0xFF1B_u16]
     }
 
     pub fn channel3_output_level(&self) {
@@ -348,14 +348,14 @@ impl Cpu {
     }
 
     pub fn channel3_frequency(&self) -> u16 {
-        let lower = self.mem[0xFF1C];
-        let higher = self.mem[0xFF1D] & 0x7;
+        let lower = self.mem[0xFF1C_u16];
+        let higher = self.mem[0xFF1D_u16] & 0x7;
 
         byte_to_u16(lower, higher)
     }
 
     pub fn channel3_shift_amount(&self) -> u8 {
-        match (self.mem[0xFF1C] >> 5) & 0x3 {
+        match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
             0 => 4, //to mute
             1 => 0,
             2 => 1,
@@ -370,7 +370,7 @@ impl Cpu {
     }
 
     pub fn channel3_restart_sound(&self) -> bool {
-        ((self.mem[0xFF1D] >> 7) & 1) == 1
+        ((self.mem[0xFF1D_u16] >> 7) & 1) == 1
     }
 
     pub fn channel3_wave_pattern_ram(&self) -> [u8; 32] {
@@ -392,13 +392,13 @@ impl Cpu {
     }
 
     fn is_timer_on(&self) -> bool {
-        (self.mem[0xFF07] & 0x4) >> 2 == 1
+        (self.mem[0xFF07_u16] & 0x4) >> 2 == 1
     }
 
     fn inc_timer(&mut self) {
-        let old_val = self.mem[0xFF05];
+        let old_val = self.mem[0xFF05_u16];
         // TMA; value which is to be set on overflow
-        let new_val = self.mem[0xFF06];
+        let new_val = self.mem[0xFF06_u16];
 
         self.mem[0xFF05] = if old_val.wrapping_add(1) == 0 {
             // on overflow...
@@ -556,36 +556,36 @@ impl Cpu {
     }
 
     pub fn lcdc_on(&self) -> bool {
-        (self.mem[0xFF40] >> 7) & 1 == 1
+        (self.mem[0xFF40_u16] >> 7) & 1 == 1
     }
     pub fn lcdc_tile_map(&self) -> bool {
-        (self.mem[0xFF40] >> 6) & 1 == 1
+        (self.mem[0xFF40_u16] >> 6) & 1 == 1
     }
     pub fn lcdc_window_on(&self) -> bool {
-        (self.mem[0xFF40] >> 5) & 1 == 1
+        (self.mem[0xFF40_u16] >> 5) & 1 == 1
     }
     pub fn lcdc_bg_win_tile_data(&self) -> bool {
-        (self.mem[0xFF40] >> 4) & 1 == 1
+        (self.mem[0xFF40_u16] >> 4) & 1 == 1
     }
     pub fn lcdc_bg_tile_map(&self) -> bool {
-        (self.mem[0xFF40] >> 3) & 1 == 1
+        (self.mem[0xFF40_u16] >> 3) & 1 == 1
     }
     pub fn lcdc_sprite_size(&self) -> bool {
-        (self.mem[0xFF40] >> 2) & 1 == 1
+        (self.mem[0xFF40_u16] >> 2) & 1 == 1
     }
     pub fn lcdc_sprite_display(&self) -> bool {
-        (self.mem[0xFF40] >> 1) & 1 == 1
+        (self.mem[0xFF40_u16] >> 1) & 1 == 1
     }
     pub fn lcdc_bg_win_display(&self) -> bool {
-        self.mem[0xFF40] & 1 == 1
+        self.mem[0xFF40_u16] & 1 == 1
     }
 
     pub fn window_x_pos(&self) -> u8 {
-        self.mem[0xFF4B]
+        self.mem[0xFF4B_u16]
     }
 
     pub fn window_y_pos(&self) -> u8 {
-        self.mem[0xFF4A]
+        self.mem[0xFF4A_u16]
     }
 
     pub fn get_background_tiles(&self) -> [[byte; 64]; 32 * 32] {
@@ -636,14 +636,14 @@ impl Cpu {
     }
 
     pub fn scy(&self) -> u8 {
-        self.mem[0xFF42]
+        self.mem[0xFF42_u16]
     }
     pub fn scx(&self) -> u8 {
-        self.mem[0xFF43]
+        self.mem[0xFF43_u16]
     }
 
     pub fn ly(&self) -> u8 {
-        self.mem[0xFF44]
+        self.mem[0xFF44_u16]
     }
 
     pub fn inc_ly(&mut self) {
@@ -660,7 +660,7 @@ impl Cpu {
     }
 
     pub fn lyc(&self) -> u8 {
-        self.mem[0xFF45]
+        self.mem[0xFF45_u16]
     }
 
     fn lyc_compare(&mut self) {
@@ -681,7 +681,7 @@ impl Cpu {
     ///
     /// During DMA, everything but high memory should be blocked
     fn dma(&mut self) {
-        let addr = (self.mem[0xFF46] as MemAddr) << 8;
+        let addr = (self.mem[0xFF46_u16] as MemAddr) << 8;
 
         for i in 0..0xA0 {
             //number of values to be copied
@@ -699,12 +699,12 @@ impl Cpu {
         if suspend_resume_mode {
             unimplemented!("suspend resume VRAM DMA");
         }
-        let src_addr = ((self.mem[0xFF51] as MemAddr) << 8 | (self.mem[0xFF52] as MemAddr)) & !0xF;
+        let src_addr = ((self.mem[0xFF51_u16] as MemAddr) << 8 | (self.mem[0xFF52_u16] as MemAddr)) & !0xF;
         let dest_addr =
-            ((self.mem[0xFF53] as MemAddr) << 8 | (self.mem[0xFF54] as MemAddr)) & 0x0FF0;
+            ((self.mem[0xFF53_u16] as MemAddr) << 8 | (self.mem[0xFF54_u16] as MemAddr)) & 0x0FF0;
 
         let chunks_to_copy = {
-            let cc = self.mem[0xFF55] & 0x7F;
+            let cc = self.mem[0xFF55_u16] & 0x7F;
             if cc == 0 {
                 0
             } else {
@@ -737,38 +737,38 @@ impl Cpu {
     }
 
     pub fn bgp(&self) -> (byte, byte, byte, byte) {
-        let v4 = ((self.mem[0xFF47] >> 6) & 0x3) as byte;
-        let v3 = ((self.mem[0xFF47] >> 4) & 0x3) as byte;
-        let v2 = ((self.mem[0xFF47] >> 2) & 0x3) as byte;
-        let v1 = (self.mem[0xFF47] & 0x3) as byte;
+        let v4 = ((self.mem[0xFF47_u16] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF47_u16] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF47_u16] >> 2) & 0x3) as byte;
+        let v1 = (self.mem[0xFF47_u16] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
 
     pub fn obp0(&self) -> (byte, byte, byte, byte) {
-        let v4 = ((self.mem[0xFF48] >> 6) & 0x3) as byte;
-        let v3 = ((self.mem[0xFF48] >> 4) & 0x3) as byte;
-        let v2 = ((self.mem[0xFF48] >> 2) & 0x3) as byte;
-        let v1 = (self.mem[0xFF48] & 0x3) as byte;
+        let v4 = ((self.mem[0xFF48_u16] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF48_u16] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF48_u16] >> 2) & 0x3) as byte;
+        let v1 = (self.mem[0xFF48_u16] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
 
     pub fn obp1(&self) -> (byte, byte, byte, byte) {
-        let v4 = ((self.mem[0xFF49] >> 6) & 0x3) as byte;
-        let v3 = ((self.mem[0xFF49] >> 4) & 0x3) as byte;
-        let v2 = ((self.mem[0xFF49] >> 2) & 0x3) as byte;
-        let v1 = (self.mem[0xFF49] & 0x3) as byte;
+        let v4 = ((self.mem[0xFF49_u16] >> 6) & 0x3) as byte;
+        let v3 = ((self.mem[0xFF49_u16] >> 4) & 0x3) as byte;
+        let v2 = ((self.mem[0xFF49_u16] >> 2) & 0x3) as byte;
+        let v1 = (self.mem[0xFF49_u16] & 0x3) as byte;
 
         (v1, v2, v3, v4)
     }
 
     pub fn wy(&self) -> u8 {
-        self.mem[0xFF4A]
+        self.mem[0xFF4A_u16]
     }
 
     pub fn wx(&self) -> u8 {
-        self.mem[0xFF4B]
+        self.mem[0xFF4B_u16]
     }
 
     //input register for joypad
@@ -797,7 +797,7 @@ impl Cpu {
 
     pub fn get_game_name(&self) -> String {
         let mut name_data: Vec<u8> = vec![];
-        for i in 0..16 {
+        for i in 0..16_u16 {
             if self.mem[0x134 + i] != 0 {
                 name_data.push(self.mem[0x134 + i]);
             }
@@ -809,7 +809,7 @@ impl Cpu {
     }
 
     pub fn get_cartridge_type(&self) -> u8 {
-        self.mem[0x147]
+        self.mem[0x147_u16]
     }
 
     fn enable_interrupts(&mut self) {
@@ -913,7 +913,7 @@ impl Cpu {
         if let Some(ref mut logger) = self.mem.logger {
             logger.log_read(self.cycles, address);
         }
-        self.mem[address as usize]
+        self.mem[address]
     }
 
     #[inline]
@@ -1533,7 +1533,7 @@ impl Cpu {
         debug!("STOP");
         if self.gbc_mode {
             // maybe track the state and check if in "waiting for speed switch" state
-            let speed_mode = (self.mem[0xFF4D] & 1) == 1;
+            let speed_mode = (self.mem[0xFF4D_u16] & 1) == 1;
             self.double_speed = speed_mode;
             self.mem[0xFF4D] = (speed_mode as u8) << 7;
         } else {
@@ -1941,6 +1941,9 @@ impl Cpu {
             }
         }
 
+        /*println!("PC:{:x} SP:{:x} A:{:x} F:{:x} B:{:x} C:{:x} D:{:x} E:{:x} H:{:x} L:{:x}",
+        self.pc, self.sp, self.a, self.f, self.b, self.c, self.d, self.e, self.h, self.l
+    );*/
         trace!("REG: A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} Z:{} N:{} H:{} C:{} (SP):{:02X}{:02X} (HL):{:02X}",
                self.a,
                self.b,
@@ -2004,6 +2007,7 @@ impl Cpu {
             let x = (second_byte >> 6) & 0x3;
             let y = (second_byte >> 3) & 0x7;
             let z = second_byte & 0x7;
+            let mut inst_time_set = false;
 
             match x {
                 // xxyy yzzz
@@ -2022,7 +2026,15 @@ impl Cpu {
                     }
                 }
 
-                1 => self.bit(y, cpu_dispatch(z)),
+                1 => {
+                    self.bit(y, cpu_dispatch(z));
+                    inst_time = if CpuRegister::HL == cpu_dispatch(z) {
+                        12
+                    } else {
+                        8
+                    };
+                    inst_time_set = true;
+                },
 
                 2 => self.res(y, cpu_dispatch(z)),
 
@@ -2031,11 +2043,13 @@ impl Cpu {
                 _ => unreachable!("{}", uf),
             }
 
-            inst_time = if CpuRegister::HL == cpu_dispatch(z) {
-                16
-            } else {
-                8
-            };
+            if !inst_time_set {
+                inst_time = if CpuRegister::HL == cpu_dispatch(z) {
+                    16
+                } else {
+                    8
+                };
+        }
 
             self.inc_pc();
         } else {
@@ -2054,7 +2068,7 @@ impl Cpu {
                         3 => {
                             self.jrn(second_byte as i8);
                             self.inc_pc();
-                            inst_time = 8;
+                            inst_time = 12;
                         } //0x18
                         v @ 4..=7 => {
                             inst_time = 8 + if self.jrccn(cc_dispatch(v - 4), second_byte as i8) {
@@ -2204,6 +2218,7 @@ impl Cpu {
                             inst_time = 16;
                         },
                         6 => {
+                            // F0
                             self.ldhan(second_byte);
                             self.inc_pc();
                             inst_time = 12;
@@ -2369,7 +2384,8 @@ impl Cpu {
     pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
         trace!("Loading ROM");
         self.mem.load(file_path);
-        self.gbc_mode = self.mem.gbc_mode();
+        // temporarily disable this
+        //self.gbc_mode = self.mem.gbc_mode();
         if self.gbc_mode {
             self.mem.set_gbc_mode();
         }

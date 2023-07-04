@@ -218,7 +218,7 @@ where
     let mut x = 0;
     let mut y = 0;
 
-    for i in 0..0xFFFF {
+    for i in 0..0xFFFFu16 {
         let p = gameboy.mem[i];
 
         use sdl2::pixels::*;
