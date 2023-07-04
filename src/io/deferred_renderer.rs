@@ -16,7 +16,7 @@ use crate::io::constants::*;
 
 struct SpriteData {
     // store pixel data here in unmapped form and mapping?
-// is this too hard on CGB? hmm
+    // is this too hard on CGB? hmm
 }
 
 // FF44(LY) LCDC Y coord

@@ -35,8 +35,8 @@ impl MemVisState {
 
     /// Returns maybe a memory address given the coordinates of the memory visualization
     pub fn screen_coord_to_mem_addr(&self, point: Point) -> Option<MemAddr> {
-        let x_scaled = point.x() as i32;
-        let y_scaled = point.y() as i32;
+        let x_scaled = point.x();
+        let y_scaled = point.y();
         // FIXME this check is not correct
         if x_scaled < MEM_DISP_WIDTH && y_scaled < MEM_DISP_HEIGHT + 1 {
             Some((x_scaled + y_scaled * MEM_DISP_WIDTH) as u16)
@@ -176,7 +176,7 @@ impl Drawable for MemVisState {
 fn addr_to_point(addr: u16) -> Point {
     let x = (addr as i32) % MEM_DISP_WIDTH;
     let y = (addr as i32) / MEM_DISP_WIDTH;
-    Point::new(x as i32, y as i32)
+    Point::new(x, y)
 }
 
 /// Clamp i16 value to 0-255 range.
@@ -218,14 +218,14 @@ where
     let mut x = 0;
     let mut y = 0;
 
-    for i in 0..0xFFFF {
+    for i in 0..0xFFFFu16 {
         let p = gameboy.mem[i];
 
         use sdl2::pixels::*;
 
         // renderer.set_draw_color(Color::RGB(r,g,b));
         // renderer.set_draw_color(Color::RGB(p as u8, p as u8, p as u8));
-        renderer.set_draw_color(Color::RGB(0 as u8, 0 as u8, p as u8));
+        renderer.set_draw_color(Color::RGB(0, 0, p));
         // debug!("pixel at {}, {} is {}", x, y, p);
 
         let point = Point::new(x, y);
@@ -355,7 +355,7 @@ where
                 let colval = (time_norm * 255.0) as u8;
                 match *event {
                     CpuEvent::Read { from: addr } => {
-                        let val = gameboy.mem[addr as usize] as u8;
+                        let val = gameboy.mem[addr as usize];
                         let (r, g, b) = mix_color(0, colval, 0, scale_col(colval, val / 2), 0, val);
                         renderer.set_draw_color(Color::RGB(r, g, b));
                         match renderer.draw_point(addr_to_point(addr)) {
@@ -364,7 +364,7 @@ where
                         }
                     }
                     CpuEvent::Write { to: addr } => {
-                        let val = gameboy.mem[addr as usize] as u8;
+                        let val = gameboy.mem[addr as usize];
                         let (r, g, b) = mix_color(colval, 0, 0, 0, scale_col(colval, val / 2), val);
                         renderer.set_draw_color(Color::RGB(r, g, b));
                         match renderer.draw_point(addr_to_point(addr)) {
@@ -373,7 +373,7 @@ where
                         }
                     }
                     CpuEvent::Execute(addr) => {
-                        let val = gameboy.mem[addr as usize] as u8;
+                        let val = gameboy.mem[addr as usize];
                         let (r, g, b) = mix_color(colval, colval, scale_col(colval, val), 0, 0, 0);
                         renderer.set_draw_color(Color::RGB(r, g, b));
                         match renderer.draw_point(addr_to_point(addr)) {
@@ -410,10 +410,10 @@ where
 
 fn print_address_info(pc: MemAddr, cpu: &Cpu) {
     let pc = pc as usize;
-    let ref mem = cpu.mem;
+    let mem = &cpu.mem;
     let b1 = mem[pc + 1];
     let b2 = mem[pc + 2];
-    let (mnem, _) = disasm::pp_opcode(mem[pc] as u8, b1 as u8, b2 as u8, pc as u16);
+    let (mnem, _) = disasm::pp_opcode(mem[pc], b1, b2, pc as u16);
     let nn = byte_to_u16(b1, b2);
     println!(
         "${:04X} {:16} 0x{:02X} 0x{:02X} 0x{:02X} 0x{:04X}",

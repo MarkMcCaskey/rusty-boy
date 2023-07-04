@@ -78,7 +78,7 @@ impl Memory {
 
     pub fn write_ram_value(&mut self, index: u16, value: byte) {
         match index {
-            0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.write_ram_value(index, value),
+            0x0000..=0x7FFF | 0xA000..=0xBFFF => self.cartridge.write_ram_value(index, value),
             _ => self[index as usize] = value,
         }
     }
@@ -87,13 +87,11 @@ impl Memory {
         *self.cartridge = Cartridge::load(input_file).expect("Could not load ROM");
     }
 
-    pub fn load_saved_ram(&mut self, data_path: PathBuf, game_name: &str) {
-        let mut path = data_path.clone();
-
+    pub fn load_saved_ram(&mut self, mut path: PathBuf, game_name: &str) {
         path.push(game_name);
         path.set_extension("savedgame");
 
-        self.cartridge.load_ram(&mut path);
+        self.cartridge.load_ram(&path);
     }
 
     pub fn save_ram(&self, data_path: PathBuf, game_name: &str) {
@@ -121,16 +119,16 @@ impl Memory {
         let mut mem_buffer: [byte; 0x1_0000] = [0u8; 0x1_0000];
         for index in 0..0xFFFF {
             mem_buffer[index] = match index {
-                0x0000...0x7FFF | 0xA000...0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
-                0x8000...0x9FFF => self.video_ram[self.gbc_vram_bank as usize][index - 0x8000],
-                0xC000...0xCFFF => self.internal_ram[0][index - 0xC000],
-                0xD000...0xDFFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
-                0xE000...0xEFFF => self.internal_ram[0][index - 0xE000],
-                0xF000...0xFDFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
-                0xFE00...0xFE9F => self.oam[index - 0xFE00],
-                0xFEA0...0xFEFF => self.empty[index - 0xFEA0],
-                0xFF00...0xFF7F => self.io_ports[index - 0xFF00],
-                0xFF80...0xFFFE => self.hram[index - 0xFF80],
+                0x0000..=0x7FFF | 0xA000..=0xBFFF => *self.cartridge.index(index as u16), //self.cartridge[index as u16],
+                0x8000..=0x9FFF => self.video_ram[self.gbc_vram_bank as usize][index - 0x8000],
+                0xC000..=0xCFFF => self.internal_ram[0][index - 0xC000],
+                0xD000..=0xDFFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
+                0xE000..=0xEFFF => self.internal_ram[0][index - 0xE000],
+                0xF000..=0xFDFF => self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
+                0xFE00..=0xFE9F => self.oam[index - 0xFE00],
+                0xFEA0..=0xFEFF => self.empty[index - 0xFEA0],
+                0xFF00..=0xFF7F => self.io_ports[index - 0xFF00],
+                0xFF80..=0xFFFE => self.hram[index - 0xFF80],
                 0xFFFF => self.interrupt_flag,
                 _ => 0,
             };
@@ -139,15 +137,22 @@ impl Memory {
     }
 
     pub fn reset(&mut self, sgb_mode: bool) {
+        self[0xFF00] = 0xCF;
+        self[0xFF01] = 0x00;
+        self[0xFF02] = 0x7E;
+        self[0xFF04] = 0xAB;
         self[0xFF05] = 0x00;
         self[0xFF06] = 0x00;
-        self[0xFF07] = 0x00;
+        self[0xFF07] = 0xF8;
+        self[0xFF0F] = 0xE1;
         self[0xFF10] = 0x80;
         self[0xFF11] = 0xBF;
         self[0xFF12] = 0xF3;
+        self[0xFF13] = 0xFF;
         self[0xFF14] = 0xBF;
         self[0xFF16] = 0x3F;
         self[0xFF17] = 0x00;
+        self[0xFF18] = 0xFF;
         self[0xFF19] = 0xBF;
         self[0xFF1A] = 0x7F;
         self[0xFF1B] = 0xFF;
@@ -161,9 +166,12 @@ impl Memory {
         self[0xFF25] = 0xF3;
         self[0xFF26] = if sgb_mode { 0xF0 } else { 0xF1 };
         self[0xFF40] = 0x91;
+        self[0xFF41] = 0x85;
         self[0xFF42] = 0x00;
         self[0xFF43] = 0x00;
+        self[0xFF44] = 0x00;
         self[0xFF45] = 0x00;
+        self[0xFF46] = 0xFF;
         self[0xFF47] = 0xFC;
         self[0xFF48] = 0xFF;
         self[0xFF49] = 0xFF;
@@ -173,65 +181,72 @@ impl Memory {
     }
 }
 
+impl Index<u16> for Memory {
+    type Output = u8;
+
+    fn index(&self, index: u16) -> &u8 {
+        match index {
+            0x0000..=0x7FFF | 0xA000..=0xBFFF => self.cartridge.index(index), //self.cartridge[index as u16],
+            0x8000..=0x9FFF => {
+                &self.video_ram[self.gbc_vram_bank as usize][(index - 0x8000) as usize]
+            }
+            0xC000..=0xCFFF => &self.internal_ram[0][(index - 0xC000) as usize],
+            0xD000..=0xDFFF => {
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xD000) as usize]
+            }
+            0xE000..=0xEFFF => {
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xE000) as usize]
+            }
+            0xF000..=0xFDFF => {
+                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xF000) as usize]
+            }
+            0xFE00..=0xFE9F => &self.oam[(index - 0xFE00) as usize],
+            0xFEA0..=0xFEFF => &self.empty[(index - 0xFEA0) as usize],
+            0xFF00..=0xFF7F => &self.io_ports[(index - 0xFF00) as usize],
+            0xFF80..=0xFFFE => &self.hram[(index - 0xFF80) as usize],
+            0xFFFF => &self.interrupt_flag,
+        }
+    }
+}
+
 impl Index<usize> for Memory {
     type Output = byte;
 
     fn index(&self, index: usize) -> &byte {
         //TODO: figure out why it's being indexed too high
-        match index % 0x1_0000 {
-            0x0000...0x7FFF | 0xA000...0xBFFF => self.cartridge.index(index as u16), //self.cartridge[index as u16],
-            0x8000...0x9FFF => unsafe {
-                self.video_ram
-                    .get_unchecked(self.gbc_vram_bank as usize)
-                    .get_unchecked(index - 0x8000)
-            },
-            0xC000...0xCFFF => unsafe {
-                self.internal_ram
-                    .get_unchecked(0)
-                    .get_unchecked(index - 0xC000)
-            },
-            0xD000...0xDFFF => unsafe {
-                self.internal_ram
-                    .get_unchecked(self.gbc_wram_bank as usize)
-                    .get_unchecked(index - 0xD000)
-            },
-            0xE000...0xEFFF => unsafe {
-                self.internal_ram
-                    .get_unchecked(self.gbc_wram_bank as usize)
-                    .get_unchecked(index - 0xE000)
-            },
-            0xF000...0xFDFF => unsafe {
-                self.internal_ram
-                    .get_unchecked(self.gbc_wram_bank as usize)
-                    .get_unchecked(index - 0xF000)
-            },
-            0xFE00...0xFE9F => unsafe { self.oam.get_unchecked(index - 0xFE00) },
-            0xFEA0...0xFEFF => unsafe { self.empty.get_unchecked(index - 0xFEA0) },
-            0xFF00...0xFF7F => unsafe { self.io_ports.get_unchecked(index - 0xFF00) },
-            0xFF80...0xFFFE => unsafe { self.hram.get_unchecked(index - 0xFF80) },
-            0xFFFF => &self.interrupt_flag,
-            _ => panic!("Address 0x{:X} is out of bounds!", index),
-        }
+        &self[(index % 0x1_0000) as u16]
     }
 }
 
 impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
         match index % 0x1_0000 {
-            0x0000...0x7FFF | 0xA000...0xBFFF => &mut self.cartridge[index as u16],
-            0x8000...0x9FFF => unsafe {
+            0x0000..=0x7FFF | 0xA000..=0xBFFF => &mut self.cartridge[index as u16],
+            0x8000..=0x9FFF => unsafe {
                 self.video_ram
                     .get_unchecked_mut(self.gbc_vram_bank as usize)
                     .get_unchecked_mut(index - 0x8000)
             },
-            0xC000...0xCFFF => &mut self.internal_ram[0][index - 0xC000],
-            0xD000...0xDFFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
-            0xE000...0xEFFF => &mut self.internal_ram[0][index - 0xE000],
-            0xF000...0xFDFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
-            0xFE00...0xFE9F => &mut self.oam[index - 0xFE00],
-            0xFEA0...0xFEFF => &mut self.empty[index - 0xFEA0],
-            0xFF00...0xFF7F => &mut self.io_ports[index - 0xFF00],
-            0xFF80...0xFFFE => &mut self.hram[index - 0xFF80],
+            0xC000..=0xCFFF => &mut self.internal_ram[0][index - 0xC000],
+            0xD000..=0xDFFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
+            0xE000..=0xEFFF => &mut self.internal_ram[0][index - 0xE000],
+            0xF000..=0xFDFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xF000],
+            0xFE00..=0xFE9F => &mut self.oam[index - 0xFE00],
+            0xFEA0..=0xFEFF => &mut self.empty[index - 0xFEA0],
+            0xFF00..=0xFF7F => {
+                match index {
+                    // link port synchronization
+                    // hack for now
+                    0xFF02 => {
+                        //self.io_ports[0x02] = 0x7E;
+                        // interrupt handler should be called, but let's try not doing it for now
+                        print!("{}", self.io_ports[0x01] as char);
+                        &mut self.io_ports[0x02]
+                    }
+                    _ => &mut self.io_ports[index - 0xFF00],
+                }
+            }
+            0xFF80..=0xFFFE => &mut self.hram[index - 0xFF80],
             0xFFFF => &mut self.interrupt_flag,
             _ => panic!("Address out of bounds!"),
         }

@@ -2,34 +2,33 @@ macro_rules! setter_unsetter_and_getter {
     ($name_setter:ident, $name_unsetter:ident, $name_getter:ident,
      $memory_location:expr) => {
         macro_rules! $name_setter {
-                            ($name:ident, $location:expr) => {
-                                //TODO: maybe add an option for setting them public?
-                                pub fn $name(&mut self) {
-                                    let orig_val = self.mem[$memory_location] as u8;
+            ($name:ident, $location:expr) => {
+                //TODO: maybe add an option for setting them public?
+                pub fn $name(&mut self) {
+                    let orig_val = self.mem[$memory_location as u16] as u8;
 
-                                    self.mem[$memory_location] = (orig_val | $location) as byte;
-                                }
-                            }
-                        }
+                    self.mem[$memory_location] = (orig_val | $location) as byte;
+                }
+            };
+        }
 
         macro_rules! $name_unsetter {
-                            ($name:ident, $location:expr) => {
-                                pub fn $name(&mut self) {
-                                    let orig_val = self.mem[$memory_location] as u8;
+            ($name:ident, $location:expr) => {
+                fn $name(&mut self) {
+                    let orig_val = self.mem[$memory_location as u16] as u8;
 
-                                    self.mem[$memory_location] = (orig_val & (!$location)) as byte;
-                                }
-                            }
-                        }
+                    self.mem[$memory_location] = (orig_val & (!$location)) as byte;
+                }
+            };
+        }
 
         macro_rules! $name_getter {
-                            ($name:ident, $location:expr) => {
-                                pub fn $name(&self) -> bool{
-                                    ((self.mem[$memory_location] as u8) & $location)
-                                        == $location
-                                }
-                            }
-                        }
+            ($name:ident, $location:expr) => {
+                pub fn $name(&self) -> bool {
+                    ((self.mem[$memory_location as u16] as u8) & $location) == $location
+                }
+            };
+        }
     };
 }
 
@@ -66,6 +65,7 @@ macro_rules! even_odd_dispatch {
             $cpu.$func0($f0dispfunc(adjusted_number));
 
             // TODO: Verify this executes it n-1 times
+            #[allow(clippy::reversed_empty_ranges)]
             for _ in 1..($f0pcincs) {
                 $cpu.inc_pc();
             }
@@ -73,6 +73,7 @@ macro_rules! even_odd_dispatch {
             let adjusted_number: u8 = $num / 2;
             $cpu.$func1($f1dispfunc(adjusted_number));
 
+            #[allow(clippy::reversed_empty_ranges)]
             for _ in 1..($f1pcincs) {
                 $cpu.inc_pc();
             }
@@ -101,5 +102,5 @@ macro_rules! button {
             let old_val = self.input_state;
             self.input_state = (old_val | $location) as byte;
         }
-    }
+    };
 }

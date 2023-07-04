@@ -5,7 +5,7 @@ extern crate clap;
 use std::num::Wrapping;
 
 #[allow(unknown_lints)]
-#[allow(many_single_char_names)]
+#[allow(clippy::many_single_char_names)]
 pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (String, u8) {
     let x = (first_byte >> 6) & 0b011;
     let y = (first_byte >> 3) & 0b111;
@@ -69,29 +69,29 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
         // Converting indexes encoded in commands to symbolic arguments
         fn idx_r(i: u8) -> &'static str {
             ["B", "C", "D", "E", "H", "L", "(HL)", "A"][i as usize]
-        };
+        }
 
         fn idx_rp(i: u8) -> &'static str {
             ["BC", "DE", "HL", "SP"][i as usize]
-        };
+        }
 
         fn idx_rp2(i: u8) -> &'static str {
             ["BC", "DE", "HL", "AF"][i as usize]
-        };
+        }
 
         fn idx_cc(i: u8) -> &'static str {
             ["NZ", "Z", "NC", "C"][i as usize]
-        };
+        }
 
         fn idx_alu(i: u8) -> &'static str {
             [
                 "ADD A,", "ADC A,", "SUB", "SBC A,", "AND", "XOR", "OR", "CP",
             ][i as usize]
-        };
+        }
 
         fn idx_rot(i: u8) -> &'static str {
             ["RLC", "RRC", "RL", "RR", "SLA", "SRA", "SWAP", "SRL"][i as usize]
-        };
+        }
 
         fn illegal_op(byte: u8) -> String {
             format!(".DB ${:02X}", byte)
@@ -164,7 +164,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                 match z {
                     0 => {
                         match y {
-                            0...3 => format!("RET {}", idx_cc(y)),
+                            0..=3 => format!("RET {}", idx_cc(y)),
                             // 4 => format!("LDH ({}),A", a8()),
                             4 => format!("LD ($FF00+{}),A", a8()),
                             5 => format!("ADD SP,{}", r8(0)), // FIXME
@@ -186,7 +186,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                         _ => unreachable!("Impossible opcode"),
                     },
                     2 => match y {
-                        0...3 => format!("JP {},{}", idx_cc(y), a16()),
+                        0..=3 => format!("JP {},{}", idx_cc(y), a16()),
                         4 => "LD ($FF00+C),A".to_string(),
                         5 => format!("LD ({}),A", a16()),
                         6 => "LD A,($FF00+C)".to_string(),
@@ -214,22 +214,22 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
                                     _ => unreachable!("Impossible opcode"),
                                 }
                             }
-                            2...5 => illegal_op(first_byte),
+                            2..=5 => illegal_op(first_byte),
                             6 => "DI".to_string(),
                             7 => "EI".to_string(),
                             _ => unreachable!("Impossible opcode"),
                         }
                     }
                     4 => match y {
-                        0...3 => format!("CALL {},{}", idx_cc(y), a16()),
-                        4...7 => illegal_op(first_byte),
+                        0..=3 => format!("CALL {},{}", idx_cc(y), a16()),
+                        4..=7 => illegal_op(first_byte),
                         _ => unreachable!("Impossible opcode"),
                     },
                     5 => match q {
                         0 => format!("PUSH {}", idx_rp2(p)),
                         1 => match p {
                             0 => format!("CALL {}", a16()),
-                            1...3 => illegal_op(first_byte),
+                            1..=3 => illegal_op(first_byte),
                             _ => unreachable!("Impossible opcode"),
                         },
                         _ => unreachable!("Impossible opcode"),
@@ -326,7 +326,7 @@ fn main() {
         Err(e) => {
             eprintln!("Could not read ROM file");
             eprintln!("{}", e);
-            return ();
+            return;
         }
     };
 

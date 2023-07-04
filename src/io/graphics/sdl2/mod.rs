@@ -75,7 +75,7 @@ impl Sdl2Renderer {
             .accelerated()
             .present_vsync()
             .build()
-            .or_else(|_| Err("Could not create SDL2 window"))?;
+            .map_err(|_| "Could not create SDL2 window")?;
 
         // TODO function for widget creation and automaic layout
         let widget_memvis = {
@@ -112,12 +112,7 @@ impl Sdl2Renderer {
             };
             let (w, h) = vis.get_initial_size();
             PositionedFrame {
-                rect: Rect::new(
-                    (MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) as i32 + 5,
-                    0,
-                    w,
-                    h,
-                ),
+                rect: Rect::new((MEM_DISP_WIDTH + SCREEN_BUFFER_SIZE_X as i32) + 5, 0, w, h),
                 scale: 1.0,
                 vis: Box::new(vis),
             }
@@ -464,7 +459,7 @@ impl Renderer for Sdl2Renderer {
             }
         }
 
-        return ret_vec;
+        ret_vec
     }
 }
 

@@ -35,7 +35,7 @@ pub struct ApplicationState {
     _screenshot_frame_num: Wrapping<u64>,
     //ui_offset: Point, // TODO whole interface pan
     application_settings: ApplicationSettings,
-    renderer: Box<Renderer>,
+    renderer: Box<dyn Renderer>,
     //    texture_creator: TextureCreator<WindowContext>,
 }
 
@@ -67,7 +67,6 @@ impl ApplicationState {
 
         #[cfg(not(feature = "vulkan"))]
         let renderer: Box<Renderer> = Box::new(dr_sdl2::Sdl2Renderer::new(&app_settings)?);
-        //Box::new(graphics::sdl2::Sdl2Renderer::new(&app_settings)?);
 
         let gbcopy = gameboy.clone();
 
@@ -117,7 +116,10 @@ impl ApplicationState {
                         .save_ram(self.application_settings.data_path.clone());
                     std::process::exit(0);
                 }
-                _ => unimplemented!(),
+                EventResponse::Reset => {
+                    info!("Resetting gameboy");
+                    self.gameboy.reset();
+                }
             }
         }
     }
@@ -155,7 +157,7 @@ impl ApplicationState {
 
             // FF04 (DIV) Divider Register stepping
             self.div_timer_cycles += current_op_time;
-            if self.div_timer_cycles >= cycles_per_divider_step {
+            while self.div_timer_cycles >= cycles_per_divider_step {
                 self.gameboy.inc_div();
                 self.div_timer_cycles -= cycles_per_divider_step;
             }
@@ -165,7 +167,7 @@ impl ApplicationState {
             let timer_hz = self.gameboy.timer_frequency_hz();
             let cpu_cycles_per_timer_counter_step =
                 (cycles_per_second as f64 / (timer_hz as f64)) as u64;
-            if self.timer_cycles >= cpu_cycles_per_timer_counter_step {
+            while self.timer_cycles >= cpu_cycles_per_timer_counter_step {
                 //           std::thread::sleep_ms(16);
                 // trace!("Incrementing the timer!");
                 self.gameboy.timer_cycle();

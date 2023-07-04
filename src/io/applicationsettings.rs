@@ -1,8 +1,8 @@
 //! Stores all settings related to the application from a user perspective
 
+use crate::io::constants::{APP_INFO, SCALE};
 use app_dirs::*;
 use clap::ArgMatches;
-use crate::io::constants::{APP_INFO, SCALE};
 use std::path::PathBuf;
 
 use log::LevelFilter;
