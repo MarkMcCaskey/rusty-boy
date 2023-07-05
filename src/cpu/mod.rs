@@ -403,6 +403,7 @@ impl Cpu {
         self.mem[0xFF05] = if old_val.wrapping_add(1) == 0 {
             // on overflow...
             self.set_timer_interrupt_bit();
+            // this seems wrong, but things break without it
             if self.state == CpuState::Halt {
                 self.state = CpuState::Normal;
             }
@@ -1597,6 +1598,8 @@ impl Cpu {
             self.double_speed = speed_mode;
             self.mem[0xFF4D] = (speed_mode as u8) << 7;
         } else {
+            // reset div
+            self.mem[0xFF04] = 0;
             self.state = CpuState::Stop;
         }
     }
@@ -1885,10 +1888,10 @@ impl Cpu {
         //     panic!("Less than 4bytes to read!!!\nNote: this may not be a problem with the ROM; if the ROM is correct, this is the result of lazy programming on my part -- sorry");
         // }
         (
-            self.mem[self.pc as usize],
-            self.mem[(self.pc as usize) + 1],
-            self.mem[(self.pc as usize) + 2],
-            self.mem[(self.pc as usize) + 3],
+            self.mem[self.pc],
+            self.mem[self.pc + 1],
+            self.mem[self.pc + 2],
+            self.mem[self.pc + 3],
         )
     }
 
@@ -1904,6 +1907,7 @@ impl Cpu {
             self.state = CpuState::Normal;
         } else if self.state == CpuState::Stop {
             //TODO: handle interrupt on stop
+            //self.state = CpuState::Normal;
         }
 
         //Then handle interrupts

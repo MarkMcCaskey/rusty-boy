@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::cpu::Cpu;
 use crate::io::constants::*;
 
@@ -40,12 +42,13 @@ pub fn deferred_renderer_draw_scanline(
     } else {
         TILE_MAP_1_START
     };
+    // TODO: could also be implemented with popcnt on a 64bit number
+    let mut sprites_seen: BTreeSet<u8> = std::collections::BTreeSet::new();
     let adj_y = y.wrapping_add(scy) as u16;
-    let mut num_sprites_drawn = 0;
     let (bg_color1, bg_color2, bg_color3, bg_color4) = cpu.bgp();
     let bg_colors = [bg_color1, bg_color2, bg_color3, bg_color4];
     let (sprite1_color1, sprite1_color2, sprite1_color3, sprite1_color4) = cpu.obp0();
-    let (sprite2_color1, sprite2_color2, sprite2_color3, sprite2_color4) = cpu.obp0();
+    let (sprite2_color1, sprite2_color2, sprite2_color3, sprite2_color4) = cpu.obp1();
     let sprite_colors1 = [
         sprite1_color1,
         sprite1_color2,
@@ -60,6 +63,20 @@ pub fn deferred_renderer_draw_scanline(
     ];
 
     let mut inc_window_counter = false;
+
+    // (x_coord, obj_idx)
+    let mut oam_objects: Vec<(u8, u8)> = (0..=40)
+        .map(|obj_idx: u8| {
+            let offset = OBJECT_ATTRIBUTE_START + (obj_idx as u16 * OBJECT_ATTRIBUTE_BLOCK_SIZE);
+            let sprite_x: u8 = cpu.mem[offset + 1];
+            (sprite_x, obj_idx)
+        })
+        .collect::<Vec<(u8, u8)>>();
+
+    if !cpu.gbc_mode {
+        // sort by x for DMG mode
+        oam_objects.sort();
+    }
 
     let row = adj_y >> 3;
     for x in 0..GB_SCREEN_WIDTH {
@@ -81,29 +98,27 @@ pub fn deferred_renderer_draw_scanline(
             let tile_byte_1_bit = (cpu.mem[tile_start + tile_line] >> nth_pixel) & 0x1;
             let tile_byte_2_bit = (cpu.mem[tile_start + (tile_line + 1)] >> nth_pixel) & 0x1;
             let px_color = (tile_byte_2_bit << 1) | tile_byte_1_bit;
-            // TOOD: look into pallet stuff; are we doing this right using 1 pallet per line?
-            // TODO: look into how to handle transparency, is it raw 0 or translated 0?
-            //if px_color != 0 {
+
             bg_pixels[x] = bg_colors[px_color as usize];
             bg_opacities[x] = bg_opacities[x] || (px_color != 0);
-            //}
-            //bg_pixels[x] = bg_colors[px_color as usize];
 
             // window here
-            if cpu.lcdc_window_on() {
-                if !((x as u8) > cpu.window_x_pos().wrapping_sub(7)
-                    && (y as u8) > cpu.window_y_pos())
-                {
-                    continue;
-                }
-                let win_y = *window_counter /*(y as u16)*/ - (cpu.window_y_pos() as u16);
+            // TODO: techincally win_x = 166 has special behavior but it may be
+            // inconsistent due to hardware bugs
+            if cpu.lcdc_window_on()
+                && ((x as u8).wrapping_add(7) >= cpu.window_x_pos()//.wrapping_sub(7)
+                    && (y as u8) >= cpu.window_y_pos())
+                && (cpu.window_x_pos() < 166)
+            {
+                let win_y = (y as u16) - (cpu.window_y_pos() as u16);
+
                 let win_x = cpu.window_x_pos().wrapping_sub(7);
                 let win_x = if (adj_x as u8) >= win_x {
                     ((x as u8) - win_x) as u16
                 } else {
                     adj_x
                 };
-                let row = win_y >> 3;
+                let row = *window_counter >> 3;
                 let col = win_x >> 3;
                 let idx_into_tile_idx_mem = tile_win_map_addr + (row << 5) + col;
                 let tile_idx = cpu.mem[idx_into_tile_idx_mem];
@@ -126,37 +141,34 @@ pub fn deferred_renderer_draw_scanline(
             }
         }
 
-        // lol just do sprite logic here I guess
-
         if cpu.lcdc_sprite_display() {
-            for obj_idx in 0..=40 {
-                if num_sprites_drawn >= 11 {
-                    break;
+            for &(_, obj_idx) in oam_objects.iter() {
+                if sprites_seen.len() >= 10 && !sprites_seen.contains(&obj_idx) {
+                    continue;
                 }
-                let offset = OBJECT_ATTRIBUTE_START + (obj_idx * OBJECT_ATTRIBUTE_BLOCK_SIZE);
+                let offset =
+                    OBJECT_ATTRIBUTE_START + (obj_idx as u16 * OBJECT_ATTRIBUTE_BLOCK_SIZE);
                 let mut sprite_y: u8 = cpu.mem[offset];
                 let mut sprite_x: u8 = cpu.mem[offset + 1];
-                // TODO: hidden sprites still count toward object limit, handle this
-                if (sprite_x == 0 || sprite_x >= 168) && (sprite_y == 0 || sprite_y >= 160) {
+                // TODO: figure out if condition below with all edge cases later
+                let original_sprite_y = sprite_y;
+                sprite_y = sprite_y.wrapping_sub(16);
+
+                let sprite_y_size = if cpu.lcdc_sprite_size() { 16 } else { 8 };
+                if ((x as u8) < sprite_x && (x as u8).wrapping_add(8) >= sprite_x)
+                    && ((y as u8) < sprite_y.wrapping_add(sprite_y_size) && (y as u8) >= sprite_y)
+                {
+                    sprites_seen.insert(obj_idx);
+                } else {
+                    continue;
+                }
+                if (sprite_x == 0 || sprite_x >= 168)
+                    && (original_sprite_y == 0 || original_sprite_y >= 160)
+                {
                     // sprite is "hidden"
                     continue;
                 }
                 sprite_x = sprite_x.wrapping_sub(8);
-                sprite_y = sprite_y.wrapping_sub(16);
-                let sprite_y_size = if cpu.lcdc_sprite_size() { 16 } else { 8 };
-                if ((x as u8) < sprite_x.wrapping_add(8) && (x as u8) >= sprite_x)
-                    && ((y as u8) < sprite_y.wrapping_add(sprite_y_size) && (y as u8) >= sprite_y)
-                {
-                    // sprite is on this line
-                    if (x as u8) == sprite_x && (y as u8) == sprite_y {
-                        // sprite is on this pixel
-                        num_sprites_drawn += 1;
-                        // extra logic is needed here to not just draw 1 pixel of the final sprite
-                        // sprite overflow flag?
-                    }
-                } else {
-                    continue;
-                }
 
                 let tile_index: u8 = cpu.mem[offset + 2];
                 // TODO implement flag handling (priority, flips...)
@@ -174,7 +186,11 @@ pub fn deferred_renderer_draw_scanline(
                 let yth_pixel = (y as u8).wrapping_sub(sprite_y);
 
                 let xth_pixel = if x_flip { 7 - xth_pixel } else { xth_pixel };
-                let yth_pixel = if y_flip { 7 - yth_pixel } else { yth_pixel };
+                let yth_pixel = if y_flip {
+                    (sprite_y_size - 1) - yth_pixel
+                } else {
+                    yth_pixel
+                };
 
                 let tile_index = if cpu.lcdc_sprite_size() {
                     let tile_16 = tile_index & !1;
@@ -197,9 +213,9 @@ pub fn deferred_renderer_draw_scanline(
                 let tile_byte_2_bit = (cpu.mem[tile_start + (tile_line + 1)] >> nth_pixel) & 0x1;
                 let px_color = (tile_byte_2_bit << 1) | tile_byte_1_bit;
                 let true_color = if alt_palette {
-                    sprite_colors1[px_color as usize]
-                } else {
                     sprite_colors2[px_color as usize]
+                } else {
+                    sprite_colors1[px_color as usize]
                 };
 
                 // transparency
@@ -211,6 +227,8 @@ pub fn deferred_renderer_draw_scanline(
                         continue;
                     }
                     bg_pixels[x] = true_color;
+                    // highest priority pixel value found here, we shouldn't draw anything else
+                    break;
                 }
             }
         }
