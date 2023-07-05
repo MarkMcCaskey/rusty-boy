@@ -558,6 +558,7 @@ impl Cpu {
     pub fn lcdc_on(&self) -> bool {
         (self.mem[0xFF40_u16] >> 7) & 1 == 1
     }
+    // confusing name, this is for window only
     pub fn lcdc_tile_map(&self) -> bool {
         (self.mem[0xFF40_u16] >> 6) & 1 == 1
     }
@@ -588,25 +589,33 @@ impl Cpu {
         self.mem[0xFF4A_u16]
     }
 
-    pub fn get_nth_background_tile(&self, n: u8) -> MemAddr {
-        if self.lcdc_bg_tile_map() {
+    pub fn get_nth_background_tile(&self, n: u16) -> MemAddr {
+        if self.lcdc_bg_win_tile_data() {
             0x8000 + ((n as u16) * 16)
         } else {
-            ((0x9000u16 as i16) + ((n as i8 as i16) * 16)) as u16 //
+            let n = 128 + ((n as i8 as i16) + 128) as u16;
+            0x8000 + (n * 16)
+            //((0x9000u16 as i16) + ((n as i8 as i16) * 16)) as u16 //
         }
     }
 
     pub fn get_background_tiles(&self) -> [[byte; 64]; 32 * 32] {
         let mut tiles = [[0u8; 64]; 32 * 32];
         let tile_map_base_addr = if self.lcdc_bg_tile_map() {
-            0x8000
+            0x9800
         } else {
-            0x9000
+            0x9C00
         };
-        let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
+        /*let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
             0x9C00
         } else {
             0x9800
+        };*/
+        let tile_data_base_addr = if true {
+            0x8000
+        } else {
+            //0x9000
+            0x8800
         };
         //        debug!("Getting {}th tile at offset {}", offset, tile_map_base_addr);
 
@@ -650,6 +659,10 @@ impl Cpu {
         self.mem[0xFF43_u16]
     }
 
+    pub fn zero_ly(&mut self) {
+        self.mem[0xFF44] = 0;
+    }
+
     pub fn ly(&self) -> u8 {
         self.mem[0xFF44_u16]
     }
@@ -677,6 +690,15 @@ impl Cpu {
 
         if ly == lyc {
             self.set_coincidence_flag();
+            if self.get_interrupts_enabled()
+                && self.get_lcdc_interrupt_enabled()
+                && self.get_coincidence_interrupt()
+            {
+                // interrupts are only triggered on a rising edge
+                if !self.get_lcdc_interrupt_bit() {
+                    self.set_lcdc_interrupt_bit();
+                }
+            }
         } else {
             self.unset_coincidence_flag();
         }
@@ -691,9 +713,9 @@ impl Cpu {
     fn dma(&mut self) {
         let addr = (self.mem[0xFF46_u16] as MemAddr) << 8;
 
-        for i in 0..0xA0 {
+        for i in 0..=0x9F {
             //number of values to be copied
-            let val = self.mem[(addr + i) as usize];
+            let val = self.mem[addr + i];
             self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
         }
         //signal dma is over (GBC ONLY)
@@ -925,21 +947,27 @@ impl Cpu {
         let address = address as usize;
         // TODO: make responsibility for where logic on memory access happens more clear
         match address {
-            v @ DISPLAY_RAM_START...DISPLAY_RAM_END => {
+            DISPLAY_RAM_START..=DISPLAY_RAM_END => {
+                self.mem[address]
+                /*
                 if self.mem[STAT_ADDR] & 3 == 3 {
-                    error!("CPU cannot read address {} at this time", v);
+                    //error!("CPU cannot read address {} at this time", address);
                     0xFF
                 } else {
                     self.mem[address]
                 }
+                */
             }
-            v @ OAM_START...OAM_END => match self.mem[STAT_ADDR] & 3 {
-                0b10 | 0b11 => {
-                    error!("CPU cannot read address {} while the OAM is in use", v);
-                    0xFF
-                }
-                _ => self.mem[address],
-            },
+            OAM_START..=OAM_END => {
+                self.mem[address]
+                /*match self.mem[STAT_ADDR] & 3 {
+                    0b10 | 0b11 => {
+                        //error!("CPU cannot read address {} while the OAM is in use", address);
+                        0xFF
+                    }
+                    _ => self.mem[address],
+                },*/
+            }
             _ => self.mem[address],
         }
     }
@@ -960,26 +988,30 @@ impl Cpu {
 
         match address {
             v @ DISPLAY_RAM_START..=DISPLAY_RAM_END => {
+                self.mem[v] = value as byte;
                 // If in OAM and Display ram are both in use
-                if self.mem[STAT_ADDR] & 3 == 3 {
+                /*if self.mem[STAT_ADDR] & 3 == 3 {
                     error!("CPU cannot write to address {} at this time", v);
                 } else {
                     self.mem[v] = value as byte;
-                }
+                }*/
             }
             v @ OAM_START..=OAM_END => {
                 //if OAM is in use
+                self.mem[v] = value as byte;
+                /*
                 match self.mem[STAT_ADDR] & 3 {
                     0b10 | 0b11 => {
                         error!("CPU cannot write to address {} while the OAM is in use", v);
                     }
                     _ => self.mem[v] = value as byte,
                 }
+                */
             }
-            ad @ 0xE000..=0xFE00 | ad @ 0xC000..=0xDE00 => {
+            /*  ad @ 0xE000..=0xFE00 | ad @ 0xC000..=0xDE00 => {
                 self.mem[ad] = value;
                 self.mem[ad ^ (0xE000 - 0xC000)] = value;
-            }
+            }*/
             0xFF00 => {
                 // (P1) Joypad Info
                 if value & 0x10 == 0x10 {
@@ -1013,7 +1045,7 @@ impl Cpu {
             0xFF45 => {
                 //LY check is done every time LY or LYC value is updated
                 self.mem[0xFF45] = value;
-                self.lyc_compare();
+                //self.lyc_compare();
             }
             0xFF46 => {
                 self.mem[0xFF46] = value;

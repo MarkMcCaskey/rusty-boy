@@ -14,7 +14,7 @@ macro_rules! setter_unsetter_and_getter {
 
         macro_rules! $name_unsetter {
             ($name:ident, $location:expr) => {
-                fn $name(&mut self) {
+                pub fn $name(&mut self) {
                     let orig_val = self.mem[$memory_location as u16] as u8;
 
                     self.mem[$memory_location] = (orig_val & (!$location)) as byte;

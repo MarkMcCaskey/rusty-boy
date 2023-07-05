@@ -158,6 +158,10 @@ impl Sdl2Renderer {
 }
 
 impl Renderer for Sdl2Renderer {
+    fn draw_frame(&mut self, _frame: &[[u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
+        todo!("do this later if we care")
+    }
+
     fn draw_gameboy(&mut self, gameboy: &mut Cpu, app_settings: &ApplicationSettings) -> usize {
         // Gameboy screen is 256x256
         // only 160x144 are displayed at a time

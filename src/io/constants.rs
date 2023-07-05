@@ -64,24 +64,58 @@ pub const TILE_COLUMNS: u16 = 16;
 
 lazy_static! {
     pub static ref TILE_PALETTE: [Color; 4] = [
-        Color::RGB(255, 255, 255),
+        /*Color::RGB(255, 255, 255),
         Color::RGB(0xB5, 0xB5, 0xB5),
         Color::RGB(0x4D, 0x4D, 0x4D),
-        Color::RGB(0, 0, 0)
-        /*Color::RGB(4, 5, 7),
+        Color::RGB(0, 0, 0)*/
+        /*
+        Color::RGB(4, 5, 7),
         Color::RGB(235, 135, 140),
         Color::RGB(156, 146, 244),
-        Color::RGB(252, 250, 175)*/
+        Color::RGB(252, 250, 175)
+        */
+
+        // Accurate colors for DMG:
+
+        // Darkest Green
+        // Hex: #0f380f
+        Color::RGB(15, 56, 15),
+        // Dark Green
+        // Hex: #306230
+        Color::RGB(48, 98, 48),
+        // Light Green
+        // Hex: #8bac0f
+        Color::RGB(139, 172, 15),
+        // Lightest Green
+        // Hex: #9bbc0f
+        Color::RGB(155, 188, 15),
     ];
     pub static ref OBJECT_PALETTE: [Color; 4] = [
-        Color::RGB(255, 255, 255),
+        /*Color::RGB(255, 255, 255),
         Color::RGB(0xB5, 0xB5, 0xB5),
         Color::RGB(0x4D, 0x4D, 0x4D),
-        Color::RGB(0, 0, 0)
-        /*Color::RGB(0, 0, 0),
+        Color::RGB(0, 0, 0)*/
+        /*
+        Color::RGB(0, 0, 0),
         Color::RGB(174, 124, 9),
         Color::RGB(248, 184, 0),
-        Color::RGB(248, 240, 240)*/
+        Color::RGB(248, 240, 240)
+        */
+
+        // Accurate colors for DMG:
+
+        // Darkest Green
+        // Hex: #0f380f
+        Color::RGB(15, 56, 15),
+        // Dark Green
+        // Hex: #306230
+        Color::RGB(48, 98, 48),
+        // Light Green
+        // Hex: #8bac0f
+        Color::RGB(139, 172, 15),
+        // Lightest Green
+        // Hex: #9bbc0f
+        Color::RGB(155, 188, 15),
     ];
     pub static ref NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 2, 255);
 }

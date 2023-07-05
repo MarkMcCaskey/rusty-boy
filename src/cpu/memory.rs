@@ -194,9 +194,7 @@ impl Index<u16> for Memory {
             0xD000..=0xDFFF => {
                 &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xD000) as usize]
             }
-            0xE000..=0xEFFF => {
-                &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xE000) as usize]
-            }
+            0xE000..=0xEFFF => &self.internal_ram[0][(index - 0xE000) as usize],
             0xF000..=0xFDFF => {
                 &self.internal_ram[self.gbc_wram_bank as usize][(index - 0xF000) as usize]
             }
@@ -222,11 +220,7 @@ impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
         match index % 0x1_0000 {
             0x0000..=0x7FFF | 0xA000..=0xBFFF => &mut self.cartridge[index as u16],
-            0x8000..=0x9FFF => unsafe {
-                self.video_ram
-                    .get_unchecked_mut(self.gbc_vram_bank as usize)
-                    .get_unchecked_mut(index - 0x8000)
-            },
+            0x8000..=0x9FFF => &mut self.video_ram[self.gbc_vram_bank as usize][index - 0x8000],
             0xC000..=0xCFFF => &mut self.internal_ram[0][index - 0xC000],
             0xD000..=0xDFFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
             0xE000..=0xEFFF => &mut self.internal_ram[0][index - 0xE000],

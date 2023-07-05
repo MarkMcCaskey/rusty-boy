@@ -17,10 +17,10 @@ use crate::io::deferred_renderer::deferred_renderer;
 
 pub struct Sdl2Renderer {
     sdl_context: Sdl,
-    sound_system: sdl2::audio::AudioDevice<GBSound>,
+    _sound_system: sdl2::audio::AudioDevice<GBSound>,
     canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
-    sound_cycles: u64,
+    _sound_cycles: u64,
 }
 
 impl Sdl2Renderer {
@@ -35,8 +35,8 @@ impl Sdl2Renderer {
 
         let window = {
             let (window_width, window_height) = (
-                ((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
-                ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32,
+                ((GB_SCREEN_WIDTH as f32) * 3.0) as u32,
+                ((GB_SCREEN_HEIGHT as f32) * 3.0) as u32,
             );
 
             match video_subsystem
@@ -64,10 +64,10 @@ impl Sdl2Renderer {
 
         Ok(Sdl2Renderer {
             sdl_context,
-            sound_system,
+            _sound_system: sound_system,
             canvas: renderer,
             controller,
-            sound_cycles: 0,
+            _sound_cycles: 0,
         })
     }
 
@@ -94,8 +94,8 @@ impl Sdl2Renderer {
 }
 
 impl Renderer for Sdl2Renderer {
-    fn draw_gameboy(&mut self, gameboy: &mut Cpu, app_settings: &ApplicationSettings) -> usize {
-        let scale = 2.0;
+    fn draw_frame(&mut self, frame: &[[u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
+        let scale = 3.0;
         //app_settings.ui_scale;
         match self.canvas.set_scale(scale, scale) {
             Ok(_) => (),
@@ -107,32 +107,24 @@ impl Renderer for Sdl2Renderer {
 
         let tc = self.canvas.texture_creator();
         let temp_surface = Surface::new(
-            ((GB_SCREEN_WIDTH as f32) * 2.0) as u32,
-            ((GB_SCREEN_HEIGHT as f32) * 2.0) as u32,
+            (GB_SCREEN_WIDTH as f32) as u32,
+            (GB_SCREEN_HEIGHT as f32) as u32,
             PixelFormatEnum::RGBA8888,
         )
         .unwrap();
 
         let mut temp_canvas = temp_surface.into_canvas().unwrap();
-        let (background, cycles) = deferred_renderer(gameboy);
-        let color_table = {
-            let byte = gameboy.mem[0xFF47];
-            [
-                byte & 0x3,
-                (byte >> 2) & 0x3,
-                (byte >> 4) & 0x3,
-                (byte >> 6) & 0x3,
-            ]
-        };
+
         for y in 0..GB_SCREEN_HEIGHT {
             for x in 0..GB_SCREEN_WIDTH {
-                let px_color = background[y][x];
-                let real_color = color_table[px_color as usize];
-                let (r, g, b) = TILE_PALETTE[real_color as usize].rgb();
+                let px_color = frame[y][x];
+                let (r, g, b) = TILE_PALETTE[px_color as usize].rgb();
                 let color = sdl2::pixels::Color::RGB(r, g, b);
 
                 temp_canvas.set_draw_color(color);
-                temp_canvas.draw_point(Point::new(x as i32, y as i32));
+                temp_canvas
+                    .draw_point(Point::new(x as i32, y as i32))
+                    .unwrap();
             }
         }
 
@@ -149,8 +141,10 @@ impl Renderer for Sdl2Renderer {
                 Some(Rect::new(
                     0,
                     0,
-                    MEM_DISP_WIDTH as u32,
-                    MEM_DISP_HEIGHT as u32,
+                    GB_SCREEN_WIDTH as u32,
+                    GB_SCREEN_HEIGHT as u32,
+                    //MEM_DISP_WIDTH as u32,
+                    //MEM_DISP_HEIGHT as u32,
                 )),
             )
             .unwrap();
@@ -165,7 +159,12 @@ impl Renderer for Sdl2Renderer {
         }*/
 
         self.canvas.present();
-        cycles
+    }
+    fn draw_gameboy(&mut self, gameboy: &mut Cpu, _app_settings: &ApplicationSettings) -> usize {
+        let frame = deferred_renderer(gameboy);
+        self.draw_frame(&frame);
+
+        0
     }
 
     fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
@@ -175,7 +174,7 @@ impl Renderer for Sdl2Renderer {
     fn handle_events(
         &mut self,
         gameboy: &mut Cpu,
-        app_settings: &ApplicationSettings,
+        _app_settings: &ApplicationSettings,
     ) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
@@ -333,7 +332,10 @@ impl Renderer for Sdl2Renderer {
                     }
                 }
                 Event::MouseButtonDown {
-                    x, y, mouse_btn, ..
+                    x: _x,
+                    y: _y,
+                    mouse_btn: _mouse_btn,
+                    ..
                 } => {
                     // Transform screen coordinates in UI coordinates
                     /* let click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
