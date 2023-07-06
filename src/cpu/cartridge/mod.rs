@@ -103,7 +103,7 @@ impl Cartridgey for Cartridge {
             | RomType::Mbc3RamBattery
             | RomType::Mbc3TimerRamBattery => {
                 const RAM_BANK_SIZE: usize = 0x2000;
-                debug_assert!(RAM_BANK_SIZE == rom_header.ram_bank_size as usize);
+                //debug_assert!(RAM_BANK_SIZE == rom_header.ram_bank_size as usize);
 
                 Ok(Cartridge {
                     cart_sub: Some(CartridgeSubType::Mbc3 {
@@ -227,14 +227,14 @@ impl Cartridgey for Cartridge {
             }
             Some(CartridgeSubType::Mbc3 {
                 mem_bank_selector: ref mut mbs,
-                //ram_bank_selector: ref mut rbs,
                 ram_active: ref mut ra,
+                ram_bank_selector: ref mut rbs,
                 ..
             }) => {
                 match index {
                     //RAM activation
                     0x0000..=0x1FFF => {
-                        let ram_active = (value & 0xA) == 0xA;
+                        let ram_active = (value & 0xF) == 0xA;
                         if ram_active {
                             debug!("MBC3: set RAM to active");
                         } else {
@@ -253,6 +253,18 @@ impl Cartridgey for Cartridge {
                         debug!("MBC3: Switching to ROM bank {}", rom_bank);
                         *mbs = rom_bank
                     }
+                    0x4000..=0x5FFF => {
+                        let v = value & 0xF;
+                        if v <= 3 {
+                            *rbs = (value & 0x3) as u32;
+                            debug!("MBC3: Suitching to RAM bank {}", value);
+                        } else if v >= 0x8 && v <= 0xC {
+                            // TODO: RTC register
+                        }
+                    }
+                    0x6000..=0x7FFF => {
+                        // TODO: latch clock data
+                    }
                     _ => debug!(
                         "MBC3 likely not fully implemented!: writing 0x{:X} to 0x{:X}",
                         value, index
@@ -264,13 +276,15 @@ impl Cartridgey for Cartridge {
                 ram_bank_selector: ref mut rbs,
                 ram_active: ref mut ra,
                 ..
-            }) => match index {
+            }) if index <= 0x7FFF => match index {
                 0x0000..=0x1FFF => {
-                    let ram_active = (value & 0xA) == 0xA;
-                    if ram_active {
-                        debug!("MBC5: set RAM to active");
-                    } else {
-                        debug!("MBC5: set RAM to inactive");
+                    let ram_active = (value & 0xF) == 0xA;
+                    if ram_active != *ra {
+                        if ram_active {
+                            debug!("MBC5: set RAM to active");
+                        } else {
+                            debug!("MBC5: set RAM to inactive");
+                        }
                     }
 
                     *ra = ram_active;
@@ -283,7 +297,7 @@ impl Cartridgey for Cartridge {
                 }
                 // bank select 2
                 0x3000..=0x3FFF => {
-                    *mbs &= !0x100;
+                    *mbs &= 0xFF;
                     *mbs |= (value as u32 & 1) << 8;
                     debug!("MBC5: Switching to ROM bank {}", *mbs);
                 }
@@ -354,6 +368,7 @@ pub enum Mbc1Type {
 impl IndexMut<u16> for Cartridge {
     fn index_mut(&mut self, ind: u16) -> &mut byte {
         trace!("indexmut: {:X}", ind);
+        // 0x0000-0x7FFF shouldn't be writable, TODO: handle this
         match ind {
             0x0000..=0x3FFF => {
                 // constructor guarantees this to be true
@@ -363,8 +378,6 @@ impl IndexMut<u16> for Cartridge {
             0x4000..=0x7FFF => {
                 match self.cart_sub {
                     Some(CartridgeSubType::RomOnly { .. }) => {
-                        // TODO: investigate generated code and remove bounds checks/verify this
-                        // invariant in the constructor if present
                         &mut self.entire_rom_data[ind as usize]
                     }
                     Some(CartridgeSubType::Mbc1 { memory_model: Mbc1Type::SixteenEight,
@@ -384,7 +397,8 @@ impl IndexMut<u16> for Cartridge {
                                                   num_rom_banks,
                                              .. }) => {
                         let m = (0x4000 * num_rom_banks as usize) - 1;
-                        let idx = ((bank_selector as usize * 0x4000) + ind as usize) & m;
+                        let adj_ind = ind - 0x4000;
+                        let idx = ((bank_selector as usize * 0x4000) + adj_ind as usize) & m;
                         &mut self.entire_rom_data[idx]
                     }
 
@@ -419,9 +433,19 @@ impl IndexMut<u16> for Cartridge {
                             &mut self.dummy_value
                         }
                     }
-                    Some(CartridgeSubType::Mbc1 {
-                        ram_active: false, ..
-                    }) => &mut self.dummy_value,
+                    Some(CartridgeSubType::Mbc3 {
+                        ram_banks: ref mut rb,
+                        ram_active: true,
+                        ram_bank_selector: rbs,
+                        ..
+                    }) => {
+                        if (rbs as usize) < rb.len() {
+                            &mut rb[rbs as usize][(ind - 0xA000) as usize]
+                        } else {
+                            &mut self.dummy_value
+                        }
+                    }
+
                     Some(CartridgeSubType::Mbc5 {
                         ram_banks: ref mut rb,
                         ram_active: true,
@@ -434,6 +458,12 @@ impl IndexMut<u16> for Cartridge {
                             &mut self.dummy_value
                         }
                     }
+                    Some(CartridgeSubType::Mbc1 {
+                        ram_active: false, ..
+                    }) => &mut self.dummy_value,
+                    Some(CartridgeSubType::Mbc3 {
+                        ram_active: false, ..
+                    }) => &mut self.dummy_value,
                     Some(CartridgeSubType::Mbc5 {
                         ram_active: false, ..
                     }) => &mut self.dummy_value,
@@ -520,11 +550,12 @@ impl Index<u16> for Cartridge {
                 }
                 Some(CartridgeSubType::Mbc5 {
                     mem_bank_selector: bank_selector,
-                    //num_rom_banks,
+                    num_rom_banks,
                     ..
                 }) => {
-                    //let m = (0x4000 * num_rom_banks as usize) - 1;
-                    let idx = /*(*/(bank_selector as usize * 0x4000) + ind as usize; // ) & m;
+                    let m = (0x4000 * num_rom_banks as usize) - 1;
+                    let adj_ind = ind - 0x4000;
+                    let idx = ((bank_selector as usize * 0x4000) + adj_ind as usize) & m;
                     &self.entire_rom_data[idx]
                 }
                 _ => panic!("Indexing {:X}", ind),
@@ -555,6 +586,7 @@ impl Index<u16> for Cartridge {
                 Some(CartridgeSubType::Mbc3 {
                     ram_banks: ref ram_vec,
                     ram_bank_selector: rbs,
+                    ram_active: true,
                     ..
                 }) => &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize],
                 Some(CartridgeSubType::Mbc5 {
@@ -570,6 +602,9 @@ impl Index<u16> for Cartridge {
                     }
                 }
                 Some(CartridgeSubType::Mbc1 {
+                    ram_active: false, ..
+                }) => &NO_RAM_BUS_NOISE,
+                Some(CartridgeSubType::Mbc3 {
                     ram_active: false, ..
                 }) => &NO_RAM_BUS_NOISE,
                 Some(CartridgeSubType::Mbc5 {

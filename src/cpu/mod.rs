@@ -194,53 +194,6 @@ impl Cpu {
         }
     }
 
-    pub fn get_bg_tiles(&self) -> Vec<byte> {
-        /*let mut ret = vec![];
-        for &i in self.mem[0x8800..0x9800].iter() {
-            ret.push(((i as byte) >> 6) & 0x3u8);
-            ret.push(((i as byte) >> 4) & 0x3u8);
-            ret.push(((i as byte) >> 2) & 0x3u8);
-            ret.push( (i as byte)       & 0x3u8);
-        }
-
-        ret*/
-        panic!("Background tiles!");
-    }
-
-    ///gets the next pixel value to be drawn to the screen and updates
-    ///the special registers correctly
-    #[allow(dead_code, unused_variables)]
-    pub fn get_next_pixel(&mut self, xval: byte) -> byte {
-        let yval = self.ly();
-        let tile_map_base_addr = if self.lcdc_bg_tile_map() {
-            0x9C00
-        } else {
-            0x9800
-        };
-
-        #[allow(clippy::if_same_then_else)]
-        let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
-            //subtractive; 0 at 0x8800
-        } else {
-            //additive; 0 at 0x8000
-            //self.get_
-        };
-
-        if tile_map_base_addr == 0x9C00 {
-            //determine additive or subtractive
-        }
-
-        self.inc_ly();
-        0
-    }
-
-    fn get_subtractive_pixel(&mut self) {
-        panic!("Subtractive pixel!");
-    }
-    fn get_additive_pixel(&mut self) {
-        panic!("Additive pixel!");
-    }
-
     /* sound */
     pub fn channel1_sweep_time(&self) -> f32 {
         (((self.mem[0xFF10_u16] >> 4) & 0x7) as f32) / 128.0
@@ -658,13 +611,8 @@ impl Cpu {
         let addr = (self.mem[0xFF46_u16] as MemAddr) << 8;
 
         for i in 0..=0x9F {
-            //number of values to be copied
             let val = self.mem[addr + i];
-            self.mem[(0xFE00 + i) as usize] = val; //start addr + offset
-        }
-        //signal dma is over (GBC ONLY)
-        if self.gbc_mode {
-            self.mem[0xFF55] = 1;
+            self.mem.oam[i as usize] = val;
         }
     }
 
@@ -688,18 +636,12 @@ impl Cpu {
         };
         // set high bit to indicate DMA in progress
         self.mem[0xFF55] = 0x80;
-        println!(
+        debug!(
             "VRAM DMA from 0x{:X} to 0x{:X}, {} chunks",
             src_addr, dest_addr, chunks_to_copy
         );
 
-        /*let bank = if self.mem.gbc_vram_bank > 1 {
-            0
-        } else {
-            self.mem.gbc_vram_bank as usize
-        };*/
-        for i in 0..=chunks_to_copy as u16 {
-            //number of values to be copied
+        for i in 0..chunks_to_copy as u16 {
             for j in 0..16 {
                 let val = self.mem[src_addr + (i * 16) + j];
                 self.mem.video_ram[self.mem.gbc_vram_bank as usize]
@@ -764,7 +706,7 @@ impl Cpu {
         let green = (byte1 >> 5) | ((byte2 & 0x7) << 3);
         let blue = (byte2 >> 2) & 0x1F;
 
-        (red << 1, green << 1, blue << 1)
+        (red << 3, green << 3, blue << 3)
     }
 
     pub fn sprite_color_palette_auto_increment(&self) -> bool {
@@ -785,7 +727,7 @@ impl Cpu {
         let green = (byte1 >> 5) | ((byte2 & 0x7) << 3);
         let blue = (byte2 >> 2) & 0x1F;
 
-        (red << 1, green << 1, blue << 1)
+        (red << 3, green << 3, blue << 3)
     }
 
     //input register for joypad
@@ -926,10 +868,12 @@ impl Cpu {
     }
 
     #[inline]
-    pub fn get_mem(&mut self, address: MemAddr) -> byte {
+    pub fn get_mem(&self, address: MemAddr) -> byte {
+        /*
         if let Some(ref mut logger) = self.mem.logger {
             logger.log_read(self.cycles, address);
         }
+        */
         let address = address as usize;
         // TODO: make responsibility for where logic on memory access happens more clear
         match address {
@@ -1277,7 +1221,7 @@ impl Cpu {
                 CpuRegister::E => self.e,
                 CpuRegister::H => self.h,
                 CpuRegister::L => self.l,
-                CpuRegister::HL => self.mem[self.hl() as usize],
+                CpuRegister::HL => self.get_mem(self.hl()),
                 CpuRegister::Num(i) => i,
             },
         )

@@ -21,7 +21,7 @@ app_dirs = "^1.1.1"
 clap = "^2.31"
 gameboy-rom = { version = "0.4" }
 lazy_static = "^1.0"
-log = { version = "0.4", features = ["max_level_info", "release_max_level_debug"] }
+log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
 log4rs = "1.2"
 rand = "^0.8.5"
 sdl2 = "^0.35.2"

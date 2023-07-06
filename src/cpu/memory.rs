@@ -38,7 +38,7 @@ pub struct Memory {
 
     /// sprite attribute memory
     /// 0xFE00-0xF9F
-    oam: [byte; 0xA0],
+    pub oam: [byte; 0xA0],
 
     /// IO ports
     /// 0xFF00-0xFF7F
@@ -230,7 +230,10 @@ impl Index<usize> for Memory {
 impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut byte {
         match index % 0x1_0000 {
-            0x0000..=0x7FFF | 0xA000..=0xBFFF => &mut self.cartridge[index as u16],
+            0x0000..=0x7FFF | 0xA000..=0xBFFF => {
+                //panic!("this shouldn't happen");
+                &mut self.cartridge[index as u16]
+            }
             0x8000..=0x9FFF => &mut self.video_ram[self.gbc_vram_bank as usize][index - 0x8000],
             0xC000..=0xCFFF => &mut self.internal_ram[0][index - 0xC000],
             0xD000..=0xDFFF => &mut self.internal_ram[self.gbc_wram_bank as usize][index - 0xD000],
