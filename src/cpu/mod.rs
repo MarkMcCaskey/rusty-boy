@@ -1872,7 +1872,7 @@ impl Cpu {
             self.state = CpuState::Normal;
         } else if self.state == CpuState::Stop {
             //TODO: handle interrupt on stop
-            self.state = CpuState::Normal;
+            //self.state = CpuState::Normal;
         }
 
         //Then handle interrupts
