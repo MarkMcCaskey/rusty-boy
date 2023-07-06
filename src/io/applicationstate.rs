@@ -120,22 +120,35 @@ impl ApplicationState {
     /// Attepmts to load a controller if it can find one every time a frame is drawn
     /// TODO: elaborate
     pub fn step(&mut self) {
-        let (_cycles_per_vblank, _cycles_per_hsync, cycles_per_second, cycles_per_divider_step) =
-            if self.gameboy.gbc_mode && self.gameboy.double_speed {
-                (
-                    CPU_CYCLES_PER_VBLANK * 2,
-                    CYCLES_PER_HSYNC * 2,
-                    CPU_CYCLES_PER_SECOND * 2,
-                    CPU_CYCLES_PER_DIVIDER_STEP * 2,
-                )
-            } else {
-                (
-                    CPU_CYCLES_PER_VBLANK,
-                    CYCLES_PER_HSYNC,
-                    CPU_CYCLES_PER_SECOND,
-                    CPU_CYCLES_PER_DIVIDER_STEP,
-                )
-            };
+        let (
+            _cycles_per_vblank,
+            _cycles_per_hsync,
+            cycles_per_second,
+            cycles_per_divider_step,
+            oam_scan_cycles,
+            vram_scan_cycles,
+            hblank_cycles,
+        ) = if self.gameboy.gbc_mode && self.gameboy.double_speed {
+            (
+                CPU_CYCLES_PER_VBLANK * 2,
+                CYCLES_PER_HSYNC * 2,
+                CPU_CYCLES_PER_SECOND * 2,
+                CPU_CYCLES_PER_DIVIDER_STEP * 2,
+                80 * 2,
+                168 * 2,
+                208 * 2,
+            )
+        } else {
+            (
+                CPU_CYCLES_PER_VBLANK,
+                CYCLES_PER_HSYNC,
+                CPU_CYCLES_PER_SECOND,
+                CPU_CYCLES_PER_DIVIDER_STEP,
+                80,
+                168,
+                208,
+            )
+        };
         let mut scanline_cycles: u32 = 0;
         let mut y = 0;
         let mut window_counter: u16 = 0;
@@ -152,11 +165,6 @@ impl ApplicationState {
             /// Mode 1
             VBlank,
         }
-
-        let oam_scan_cycles = 80; // / 4;
-                                  // 168-291
-        let vram_scan_cycles = 168; // / 4;
-        let hblank_cycles = 208; // / 4;
 
         let mut mode = GameBoyMode::OamScan;
         self.gameboy.set_oam_lock();
@@ -175,7 +183,7 @@ impl ApplicationState {
             self.gameboy.inc_ly();
             assert_eq!(self.gameboy.ly(), 0);
         }
-        let mut frame = [[0u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT];
+        let mut frame = [[(0u8, 0u8, 0u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT];
         'steploop: loop {
             let mut cycles_this_loop = 0;
             match mode {
@@ -228,6 +236,9 @@ impl ApplicationState {
                         //run_inc_ly_logic(&mut self.gameboy);
 
                         scanline_cycles -= hblank_cycles + vram_scan_cycles + oam_scan_cycles;
+                        assert!(
+                            scanline_cycles < hblank_cycles + vram_scan_cycles + oam_scan_cycles
+                        );
                         if y == (GB_SCREEN_HEIGHT as u8) {
                             self.gameboy.set_vblank();
                             if self.gameboy.get_interrupts_enabled() {

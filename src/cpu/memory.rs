@@ -26,6 +26,12 @@ pub struct Memory {
 
     pub gbc_wram_bank: u8,
 
+    // extra GBC ram, accessed via 0xFF68 and 0xFF69
+    // TODO: locked during mode 3
+    pub gbc_background_color_palette: [byte; 0x40],
+
+    pub gbc_sprite_color_palette: [byte; 0x40],
+
     /// unusable values
     /// 0xFEA0-0xFF00
     empty: [byte; 0x6F],
@@ -73,6 +79,8 @@ impl Memory {
             // default to 1 so normal gameboy works as expected
             gbc_wram_bank: 1,
             gbc_vram_bank: 0,
+            gbc_background_color_palette: [0xFF; 0x40],
+            gbc_sprite_color_palette: [0xFF; 0x40],
         }
     }
 
@@ -112,7 +120,7 @@ impl Memory {
     }
 
     pub fn set_gbc_mode(&mut self) {
-        self.gbc_wram_bank = 0;
+        self.gbc_wram_bank = 1;
     }
 
     pub fn initialize_logger(&mut self) {
@@ -178,6 +186,9 @@ impl Memory {
         self[0xFF4A] = 0x00;
         self[0xFF4B] = 0x00;
         self[0xFFFF] = 0x00;
+
+        self.gbc_background_color_palette = [0xFF; 0x40];
+        self.gbc_sprite_color_palette = [0xFF; 0x40];
     }
 }
 

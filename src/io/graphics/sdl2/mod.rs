@@ -158,7 +158,7 @@ impl Sdl2Renderer {
 }
 
 impl Renderer for Sdl2Renderer {
-    fn draw_frame(&mut self, _frame: &[[u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
+    fn draw_frame(&mut self, _frame: &[[(u8, u8, u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
         todo!("do this later if we care")
     }
 

@@ -141,22 +141,18 @@ impl Cpu {
         self.state = CpuState::Normal;
         self.a = if self.gbc_mode { 0x11 } else { 0x01 }; // gameboy pocket needs 0xFF
         self.b = 0;
-        self.c = 0;
-        self.d = 0;
-        self.e = 0;
-        self.f = 0xB0;
-        self.h = 0;
-        self.l = 0;
+        self.c = if self.gbc_mode { 0 } else { 0x13 };
+        self.d = if self.gbc_mode { 0xFF } else { 0 };
+        self.e = if self.gbc_mode { 0x56 } else { 0xD8 };
+        self.f = if self.gbc_mode { 0x80 } else { 0xB0 };
+        self.h = if self.gbc_mode { 0 } else { 0x01 };
+        self.l = if self.gbc_mode { 0x0D } else { 0x4D };
         self.sp = 0xFFFE;
         self.pc = 0x100;
         self.cycles = 0;
 
-        info!("reset");
+        info!("reset {}", if self.gbc_mode { "GBC" } else { "GB" });
         self.mem.reset(self.sgb_mode);
-
-        self.set_bc(0x0013);
-        self.set_de(0x00D8);
-        self.set_hl(0x014D);
     }
 
     pub fn reinit_logger(&mut self) {
@@ -590,67 +586,18 @@ impl Cpu {
         self.mem[0xFF4A_u16]
     }
 
-    pub fn get_nth_background_tile(&self, n: u16) -> MemAddr {
+    pub fn get_nth_background_tile_idx(&self, n: u16) -> MemAddr {
         if self.lcdc_bg_win_tile_data() {
-            0x8000 + ((n as u16) * 16)
+            (n as u16) * 16
         } else {
             let n = 128 + ((n as i8 as i16) + 128) as u16;
-            0x8000 + (n * 16)
-            //((0x9000u16 as i16) + ((n as i8 as i16) * 16)) as u16 //
+            n * 16
         }
     }
 
-    pub fn get_background_tiles(&self) -> [[byte; 64]; 32 * 32] {
-        let mut tiles = [[0u8; 64]; 32 * 32];
-        let tile_map_base_addr = if self.lcdc_bg_tile_map() {
-            0x9800
-        } else {
-            0x9C00
-        };
-        /*let tile_data_base_addr = if self.lcdc_bg_win_tile_data() {
-            0x9C00
-        } else {
-            0x9800
-        };*/
-        let tile_data_base_addr = if true {
-            0x8000
-        } else {
-            //0x9000
-            0x8800
-        };
-        //        debug!("Getting {}th tile at offset {}", offset, tile_map_base_addr);
-
-        if tile_map_base_addr == 0x9C00 {
-            for j in 0..(32 * 32) {
-                let tile_pointer = self.mem[tile_map_base_addr + j];
-                for i in 0..16 {
-                    for k in 0..4 {
-                        //multiply offset by tile size
-                        tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as i16)
-                            + ((tile_pointer as i16) * 0x40))
-                            as usize] as u8)
-                            >> (k * 2))
-                            & 0x3;
-                    }
-                }
-            }
-        } else {
-            for j in 0..(32 * 32) {
-                let tile_pointer = self.mem[tile_map_base_addr + j];
-                for i in 0..16 {
-                    for k in 0..4 {
-                        //multiply offset by tile size
-                        tiles[j][i * (k + 1)] = ((self.mem[((tile_data_base_addr as MemAddr)
-                            + ((tile_pointer as MemAddr) * 0x40))
-                            as usize] as byte)
-                            >> (k * 2))
-                            & 0x3;
-                    }
-                }
-            }
-        }
-
-        tiles
+    pub fn get_nth_background_tile(&self, n: u16) -> MemAddr {
+        let idx = self.get_nth_background_tile_idx(n);
+        0x8000 + idx
     }
 
     pub fn scy(&self) -> u8 {
@@ -658,10 +605,6 @@ impl Cpu {
     }
     pub fn scx(&self) -> u8 {
         self.mem[0xFF43_u16]
-    }
-
-    pub fn zero_ly(&mut self) {
-        self.mem[0xFF44] = 0;
     }
 
     pub fn ly(&self) -> u8 {
@@ -737,35 +680,33 @@ impl Cpu {
 
         let chunks_to_copy = {
             let cc = self.mem[0xFF55_u16] & 0x7F;
-            if cc == 0 {
-                0
-            } else {
-                cc - 1
+            let flag = (self.mem[0xFF55_u16] >> 7) & 1;
+            if flag == 1 {
+                panic!("HBLANK DMA!");
             }
+            (cc + 1) as u16
         };
-        debug!(
+        // set high bit to indicate DMA in progress
+        self.mem[0xFF55] = 0x80;
+        println!(
             "VRAM DMA from 0x{:X} to 0x{:X}, {} chunks",
-            src_addr,
-            dest_addr,
-            chunks_to_copy + 1
+            src_addr, dest_addr, chunks_to_copy
         );
 
-        let bank = if self.mem.gbc_vram_bank > 1 {
+        /*let bank = if self.mem.gbc_vram_bank > 1 {
             0
         } else {
             self.mem.gbc_vram_bank as usize
-        };
-        for i in 0..(chunks_to_copy as u16 + 1) {
+        };*/
+        for i in 0..=chunks_to_copy as u16 {
             //number of values to be copied
             for j in 0..16 {
-                let val = self.mem[(src_addr + (i * 16) + j) as usize];
-                unsafe {
-                    self.mem.video_ram.get_unchecked_mut(bank)
-                        [(dest_addr + (i * 16) + j) as usize] = val;
-                }
+                let val = self.mem[src_addr + (i * 16) + j];
+                self.mem.video_ram[self.mem.gbc_vram_bank as usize]
+                    [(dest_addr + (i * 16) + j) as usize] = val;
             }
         }
-        self.mem[0xFF55] = 1;
+        self.mem[0xFF55] = 0xFF;
     }
 
     pub fn bgp(&self) -> (byte, byte, byte, byte) {
@@ -801,6 +742,50 @@ impl Cpu {
 
     pub fn wx(&self) -> u8 {
         self.mem[0xFF4B_u16]
+    }
+
+    // CGB registers:
+
+    pub fn background_color_palette_auto_increment(&self) -> bool {
+        self.mem[0xFF68_u16] & 0x80 != 0
+    }
+
+    pub fn background_color_palette_index(&self) -> u8 {
+        self.mem[0xFF68_u16] & 0x3F
+    }
+
+    // little-endian RGB555
+    pub fn background_color_palette_info(&self, palette_idx: u8) -> (u8, u8, u8) {
+        debug_assert!(palette_idx & 0x1 == 0);
+        debug_assert!(palette_idx < 0x40);
+        let byte1 = self.mem.gbc_background_color_palette[palette_idx as usize];
+        let byte2 = self.mem.gbc_background_color_palette[palette_idx as usize + 1];
+        let red = byte1 & 0x1F;
+        let green = (byte1 >> 5) | ((byte2 & 0x7) << 3);
+        let blue = (byte2 >> 2) & 0x1F;
+
+        (red << 1, green << 1, blue << 1)
+    }
+
+    pub fn sprite_color_palette_auto_increment(&self) -> bool {
+        self.mem[0xFF6A_u16] & 0x80 != 0
+    }
+
+    pub fn sprite_color_palette_index(&self) -> u8 {
+        self.mem[0xFF6A_u16] & 0x3F
+    }
+
+    // little-endian RGB555
+    pub fn sprite_color_palette_info(&self, palette_idx: u8) -> (u8, u8, u8) {
+        debug_assert!(palette_idx & 0x1 == 0);
+        debug_assert!(palette_idx < 0x40);
+        let byte1 = self.mem.gbc_sprite_color_palette[palette_idx as usize];
+        let byte2 = self.mem.gbc_sprite_color_palette[palette_idx as usize + 1];
+        let red = byte1 & 0x1F;
+        let green = (byte1 >> 5) | ((byte2 & 0x7) << 3);
+        let blue = (byte2 >> 2) & 0x1F;
+
+        (red << 1, green << 1, blue << 1)
     }
 
     //input register for joypad
@@ -969,6 +954,12 @@ impl Cpu {
                     _ => self.mem[address],
                 },*/
             }
+            0xFF69 if self.gbc_mode => {
+                self.mem.gbc_background_color_palette[(self.mem[0xFF68_u16] & 0x3F) as usize]
+            }
+            0xFF6B if self.gbc_mode => {
+                self.mem.gbc_sprite_color_palette[(self.mem[0xFF6A_u16] & 0x3F) as usize]
+            }
             _ => self.mem[address],
         }
     }
@@ -1042,7 +1033,10 @@ impl Cpu {
                     self.set_sound_all();
                 }
             }
-            0xFF44 => self.mem[0xFF44] = 0,
+            0xFF44 => {
+                // cannot write to LY
+                //dbg!(self.mem[0xFF44] = 0),
+            }
             0xFF45 => {
                 //LY check is done every time LY or LYC value is updated
                 self.mem[0xFF45] = value;
@@ -1066,12 +1060,39 @@ impl Cpu {
                     self.vram_dma((value >> 7) != 0);
                 }
             }
+            0xFF6C => {
+                self.mem[0xFF6C] = value;
+                if self.gbc_mode {
+                    // TODO: object priority mode, set by BIOS during boot, do we care about this?
+                }
+            }
             // cgb wram bank
             0xFF70 => {
                 self.mem[0xFF70] = value;
                 if self.gbc_mode {
                     trace!("Switching to WRAM bank {}", value & 0x7);
-                    self.mem.gbc_wram_bank = value & 0x7;
+                    let mut bank_num = value & 0x7;
+                    if bank_num == 0 {
+                        bank_num = 1;
+                    }
+                    self.mem.gbc_wram_bank = bank_num;
+                }
+            }
+            0xFF69 if self.gbc_mode => {
+                // TODO: protect writes during mode 3 but still auto increment if set
+                self.mem.gbc_background_color_palette[(self.mem[0xFF68_u16] & 0x3F) as usize] =
+                    value;
+                if self.background_color_palette_auto_increment() {
+                    let v = self.mem[0xFF68_u16];
+                    self.mem[0xFF68] = (v.wrapping_add(1) & 0x3F) | 0x80;
+                }
+            }
+            0xFF6B if self.gbc_mode => {
+                // TODO: protect writes during mode 3 but still auto increment if set
+                self.mem.gbc_sprite_color_palette[(self.mem[0xFF6A_u16] & 0x3F) as usize] = value;
+                if self.sprite_color_palette_auto_increment() {
+                    let v = self.mem[0xFF6A_u16];
+                    self.mem[0xFF6A] = (v.wrapping_add(1) & 0x3F) | 0x80;
                 }
             }
             //switchable ram bank;
@@ -2448,8 +2469,7 @@ impl Cpu {
     pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
         trace!("Loading ROM");
         self.mem.load(file_path);
-        // temporarily disable this
-        //self.gbc_mode = self.mem.gbc_mode();
+        self.gbc_mode = self.mem.gbc_mode();
         if self.gbc_mode {
             self.mem.set_gbc_mode();
         }

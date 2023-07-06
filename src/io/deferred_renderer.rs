@@ -20,8 +20,8 @@ pub fn deferred_renderer_draw_scanline(
     y: u8,
     cpu: &mut Cpu,
     window_counter: &mut u16,
-) -> [u8; GB_SCREEN_WIDTH] {
-    let mut bg_pixels = [0u8; GB_SCREEN_WIDTH];
+) -> [(u8, u8, u8); GB_SCREEN_WIDTH] {
+    let mut bg_pixels = [(0u8, 0u8, 0u8); GB_SCREEN_WIDTH];
     let mut bg_opacities = [false; GB_SCREEN_WIDTH];
 
     // invalid y, just return
@@ -46,20 +46,25 @@ pub fn deferred_renderer_draw_scanline(
     let mut sprites_seen: BTreeSet<u8> = std::collections::BTreeSet::new();
     let adj_y = y.wrapping_add(scy) as u16;
     let (bg_color1, bg_color2, bg_color3, bg_color4) = cpu.bgp();
-    let bg_colors = [bg_color1, bg_color2, bg_color3, bg_color4];
+    let bg_colors = [
+        TILE_PALETTE[bg_color1 as usize],
+        TILE_PALETTE[bg_color2 as usize],
+        TILE_PALETTE[bg_color3 as usize],
+        TILE_PALETTE[bg_color4 as usize],
+    ];
     let (sprite1_color1, sprite1_color2, sprite1_color3, sprite1_color4) = cpu.obp0();
     let (sprite2_color1, sprite2_color2, sprite2_color3, sprite2_color4) = cpu.obp1();
     let sprite_colors1 = [
-        sprite1_color1,
-        sprite1_color2,
-        sprite1_color3,
-        sprite1_color4,
+        TILE_PALETTE[sprite1_color1 as usize],
+        TILE_PALETTE[sprite1_color2 as usize],
+        TILE_PALETTE[sprite1_color3 as usize],
+        TILE_PALETTE[sprite1_color4 as usize],
     ];
     let sprite_colors2 = [
-        sprite2_color1,
-        sprite2_color2,
-        sprite2_color3,
-        sprite2_color4,
+        TILE_PALETTE[sprite2_color1 as usize],
+        TILE_PALETTE[sprite2_color2 as usize],
+        TILE_PALETTE[sprite2_color3 as usize],
+        TILE_PALETTE[sprite2_color4 as usize],
     ];
 
     let mut inc_window_counter = false;
@@ -80,26 +85,68 @@ pub fn deferred_renderer_draw_scanline(
 
     let row = adj_y >> 3;
     for x in 0..GB_SCREEN_WIDTH {
+        let mut gbc_bg_override = false;
         let adj_x = (x as u8).wrapping_add(scx) as u16;
-        if cpu.lcdc_bg_win_display() {
+        if cpu.gbc_mode || cpu.lcdc_bg_win_display() {
             let col = adj_x >> 3;
             let idx_into_tile_idx_mem = tile_bg_map_addr + (row << 5) + col;
             let tile_idx = cpu.mem[idx_into_tile_idx_mem];
-            let tile_start = cpu.get_nth_background_tile(tile_idx as u16);
+            let tile_start_relative = cpu.get_nth_background_tile_idx(tile_idx as u16);
 
-            // Lower 3 bits determine which line of the tile we're one
-            // 1 line = 2 bytes, so we double it
-            let tile_line = (adj_y & 0x7) * 2;
+            let gbc_flag_idx = idx_into_tile_idx_mem - 0x8000;
+            //let gbc_flag_idx = (row << 5) + col;
+            let gbc_tile_flags = cpu.mem.video_ram[1][gbc_flag_idx as usize];
+            let vram_index = if cpu.gbc_mode {
+                ((gbc_tile_flags >> 3) & 1) as usize
+            } else {
+                0
+            };
+
+            // Lower 3 bits determine which line of the tile we're on
+            let mut nth_line = adj_y & 0x7;
             // 8 choices for which pixel on the line we're on, so we take 3 bits here
             let tile_pixel = adj_x & 0x7;
             // pixels go from MSB to LSB within a tile
-            let nth_pixel = 7 - tile_pixel;
+            let mut nth_pixel = 7 - tile_pixel;
 
-            let tile_byte_1_bit = (cpu.mem[tile_start + tile_line] >> nth_pixel) & 0x1;
-            let tile_byte_2_bit = (cpu.mem[tile_start + (tile_line + 1)] >> nth_pixel) & 0x1;
+            if cpu.gbc_mode {
+                let x_flip = ((gbc_tile_flags >> 5) & 1) == 1;
+                let y_flip = ((gbc_tile_flags >> 6) & 1) == 1;
+                if y_flip {
+                    nth_line = 7 - nth_line;
+                }
+                if x_flip {
+                    nth_pixel = 7 - nth_pixel;
+                }
+            }
+
+            // 1 line = 2 bytes, so we double it
+            let tile_line = nth_line * 2;
+
+            let tile_byte_1_bit = (cpu.mem.video_ram[vram_index]
+                [(tile_start_relative + tile_line) as usize]
+                >> nth_pixel)
+                & 0x1;
+            let tile_byte_2_bit = (cpu.mem.video_ram[vram_index]
+                [(tile_start_relative + (tile_line + 1)) as usize]
+                >> nth_pixel)
+                & 0x1;
             let px_color = (tile_byte_2_bit << 1) | tile_byte_1_bit;
 
-            bg_pixels[x] = bg_colors[px_color as usize];
+            if cpu.gbc_mode {
+                let bg_palette = (gbc_tile_flags & 0x7) * 4 * 2;
+                let bg_priority = ((gbc_tile_flags >> 7) & 1) == 1;
+                let colors = [
+                    cpu.background_color_palette_info(bg_palette),
+                    cpu.background_color_palette_info(bg_palette + 2),
+                    cpu.background_color_palette_info(bg_palette + 4),
+                    cpu.background_color_palette_info(bg_palette + 6),
+                ];
+                bg_pixels[x] = colors[px_color as usize];
+                gbc_bg_override = gbc_bg_override || bg_priority;
+            } else {
+                bg_pixels[x] = bg_colors[px_color as usize].rgb();
+            }
             bg_opacities[x] = bg_opacities[x] || (px_color != 0);
 
             // window here
@@ -122,19 +169,62 @@ pub fn deferred_renderer_draw_scanline(
                 let col = win_x >> 3;
                 let idx_into_tile_idx_mem = tile_win_map_addr + (row << 5) + col;
                 let tile_idx = cpu.mem[idx_into_tile_idx_mem];
-                let tile_start = cpu.get_nth_background_tile(tile_idx as u16);
+                let tile_start_relative = cpu.get_nth_background_tile_idx(tile_idx as u16);
+
+                let gbc_flag_idx = idx_into_tile_idx_mem - 0x8000;
+                //let gbc_flag_idx = (row << 5) + col;
+                let gbc_tile_flags = cpu.mem.video_ram[1][gbc_flag_idx as usize];
+                //let gbc_tile_flags = cpu.mem.video_ram[1][((row << 5) + col) as usize];
+                let vram_index = if cpu.gbc_mode {
+                    ((gbc_tile_flags >> 3) & 1) as usize
+                } else {
+                    0
+                };
 
                 // select the correct y pos based on lower 3 bits
-                let tile_line = (win_y & 0x7) * 2;
+                let mut nth_line = win_y & 0x7;
                 // 8 choices for which pixel on the line we're on, so we take 3 bits here
                 let tile_pixel = adj_x & 0x7;
                 // pixels go from MSB to LSB within a tile
-                let nth_pixel = 7 - tile_pixel;
+                let mut nth_pixel = 7 - tile_pixel;
 
-                let tile_byte_1_bit = (cpu.mem[tile_start + tile_line] >> nth_pixel) & 0x1;
-                let tile_byte_2_bit = (cpu.mem[tile_start + (tile_line + 1)] >> nth_pixel) & 0x1;
+                if cpu.gbc_mode {
+                    let x_flip = ((gbc_tile_flags >> 5) & 1) == 1;
+                    let y_flip = ((gbc_tile_flags >> 6) & 1) == 1;
+                    if y_flip {
+                        nth_line = 7 - nth_line;
+                    }
+                    if x_flip {
+                        nth_pixel = 7 - nth_pixel;
+                    }
+                }
+
+                let tile_line = nth_line * 2;
+
+                let tile_byte_1_bit = (cpu.mem.video_ram[vram_index]
+                    [(tile_start_relative + tile_line) as usize]
+                    >> nth_pixel)
+                    & 0x1;
+                let tile_byte_2_bit = (cpu.mem.video_ram[vram_index]
+                    [(tile_start_relative + (tile_line + 1)) as usize]
+                    >> nth_pixel)
+                    & 0x1;
                 let px_color = (tile_byte_2_bit << 1) | tile_byte_1_bit;
-                bg_pixels[x] = bg_colors[px_color as usize];
+
+                if cpu.gbc_mode {
+                    let bg_palette = (gbc_tile_flags & 0x7) * 4 * 2;
+                    let bg_priority = ((gbc_tile_flags >> 7) & 1) == 1;
+                    let colors = [
+                        cpu.background_color_palette_info(bg_palette),
+                        cpu.background_color_palette_info(bg_palette + 2),
+                        cpu.background_color_palette_info(bg_palette + 4),
+                        cpu.background_color_palette_info(bg_palette + 6),
+                    ];
+                    bg_pixels[x] = colors[px_color as usize];
+                    gbc_bg_override = gbc_bg_override || bg_priority;
+                } else {
+                    bg_pixels[x] = bg_colors[px_color as usize].rgb();
+                }
                 bg_opacities[x] = bg_opacities[x] || (px_color != 0);
 
                 inc_window_counter = true;
@@ -177,11 +267,13 @@ pub fn deferred_renderer_draw_scanline(
                 let y_flip = ((flags >> 6) & 1) == 1;
                 let win_bg_over_sprite = ((flags >> 7) & 1) == 1;
                 let alt_palette = ((flags >> 4) & 1) == 1;
+                let cgb_palette_num = flags & 0x7;
+                let vram_index = if cpu.gbc_mode {
+                    ((flags >> 3) & 1) as usize
+                } else {
+                    0
+                };
 
-                // This table is fixed for OAM
-                let pattern_table = TILE_PATTERN_TABLE_1_START;
-
-                // a B c d e f g h
                 let xth_pixel = (x as u8).wrapping_sub(sprite_x);
                 let yth_pixel = (y as u8).wrapping_sub(sprite_y);
 
@@ -208,9 +300,15 @@ pub fn deferred_renderer_draw_scanline(
                 let tile_pixel = xth_pixel & 0x7;
                 // pixels go from MSB to LSB within a tile
                 let nth_pixel = 7 - tile_pixel;
-                let tile_start = pattern_table + (tile_index as u16 * 16);
-                let tile_byte_1_bit = (cpu.mem[tile_start + tile_line] >> nth_pixel) & 0x1;
-                let tile_byte_2_bit = (cpu.mem[tile_start + (tile_line + 1)] >> nth_pixel) & 0x1;
+                let tile_start_relative = tile_index as u16 * 16;
+                let tile_byte_1_bit = (cpu.mem.video_ram[vram_index]
+                    [(tile_start_relative + tile_line) as usize]
+                    >> nth_pixel)
+                    & 0x1;
+                let tile_byte_2_bit = (cpu.mem.video_ram[vram_index]
+                    [(tile_start_relative + (tile_line + 1)) as usize]
+                    >> nth_pixel)
+                    & 0x1;
                 let px_color = (tile_byte_2_bit << 1) | tile_byte_1_bit;
                 let true_color = if alt_palette {
                     sprite_colors2[px_color as usize]
@@ -218,15 +316,33 @@ pub fn deferred_renderer_draw_scanline(
                     sprite_colors1[px_color as usize]
                 };
 
+                if px_color == 0 && cpu.gbc_mode && gbc_bg_override {
+                    break;
+                }
                 // transparency
-                if px_color != 0
-                /*colors[color as usize] != 0*/
-                /*color != 0*/
-                {
-                    if win_bg_over_sprite && bg_opacities[x] {
+                if px_color != 0 || !cpu.lcdc_bg_win_display() {
+                    let bg_priority = if cpu.gbc_mode {
+                        match (gbc_bg_override, win_bg_over_sprite) {
+                            (false, false) => false,
+                            _ => cpu.lcdc_bg_win_display() && bg_opacities[x],
+                        }
+                    } else {
+                        win_bg_over_sprite && bg_opacities[x]
+                    };
+                    if bg_priority {
                         continue;
                     }
-                    bg_pixels[x] = true_color;
+                    if cpu.gbc_mode {
+                        let colors = [
+                            cpu.sprite_color_palette_info(cgb_palette_num * 4 * 2),
+                            cpu.sprite_color_palette_info((cgb_palette_num * 4 * 2) + 2),
+                            cpu.sprite_color_palette_info((cgb_palette_num * 4 * 2) + 4),
+                            cpu.sprite_color_palette_info((cgb_palette_num * 4 * 2) + 6),
+                        ];
+                        bg_pixels[x] = colors[px_color as usize];
+                    } else {
+                        bg_pixels[x] = true_color.rgb();
+                    }
                     // highest priority pixel value found here, we shouldn't draw anything else
                     break;
                 }
@@ -242,8 +358,8 @@ pub fn deferred_renderer_draw_scanline(
 
 // FF44(LY) LCDC Y coord
 // FF45(LYC) value to compare the above to and set a flag (I think this is an interrupt)
-pub fn deferred_renderer(cpu: &mut Cpu) -> [[u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT] {
-    let mut bg_pixels = [[0u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT];
+pub fn deferred_renderer(cpu: &mut Cpu) -> [[(u8, u8, u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT] {
+    let mut bg_pixels = [[(0u8, 0u8, 0u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT];
 
     let mut window_counter: u16 = 0;
     for y in 0..=(GB_SCREEN_HEIGHT + 9) {
