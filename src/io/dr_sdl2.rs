@@ -94,7 +94,7 @@ impl Sdl2Renderer {
 }
 
 impl Renderer for Sdl2Renderer {
-    fn draw_frame(&mut self, frame: &[[u8; GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
+    fn draw_frame(&mut self, frame: &[[(u8, u8, u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]) {
         let scale = 3.0;
         //app_settings.ui_scale;
         match self.canvas.set_scale(scale, scale) {
@@ -117,8 +117,7 @@ impl Renderer for Sdl2Renderer {
 
         for y in 0..GB_SCREEN_HEIGHT {
             for x in 0..GB_SCREEN_WIDTH {
-                let px_color = frame[y][x];
-                let (r, g, b) = TILE_PALETTE[px_color as usize].rgb();
+                let (r, g, b) = frame[y][x];
                 let color = sdl2::pixels::Color::RGB(r, g, b);
 
                 temp_canvas.set_draw_color(color);

@@ -168,9 +168,9 @@ dependencies = [
 
 [[package]]
 name = "gameboy-rom"
-version = "0.2.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d96370e39411f402bb1bc6b39cf3200c8c931884a8c7ce9aeb4d38d80ccfa935"
+checksum = "301133411143a7c939a82477d6f435483c8836b395fb18192ba846d8fa3fcc53"
 dependencies = [
  "nom 5.0.0",
  "serde",

@@ -1,7 +1,7 @@
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 
-use gameboy_rom::data::RomType;
+use gameboy_rom::header::RomType;
 
 use crate::cpu::constants::*;
 
@@ -50,7 +50,8 @@ impl Cartridgey for Cartridge {
         let mut rom_buffer = Vec::with_capacity(0x4000);
         rom.read_to_end(&mut rom_buffer)
             .map_err(|e| format!("Could not read ROM data from file: {}", e))?;
-        let (rom_header, _) = gameboy_rom::parse_rom(rom_buffer.as_slice())?;
+        let rom = gameboy_rom::GameBoyRom::new(rom_buffer.as_slice());
+        let rom_header = rom.parse_header()?;
 
         info!("Loading game {}", rom_header.game_title);
         info!(
@@ -69,7 +70,7 @@ impl Cartridgey for Cartridge {
 
         match rom_header.rom_type {
             RomType::RomOnly | RomType::RomRam | RomType::RomRamBattery => Ok(Cartridge {
-                gbc: rom_header.gameboy_color,
+                gbc: rom_header.gameboy_color.supports_color(),
                 sgb: rom_header.super_gameboy,
                 entire_rom_data: rom_buffer,
                 cart_sub: Some(CartridgeSubType::RomOnly {
@@ -91,7 +92,7 @@ impl Cartridgey for Cartridge {
                         ram_bank_selector: 0,
                         num_rom_banks: (rom_buffer.len() / 0x4000) as u32,
                     }),
-                    gbc: rom_header.gameboy_color,
+                    gbc: rom_header.gameboy_color.supports_color(),
                     sgb: rom_header.super_gameboy,
                     dummy_value: 0,
                     entire_rom_data: rom_buffer,
@@ -111,7 +112,7 @@ impl Cartridgey for Cartridge {
                         mem_bank_selector: 1,
                         ram_bank_selector: 0,
                     }),
-                    gbc: rom_header.gameboy_color,
+                    gbc: rom_header.gameboy_color.supports_color(),
                     sgb: rom_header.super_gameboy,
                     entire_rom_data: rom_buffer,
                     dummy_value: 0,
@@ -124,7 +125,8 @@ impl Cartridgey for Cartridge {
             | RomType::Mbc5RumbleSram
             | RomType::Mbc5RumbleSramBattery => {
                 const RAM_BANK_SIZE: usize = 0x2000;
-                debug_assert!(RAM_BANK_SIZE == rom_header.ram_bank_size as usize);
+                // TODO: figure out why I had this as an assert before
+                //assert_eq!(RAM_BANK_SIZE, rom_header.ram_bank_size as usize);
 
                 Ok(Cartridge {
                     cart_sub: Some(CartridgeSubType::Mbc5 {
@@ -132,8 +134,9 @@ impl Cartridgey for Cartridge {
                         ram_active: false,
                         mem_bank_selector: 1,
                         ram_bank_selector: 0,
+                        num_rom_banks: (rom_buffer.len() / 0x4000) as u32,
                     }),
-                    gbc: rom_header.gameboy_color,
+                    gbc: rom_header.gameboy_color.supports_color(),
                     sgb: rom_header.super_gameboy,
                     entire_rom_data: rom_buffer,
                     dummy_value: 0,
@@ -219,7 +222,7 @@ impl Cartridgey for Cartridge {
                             Mbc1Type::SixteenEight
                         }
                     }
-                    _ => unreachable!(),
+                    _ => self[index] = value,
                 }
             }
             Some(CartridgeSubType::Mbc3 {
@@ -286,14 +289,19 @@ impl Cartridgey for Cartridge {
                 }
                 // ram select
                 0x4000..=0x5FFF => {
-                    *rbs &= !0xF;
-                    *rbs |= value as u32 & 0xF;
+                    *rbs = value as u32 & 0xF;
                     debug!("MBC5: Switching to RAM bank {}", *rbs);
                 }
+                0x6000..=0x7FFF => {
+                    // nop
+                }
+                _ => self[index] = value,
+                /*
                 _ => debug!(
                     "Out of bounds write in MBC5: writing 0x{:X} to 0x:{:X}",
                     value, index
                 ),
+                */
             },
             Some(CartridgeSubType::RomOnly { .. }) | None | _ => self[index] = value,
         }
@@ -330,6 +338,7 @@ pub enum CartridgeSubType {
     Mbc5 {
         ram_banks: Vec<[byte; 0x2000]>,
         ram_active: bool,
+        num_rom_banks: u32,
         mem_bank_selector: u32,
         ram_bank_selector: u32,
     },
@@ -349,7 +358,7 @@ impl IndexMut<u16> for Cartridge {
             0x0000..=0x3FFF => {
                 // constructor guarantees this to be true
                 debug_assert!(self.entire_rom_data.len() >= 0x4000);
-                unsafe { self.entire_rom_data.get_unchecked_mut(ind as usize) }
+                &mut self.entire_rom_data[ind as usize]
             }
             0x4000..=0x7FFF => {
                 match self.cart_sub {
@@ -371,6 +380,13 @@ impl IndexMut<u16> for Cartridge {
                                              memory_banks: ref mb,
                                              //ram_active: ra,
                                              mem_bank_selector: index*/ }) => unimplemented!(),
+                    Some(CartridgeSubType::Mbc5 {  mem_bank_selector: bank_selector,
+                                                  num_rom_banks,
+                                             .. }) => {
+                        let m = (0x4000 * num_rom_banks as usize) - 1;
+                        let idx = ((bank_selector as usize * 0x4000) + ind as usize) & m;
+                        &mut self.entire_rom_data[idx]
+                    }
 
                     _ => unimplemented!(),
                 }
@@ -404,6 +420,21 @@ impl IndexMut<u16> for Cartridge {
                         }
                     }
                     Some(CartridgeSubType::Mbc1 {
+                        ram_active: false, ..
+                    }) => &mut self.dummy_value,
+                    Some(CartridgeSubType::Mbc5 {
+                        ram_banks: ref mut rb,
+                        ram_active: true,
+                        ram_bank_selector: rbs,
+                        ..
+                    }) => {
+                        if (rbs as usize) < rb.len() {
+                            &mut rb[rbs as usize][(ind - 0xA000) as usize]
+                        } else {
+                            &mut self.dummy_value
+                        }
+                    }
+                    Some(CartridgeSubType::Mbc5 {
                         ram_active: false, ..
                     }) => &mut self.dummy_value,
                     _ => panic!("at switchable ram bank"),
@@ -445,7 +476,7 @@ impl Index<u16> for Cartridge {
             0x0000..=0x3FFF => {
                 // constructor guarantees this to be true
                 debug_assert!(self.entire_rom_data.len() >= 0x4000);
-                unsafe { self.entire_rom_data.get_unchecked(ind as usize) }
+                &self.entire_rom_data[ind as usize]
             }
             0x4000..=0x7FFF => match self.cart_sub {
                 Some(CartridgeSubType::RomOnly { .. }) => &self.entire_rom_data[ind as usize],
@@ -489,9 +520,13 @@ impl Index<u16> for Cartridge {
                 }
                 Some(CartridgeSubType::Mbc5 {
                     mem_bank_selector: bank_selector,
+                    //num_rom_banks,
                     ..
-                }) => &self.entire_rom_data[(bank_selector as usize * 0x4000) + ind as usize],
-
+                }) => {
+                    //let m = (0x4000 * num_rom_banks as usize) - 1;
+                    let idx = /*(*/(bank_selector as usize * 0x4000) + ind as usize; // ) & m;
+                    &self.entire_rom_data[idx]
+                }
                 _ => panic!("Indexing {:X}", ind),
             },
             // Video RAM:
@@ -500,47 +535,48 @@ impl Index<u16> for Cartridge {
                 panic!("At access video ram");
             }
             // switchable RAM bank
-            0xA000..=0xBFFF => {
-                match self.cart_sub {
-                    Some(CartridgeSubType::RomOnly {
-                        ram_bank: ref rambank,
-                        ..
-                    }) => unsafe { rambank.get_unchecked((ind - 0xA000) as usize) },
-                    Some(CartridgeSubType::Mbc1 {
-                        ram_active: true,
-                        ram_banks: ref ram_vec,
-                        ram_bank_selector: rbs,
-                        ..
-                    }) => {
-                        if (rbs as usize) < ram_vec.len() {
-                            &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
-                        } else {
-                            &NO_RAM_BUS_NOISE
-                        }
+            0xA000..=0xBFFF => match self.cart_sub {
+                Some(CartridgeSubType::RomOnly {
+                    ram_bank: ref rambank,
+                    ..
+                }) => &rambank[(ind - 0xA000) as usize],
+                Some(CartridgeSubType::Mbc1 {
+                    ram_active: true,
+                    ram_banks: ref ram_vec,
+                    ram_bank_selector: rbs,
+                    ..
+                }) => {
+                    if (rbs as usize) < ram_vec.len() {
+                        &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
+                    } else {
+                        &NO_RAM_BUS_NOISE
                     }
-                    Some(CartridgeSubType::Mbc3 {
-                        ram_banks: ref ram_vec,
-                        ram_bank_selector: rbs,
-                        ..
-                    }) => unsafe {
-                        ram_vec[rbs as usize].get_unchecked((ind as u32 - 0xA000) as usize)
-                    },
-                    /*Some(CartridgeSubType::Mbc1 { ram_active: false, .. }) => {
-                        panic!("Ram is not active")
-                    }*/
-                    Some(CartridgeSubType::Mbc5 {
-                        ram_banks: ref ram_vec,
-                        ram_bank_selector: rbs,
-                        ..
-                    }) => unsafe {
-                        ram_vec[rbs as usize].get_unchecked((ind as u32 - 0xA000) as usize)
-                    },
-                    Some(CartridgeSubType::Mbc1 {
-                        ram_active: false, ..
-                    }) => &NO_RAM_BUS_NOISE,
-                    _ => panic!("at switchable ram bank"),
                 }
-            }
+                Some(CartridgeSubType::Mbc3 {
+                    ram_banks: ref ram_vec,
+                    ram_bank_selector: rbs,
+                    ..
+                }) => &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize],
+                Some(CartridgeSubType::Mbc5 {
+                    ram_active: true,
+                    ram_banks: ref ram_vec,
+                    ram_bank_selector: rbs,
+                    ..
+                }) => {
+                    if (rbs as usize) < ram_vec.len() {
+                        &ram_vec[rbs as usize][(ind as u32 - 0xA000) as usize]
+                    } else {
+                        &NO_RAM_BUS_NOISE
+                    }
+                }
+                Some(CartridgeSubType::Mbc1 {
+                    ram_active: false, ..
+                }) => &NO_RAM_BUS_NOISE,
+                Some(CartridgeSubType::Mbc5 {
+                    ram_active: false, ..
+                }) => &NO_RAM_BUS_NOISE,
+                _ => panic!("at switchable ram bank"),
+            },
             //internal ram
             /*0xC000...0xDFFF => &self.internal_ram[(ind - 0xC000) as usize],
             //echo of internal ram
