@@ -145,7 +145,7 @@ pub fn deferred_renderer_draw_scanline(
                 bg_pixels[x] = colors[px_color as usize];
                 gbc_bg_override = gbc_bg_override || bg_priority;
             } else {
-                bg_pixels[x] = bg_colors[px_color as usize].rgb();
+                bg_pixels[x] = bg_colors[px_color as usize];
             }
             bg_opacities[x] = bg_opacities[x] || (px_color != 0);
 
@@ -223,7 +223,7 @@ pub fn deferred_renderer_draw_scanline(
                     bg_pixels[x] = colors[px_color as usize];
                     gbc_bg_override = gbc_bg_override || bg_priority;
                 } else {
-                    bg_pixels[x] = bg_colors[px_color as usize].rgb();
+                    bg_pixels[x] = bg_colors[px_color as usize];
                 }
                 bg_opacities[x] = bg_opacities[x] || (px_color != 0);
 
@@ -341,7 +341,7 @@ pub fn deferred_renderer_draw_scanline(
                         ];
                         bg_pixels[x] = colors[px_color as usize];
                     } else {
-                        bg_pixels[x] = true_color.rgb();
+                        bg_pixels[x] = true_color;
                     }
                     // highest priority pixel value found here, we shouldn't draw anything else
                     break;

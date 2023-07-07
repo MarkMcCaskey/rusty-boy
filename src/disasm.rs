@@ -1,7 +1,5 @@
 // Code courtesy of spawnedartifact
 
-extern crate clap;
-
 use std::num::Wrapping;
 
 #[allow(unknown_lints)]
@@ -289,6 +287,7 @@ pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16
     ret
 }
 
+#[cfg(cli)]
 #[allow(dead_code)]
 fn main() {
     // // Print "[prefix] opcode size mnemonic" table

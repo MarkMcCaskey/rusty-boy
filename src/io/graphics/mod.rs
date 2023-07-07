@@ -1,6 +1,7 @@
 pub mod renderer;
+#[cfg(feature = "desktop")]
 pub mod sdl2;
-#[cfg(feature = "vulkan")]
+#[cfg(all(feature = "vulkan", feature = "desktop"))]
 pub mod vulkan;
 
 /*

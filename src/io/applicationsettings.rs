@@ -1,6 +1,6 @@
 //! Stores all settings related to the application from a user perspective
 
-use crate::io::constants::{APP_INFO, SCALE};
+use crate::io::constants::SCALE;
 use app_dirs::*;
 use clap::ArgMatches;
 use std::path::PathBuf;
@@ -11,7 +11,12 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+pub const APP_INFO: AppInfo = AppInfo {
+    name: "rusty-boy",
+    author: "Mark McCaskey, SpawnedArtifact, and friends",
+};
+
+#[derive(Debug, Clone)]
 pub struct ApplicationSettings {
     pub rom_file_name: String,
     pub debug_mode: bool,
@@ -19,7 +24,7 @@ pub struct ApplicationSettings {
     pub memvis_mode: bool,
     pub debugger_on: bool,
     pub vulkan_mode: bool,
-    config_path: Option<PathBuf>,
+    _config_path: Option<PathBuf>,
     pub data_path: Option<PathBuf>,
     pub ui_scale: f32,
 }
@@ -91,7 +96,7 @@ impl ApplicationSettings {
             trace_mode,
             memvis_mode,
             vulkan_mode,
-            config_path,
+            _config_path: config_path,
             data_path,
             debugger_on: should_debugger,
             //               logger_handle: handle,

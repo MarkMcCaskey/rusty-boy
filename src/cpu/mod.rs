@@ -1992,31 +1992,32 @@ impl Cpu {
 
         let old_pc = self.pc;
 
-        //Then execute instruction
-        let (inst_name, inst_len) = pp_opcode(first_byte, second_byte, third_byte, self.pc);
-        let next_pc = (Wrapping(old_pc) + Wrapping(inst_len as u16)).0;
-        match inst_len {
-            1 => {
-                trace!(
-                    "Running {:02x}    :  -> 0x{:04X}: {:<20}",
-                    first_byte,
-                    self.pc,
-                    inst_name
-                )
-            }
-            2 => {
-                trace!(
-                    "Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
-                    first_byte,
-                    second_byte,
-                    self.pc,
-                    inst_name,
-                    second_byte,
-                    next_pc
-                )
-            }
-            3 => {
-                trace!("Running {:02x}{:02x}{:02x}:  -> 0x{:04X}: {:<20} 0x{:02X} 0x{:02X}  ; next 0x{:04X}",
+        if log::log_enabled!(log::Level::Trace) {
+            //Then execute instruction
+            let (inst_name, inst_len) = pp_opcode(first_byte, second_byte, third_byte, self.pc);
+            let next_pc = (Wrapping(old_pc) + Wrapping(inst_len as u16)).0;
+            match inst_len {
+                1 => {
+                    trace!(
+                        "Running {:02x}    :  -> 0x{:04X}: {:<20}",
+                        first_byte,
+                        self.pc,
+                        inst_name
+                    )
+                }
+                2 => {
+                    trace!(
+                        "Running {:02x}{:02x}  :  -> 0x{:04X}: {:<20} 0x{:02X}  ; next 0x{:04X}",
+                        first_byte,
+                        second_byte,
+                        self.pc,
+                        inst_name,
+                        second_byte,
+                        next_pc
+                    )
+                }
+                3 => {
+                    trace!("Running {:02x}{:02x}{:02x}:  -> 0x{:04X}: {:<20} 0x{:02X} 0x{:02X}  ; next 0x{:04X}",
                        first_byte,
                        second_byte,
                        third_byte,
@@ -2025,8 +2026,9 @@ impl Cpu {
                        second_byte,
                        third_byte,
                        next_pc)
+                }
+                n => error!("Instruction with impossible length: {:?}", n),
             }
-            n => error!("Instruction with impossible length: {:?}", n),
         }
 
         let uf = "The impossible happened!";
@@ -2410,9 +2412,9 @@ impl Cpu {
     }
 
     /// Loads the ROM with saved RAM if its available
-    pub fn load_rom(&mut self, file_path: &str, data_path: Option<PathBuf>) {
+    pub fn load_rom(&mut self, rom_bytes: Vec<u8> /*, data_path: Option<PathBuf>*/) {
         trace!("Loading ROM");
-        self.mem.load(file_path);
+        self.mem.load(rom_bytes);
         self.gbc_mode = self.mem.gbc_mode();
         if self.gbc_mode {
             self.mem.set_gbc_mode();
@@ -2420,13 +2422,18 @@ impl Cpu {
         self.sgb_mode = self.mem.gbc_mode();
         self.reset();
 
+        // TODO: revisit where this code should live when properly implementing
+        // resuming from saves / savestates.
+        /*
         // load RAM if it exists
         if let Some(data_location) = data_path {
             let game_name = self.get_game_name();
             self.mem.load_saved_ram(data_location, game_name.as_ref());
         }
+        */
 
-        self.mem.initialize_logger();
+        // disable for now
+        //self.mem.initialize_logger();
     }
 
     pub fn save_ram(&self, data_path: Option<PathBuf>) {

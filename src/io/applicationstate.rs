@@ -6,12 +6,9 @@
 use std;
 
 use crate::cpu;
-use crate::debugger::graphics::*;
 use crate::io::constants::*;
 
-use crate::io::applicationsettings::ApplicationSettings;
 use crate::io::deferred_renderer::deferred_renderer_draw_scanline;
-use crate::io::graphics;
 use crate::io::graphics::renderer::Renderer;
 
 use std::num::Wrapping;
@@ -23,51 +20,21 @@ pub struct ApplicationState {
     //renderer: render::Renderer<'static>,
     cycle_count: u64,
     prev_time: u64,
-    /// counts cycles for hsync updates
-    _prev_hsync_cycles: u64,
     /// counts cycles since last timer update
     timer_cycles: u64,
     /// counts cycles since last divider register update
     div_timer_cycles: u64,
     /// counts cycles since last sound update
     _sound_cycles: u64,
-    debugger: Option<Debugger>,
-    _initial_gameboy_state: cpu::Cpu,
     _screenshot_frame_num: Wrapping<u64>,
-    application_settings: ApplicationSettings,
-    renderer: Box<dyn Renderer>,
+    pub renderer: Box<dyn Renderer>,
 }
 
 impl ApplicationState {
     //! Sets up the environment for running in memory visualization mode
-    pub fn new(app_settings: ApplicationSettings) -> Result<ApplicationState, String> {
+    pub fn new(renderer: Box<dyn Renderer>) -> Result<ApplicationState, String> {
         // Set up gameboy and other state
-        let mut gameboy = cpu::Cpu::new();
-        trace!("loading ROM");
-        gameboy.load_rom(
-            app_settings.rom_file_name.as_ref(),
-            app_settings.data_path.clone(),
-        );
-
-        // delay debugger so loading rom can be logged if need be
-        let debugger = if app_settings.debugger_on {
-            Some(Debugger::new(&gameboy))
-        } else {
-            None
-        };
-        use crate::io::dr_sdl2;
-
-        #[cfg(feature = "vulkan")]
-        let renderer: Box<Renderer> = if app_settings.vulkan_mode {
-            Box::new(graphics::vulkan::VulkanRenderer::new(&app_settings)?)
-        } else {
-            Box::new(dr_sdl2::Sdl2Renderer::new(&app_settings)?)
-        };
-
-        #[cfg(not(feature = "vulkan"))]
-        let renderer: Box<dyn Renderer> = Box::new(dr_sdl2::Sdl2Renderer::new(&app_settings)?);
-
-        let gbcopy = gameboy.clone();
+        let gameboy = cpu::Cpu::new();
 
         Ok(ApplicationState {
             gameboy,
@@ -76,49 +43,14 @@ impl ApplicationState {
             prev_time: 0,
             // FIXME sound_cycles is probably wrong or not needed
             _sound_cycles: 0,
-            debugger,
-            _prev_hsync_cycles: 0,
             timer_cycles: 0,
             div_timer_cycles: 0,
-            _initial_gameboy_state: gbcopy,
-            //logger_handle: handle,
             _screenshot_frame_num: Wrapping(0),
-            application_settings: app_settings,
             renderer,
         })
     }
 
-    /// Handles both controller input and keyboard/mouse debug input
-    /// NOTE: does not handle input for ncurses debugger
-    //this should be properly abstracted... allow for rebinding too
-    pub fn handle_events(&mut self) {
-        use self::graphics::renderer::EventResponse;
-        for event in self
-            .renderer
-            .handle_events(&mut self.gameboy, &self.application_settings)
-            .iter()
-        {
-            match *event {
-                EventResponse::ProgramTerminated => {
-                    info!("Program exiting!");
-                    if let Some(ref mut debugger) = self.debugger {
-                        debugger.die();
-                    }
-                    self.gameboy
-                        .save_ram(self.application_settings.data_path.clone());
-                    std::process::exit(0);
-                }
-                EventResponse::Reset => {
-                    info!("Resetting gameboy");
-                    self.gameboy.reset();
-                }
-            }
-        }
-    }
-
-    /// Runs the game application forward one "unit of time"
-    /// Attepmts to load a controller if it can find one every time a frame is drawn
-    /// TODO: elaborate
+    /// Runs the emulator for 1 frame and requests that frame to be drawn.
     pub fn step(&mut self) {
         let (
             _cycles_per_vblank,
@@ -275,14 +207,7 @@ impl ApplicationState {
                         // REVIEW: why is this here?
                         //self.gameboy.set_oam_and_display_lock();
 
-                        if let Some(ref mut dbg) = self.debugger {
-                            dbg.step(&mut self.gameboy);
-                        }
-
                         self.prev_time = self.cycle_count;
-
-                        /*//check for new controller every frame
-                        self.load_controller_if_none_exist();*/
 
                         //for memory visualization
                         self.gameboy.remove_old_events();
@@ -318,8 +243,6 @@ impl ApplicationState {
             let cpu_cycles_per_timer_counter_step =
                 (cycles_per_second as f64 / (timer_hz as f64)) as u64;
             while self.timer_cycles >= cpu_cycles_per_timer_counter_step {
-                //           std::thread::sleep_ms(16);
-                // trace!("Incrementing the timer!");
                 self.gameboy.timer_cycle();
                 self.timer_cycles -= cpu_cycles_per_timer_counter_step;
             }

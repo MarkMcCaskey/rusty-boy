@@ -13,8 +13,6 @@ use crate::io::graphics::renderer::Renderer;
 use crate::io::graphics::sdl2::input::setup_controller_subsystem;
 use crate::io::sound::*;
 
-use crate::io::deferred_renderer::deferred_renderer;
-
 pub struct Sdl2Renderer {
     sdl_context: Sdl,
     _sound_system: sdl2::audio::AudioDevice<GBSound>,
@@ -22,6 +20,46 @@ pub struct Sdl2Renderer {
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     _sound_cycles: u64,
 }
+
+// copied from legacy code:
+// left here for reference for how we might want to use sound in SDL2.
+// this code can be safely deleted once we have a working sound system.
+
+/*
+
+       let freq1 = ((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
+       //info!("CH1 freq {:?}; {:?}", freq1, freq2);
+       let sound_upper_limit = freq1;
+       //((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
+
+       if self.sound_cycles >= sound_upper_limit {
+           self.sound_cycles -= sound_upper_limit;
+
+           if gameboy.get_sound1() || gameboy.get_sound2() {
+               self.sound_system.resume();
+           } else {
+               self.sound_system.pause();
+           }
+
+           let mut sound_system = self.sound_system.lock();
+           // TODO move this to channel.update() or something
+           sound_system.channel1.wave_duty = gameboy.channel1_wave_pattern_duty();
+           let channel1_freq =
+               4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel1_frequency() as f32));
+           sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
+
+           // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
+           let channel2_freq =
+               4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel2_frequency() as f32));
+           sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
+
+           let channel3_freq =
+               4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel3_frequency() as f32));
+           sound_system.channel3.shift_amount = gameboy.channel3_shift_amount();
+           sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
+           sound_system.channel3.wave_ram = gameboy.channel3_wave_pattern_ram();
+       }
+*/
 
 impl Sdl2Renderer {
     pub fn new(app_settings: &ApplicationSettings) -> Result<Self, String> {
@@ -102,7 +140,7 @@ impl Renderer for Sdl2Renderer {
             Err(_) => error!("Could not set render scale"),
         }
 
-        self.canvas.set_draw_color(*NICER_COLOR);
+        self.canvas.set_draw_color(NICER_COLOR);
         self.canvas.clear();
 
         let tc = self.canvas.texture_creator();
@@ -159,22 +197,8 @@ impl Renderer for Sdl2Renderer {
 
         self.canvas.present();
     }
-    fn draw_gameboy(&mut self, gameboy: &mut Cpu, _app_settings: &ApplicationSettings) -> usize {
-        let frame = deferred_renderer(gameboy);
-        self.draw_frame(&frame);
 
-        0
-    }
-
-    fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
-        unimplemented!();
-    }
-
-    fn handle_events(
-        &mut self,
-        gameboy: &mut Cpu,
-        _app_settings: &ApplicationSettings,
-    ) -> Vec<renderer::EventResponse> {
+    fn handle_events(&mut self, gameboy: &mut Cpu) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;

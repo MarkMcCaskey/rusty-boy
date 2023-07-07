@@ -6,9 +6,7 @@ pub mod vidram;
 
 use sdl2;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::{Point, Rect};
-use sdl2::surface::Surface;
 use sdl2::*;
 
 use self::input::*;
@@ -27,11 +25,11 @@ use self::utility::*;
 
 pub struct Sdl2Renderer {
     sdl_context: Sdl,
-    sound_system: sdl2::audio::AudioDevice<GBSound>,
-    canvas: render::Canvas<video::Window>,
+    _sound_system: sdl2::audio::AudioDevice<GBSound>,
+    _canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     widgets: Vec<PositionedFrame>,
-    sound_cycles: u64,
+    _sound_cycles: u64,
 }
 
 impl Sdl2Renderer {
@@ -127,11 +125,11 @@ impl Sdl2Renderer {
 
         Ok(Sdl2Renderer {
             sdl_context,
-            sound_system,
-            canvas: renderer,
+            _sound_system: sound_system,
+            _canvas: renderer,
             controller,
             widgets,
-            sound_cycles: 0,
+            _sound_cycles: 0,
         })
     }
 
@@ -162,124 +160,7 @@ impl Renderer for Sdl2Renderer {
         todo!("do this later if we care")
     }
 
-    fn draw_gameboy(&mut self, gameboy: &mut Cpu, app_settings: &ApplicationSettings) -> usize {
-        // Gameboy screen is 256x256
-        // only 160x144 are displayed at a time
-        //
-        // Background tile map is 32x32 of tiles. Scrollx and scrolly
-        // determine how this is actually rendered (it wraps)
-        // These numbers index the tile data table
-        //
-
-        // 16384hz, call inc_div
-        // CPU is at 4.194304MHz (or 1.05MHz) 105000000hz
-        // hsync at 9198KHz = 9198000hz
-        // vsync at 59.73Hz
-
-        let scale = app_settings.ui_scale;
-        match self.canvas.set_scale(scale, scale) {
-            Ok(_) => (),
-            Err(_) => error!("Could not set render scale"),
-        }
-
-        let freq1 = ((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
-        //info!("CH1 freq {:?}; {:?}", freq1, freq2);
-        let sound_upper_limit = freq1;
-        //((CPU_CYCLES_PER_SECOND as f32) / gameboy.channel1_sweep_time()) as u64;
-
-        if self.sound_cycles >= sound_upper_limit {
-            self.sound_cycles -= sound_upper_limit;
-
-            if gameboy.get_sound1() || gameboy.get_sound2() {
-                self.sound_system.resume();
-            } else {
-                self.sound_system.pause();
-            }
-
-            let mut sound_system = self.sound_system.lock();
-            // TODO move this to channel.update() or something
-            sound_system.channel1.wave_duty = gameboy.channel1_wave_pattern_duty();
-            let channel1_freq =
-                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel1_frequency() as f32));
-            sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
-
-            // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
-            let channel2_freq =
-                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel2_frequency() as f32));
-            sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
-
-            let channel3_freq =
-                4194304.0 / (4.0 * 8.0 * (2048.0 - gameboy.channel3_frequency() as f32));
-            sound_system.channel3.shift_amount = gameboy.channel3_shift_amount();
-            sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
-            sound_system.channel3.wave_ram = gameboy.channel3_wave_pattern_ram();
-        }
-
-        // 1ms before drawing in terms of CPU time we must throw a vblank interrupt
-        // TODO make this variable based on whether it's GB, SGB, etc.
-
-        self.canvas.set_draw_color(*NICER_COLOR);
-        self.canvas.clear();
-
-        // Draw all widgets
-
-        let tc = self.canvas.texture_creator();
-        let temp_surface = Surface::new(
-            (MEM_DISP_WIDTH as u32)
-                + SCREEN_BUFFER_SIZE_X
-                + (SCREEN_BUFFER_TILES_X * (TILE_SIZE_PX as u32)),
-            (MEM_DISP_HEIGHT as u32)
-                + SCREEN_BUFFER_SIZE_Y
-                + (SCREEN_BUFFER_TILES_Y * (TILE_SIZE_PX as u32)),
-            PixelFormatEnum::RGBA8888,
-        )
-        .unwrap();
-
-        let mut temp_canvas = temp_surface.into_canvas().unwrap();
-        for ref mut widget in &mut self.widgets {
-            widget.draw(&mut temp_canvas, gameboy);
-        }
-        let mut texture = tc
-            .create_texture_from_surface(&temp_canvas.into_surface())
-            .unwrap();
-
-        texture.set_blend_mode(sdl2::render::BlendMode::None);
-
-        self.canvas
-            .copy(
-                &texture,
-                None,
-                Some(Rect::new(
-                    0,
-                    0,
-                    MEM_DISP_WIDTH as u32,
-                    MEM_DISP_HEIGHT as u32,
-                )),
-            )
-            .unwrap();
-
-        // feature disabled while graphics are being generalized
-        // TODO add a way to enable/disable this while running
-        /*let record_screen = false;
-        if record_screen {
-            save_screenshot(&self.canvas,
-                            format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
-            self.screenshot_frame_num += Wrapping(1);
-        }*/
-
-        self.canvas.present();
-        0
-    }
-
-    fn draw_memory_visualization(&mut self, _gameboy: &Cpu, _app_settings: &ApplicationSettings) {
-        unimplemented!();
-    }
-
-    fn handle_events(
-        &mut self,
-        gameboy: &mut Cpu,
-        app_settings: &ApplicationSettings,
-    ) -> Vec<renderer::EventResponse> {
+    fn handle_events(&mut self, gameboy: &mut Cpu) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
@@ -439,7 +320,8 @@ impl Renderer for Sdl2Renderer {
                     x, y, mouse_btn, ..
                 } => {
                     // Transform screen coordinates in UI coordinates
-                    let click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
+                    let click_point =
+                        display_coords_to_ui_point(2. /*app_settings.ui_scale*/, x, y);
 
                     // Find clicked widget
                     for widget in &mut self.widgets {

@@ -125,7 +125,7 @@ pub fn draw_tile(
             let col_bit_2 = get_bit(col_byte2_v, px as u8);
             let px_color = (col_bit_2 << 1) | col_bit_1;
 
-            let (rval, gval, bval) = TILE_PALETTE[px_color as usize].rgb();
+            let (rval, gval, bval) = TILE_PALETTE[px_color as usize];
 
             let tile_index = ((py * TILE_SIZE_PX) + (px)) * 4;
             // TODO: verify this order is correct outside of Linux...
@@ -201,7 +201,7 @@ pub fn draw_tile_transparent<T>(
             }*/
 
             //if DEBUG_OAM_BG || px_color != 0 {
-            let (rval, bval, gval) = OBJECT_PALETTE[px_color as usize].rgb();
+            let (rval, bval, gval) = OBJECT_PALETTE[px_color as usize];
             let tile_index = ((((realpy as u16) * TILE_SIZE_PX) + (realpx as u16)) * 4) as u8;
             pixel_buffer[tile_index.wrapping_add(0) as usize] = if px_color == 0 { 0 } else { 255 };
             pixel_buffer[(tile_index.wrapping_add(1)) as usize] = gval;
