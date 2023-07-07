@@ -1,7 +1,4 @@
 use crate::cpu::constants::*;
-use app_dirs::AppInfo;
-use sdl2;
-use sdl2::pixels::*;
 
 pub const RB_SCREEN_WIDTH: u32 = 1400;
 pub const RB_SCREEN_HEIGHT: u32 = 900;
@@ -62,63 +59,39 @@ pub const TILE_SIZE_PX: u16 = 8;
 pub const BORDER_PX: u16 = 1;
 pub const TILE_COLUMNS: u16 = 16;
 
-lazy_static! {
-    pub static ref TILE_PALETTE: [Color; 4] = [
-        /*Color::RGB(255, 255, 255),
-        Color::RGB(0xB5, 0xB5, 0xB5),
-        Color::RGB(0x4D, 0x4D, 0x4D),
-        Color::RGB(0, 0, 0)*/
-        /*
-        Color::RGB(4, 5, 7),
-        Color::RGB(235, 135, 140),
-        Color::RGB(156, 146, 244),
-        Color::RGB(252, 250, 175)
-        */
+pub static TILE_PALETTE: [(u8, u8, u8); 4] = [
+    // Accurate colors for DMG:
 
-        // Accurate colors for DMG:
+    // Darkest Green
+    // Hex: #0f380f
+    (15, 56, 15),
+    // Dark Green
+    // Hex: #306230
+    (48, 98, 48),
+    // Light Green
+    // Hex: #8bac0f
+    (139, 172, 15),
+    // Lightest Green
+    // Hex: #9bbc0f
+    (155, 188, 15),
+];
+pub static OBJECT_PALETTE: [(u8, u8, u8); 4] = [
+    // Accurate colors for DMG:
 
-        // Darkest Green
-        // Hex: #0f380f
-        Color::RGB(15, 56, 15),
-        // Dark Green
-        // Hex: #306230
-        Color::RGB(48, 98, 48),
-        // Light Green
-        // Hex: #8bac0f
-        Color::RGB(139, 172, 15),
-        // Lightest Green
-        // Hex: #9bbc0f
-        Color::RGB(155, 188, 15),
-    ];
-    pub static ref OBJECT_PALETTE: [Color; 4] = [
-        /*Color::RGB(255, 255, 255),
-        Color::RGB(0xB5, 0xB5, 0xB5),
-        Color::RGB(0x4D, 0x4D, 0x4D),
-        Color::RGB(0, 0, 0)*/
-        /*
-        Color::RGB(0, 0, 0),
-        Color::RGB(174, 124, 9),
-        Color::RGB(248, 184, 0),
-        Color::RGB(248, 240, 240)
-        */
-
-        // Accurate colors for DMG:
-
-        // Darkest Green
-        // Hex: #0f380f
-        Color::RGB(15, 56, 15),
-        // Dark Green
-        // Hex: #306230
-        Color::RGB(48, 98, 48),
-        // Light Green
-        // Hex: #8bac0f
-        Color::RGB(139, 172, 15),
-        // Lightest Green
-        // Hex: #9bbc0f
-        Color::RGB(155, 188, 15),
-    ];
-    pub static ref NICER_COLOR: sdl2::pixels::Color = sdl2::pixels::Color::RGBA(139, 41, 2, 255);
-}
+    // Darkest Green
+    // Hex: #0f380f
+    (15, 56, 15),
+    // Dark Green
+    // Hex: #306230
+    (48, 98, 48),
+    // Light Green
+    // Hex: #8bac0f
+    (139, 172, 15),
+    // Lightest Green
+    // Hex: #9bbc0f
+    (155, 188, 15),
+];
+pub static NICER_COLOR: (u8, u8, u8, u8) = (139, 41, 2, 255);
 
 pub const SCREEN_BUFFER_SIZE_X: u32 = 256;
 pub const SCREEN_BUFFER_SIZE_Y: u32 = 256;
@@ -132,8 +105,3 @@ pub const GB_SCREEN_HEIGHT: usize = 144;
 pub const OBJECT_ATTRIBUTE_START: u16 = 0xFE00;
 pub const OBJECT_ATTRIBUTE_END: u16 = 0xFE9F;
 pub const OBJECT_ATTRIBUTE_BLOCK_SIZE: u16 = 4;
-
-pub const APP_INFO: AppInfo = AppInfo {
-    name: "rusty-boy",
-    author: "Mark McCaskey, SpawnedArtifact, and friends",
-};

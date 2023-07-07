@@ -75,7 +75,7 @@ impl Memory {
             hram: [0u8; 0x80],
             interrupt_flag: 0,
             iterator_index: 0,
-            logger: Some(DeqCpuEventLogger::new(None)),
+            logger: None, //Some(DeqCpuEventLogger::new(None)),
             // default to 1 so normal gameboy works as expected
             gbc_wram_bank: 1,
             gbc_vram_bank: 0,
@@ -91,8 +91,8 @@ impl Memory {
         }
     }
 
-    pub fn load(&mut self, input_file: &str) {
-        *self.cartridge = Cartridge::load(input_file).expect("Could not load ROM");
+    pub fn load(&mut self, rom_bytes: Vec<u8>) {
+        *self.cartridge = Cartridge::load(rom_bytes).expect("Could not load ROM");
     }
 
     pub fn load_saved_ram(&mut self, mut path: PathBuf, game_name: &str) {

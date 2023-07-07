@@ -7,7 +7,7 @@ use crate::cpu::constants::*;
 
 /// A thing that is like a Cartridge
 pub trait Cartridgey {
-    fn load(rom_file: &str) -> Result<Cartridge, String>;
+    fn load(rom_data: Vec<u8>) -> Result<Cartridge, String>;
 
     fn read_rom_value(&self, index: u16) -> byte;
 
@@ -41,15 +41,7 @@ pub struct Cartridge {
 }
 
 impl Cartridgey for Cartridge {
-    fn load(file_path: &str) -> Result<Cartridge, String> {
-        use std::fs::File;
-        use std::io::Read;
-
-        let mut rom =
-            File::open(file_path).map_err(|e| format!("Could not open ROM file: {}", e))?;
-        let mut rom_buffer = Vec::with_capacity(0x4000);
-        rom.read_to_end(&mut rom_buffer)
-            .map_err(|e| format!("Could not read ROM data from file: {}", e))?;
+    fn load(rom_buffer: Vec<u8>) -> Result<Cartridge, String> {
         let rom = gameboy_rom::GameBoyRom::new(rom_buffer.as_slice());
         let rom_header = rom.parse_header()?;
 

@@ -5,36 +5,39 @@ edition = "2021"
 authors = ["MarkMcCaskey <rabidwaffle@gmail.com>"]
 description = "A Gameboy emulator and related tools"
 
+[lib]
+name = "rusty_boy_lib"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
 [badges]
 travis-ci = { repository = "MarkMcCaskey/rusty-boy", branch = "master" }
 maintainence = {status = "experimental"}
 
 [features]
-default = []
+default = ["cli"]
 asm = ["nom"]
 debugger = ["ncurses", "nom"]
 vulkan = []
 development = ["debugger"]
+cli = ["clap", "log4rs", "desktop"]
+desktop = ["app_dirs", "sdl2"]
 
 [dependencies]
-app_dirs = "^1.1.1"
-clap = "^2.31"
+app_dirs = { version = "^1.1.1", optional = true }
+clap = { version = "^2.31", optional = true}
 gameboy-rom = { version = "0.4" }
-lazy_static = "^1.0"
-log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
-log4rs = "1.2"
-rand = "^0.8.5"
-sdl2 = "^0.35.2"
-serde = "^1.0.0"
-serde_derive = "^1.0.0"
-time = "^0.1"
+log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
+log4rs = { version = "1.2", optional = true }
+rand = { version = "^0.8.5", optional = true }
+sdl2 = { version = "^0.35.2", optional = true }
 
 #vulkano = {version = "0.6.2", optional = true}
 #vulkano-shader-derive = {version = "0.6.2", optional = true}
 #winit = {version = "0.7.6", optional = true}
 #vulkano-win = {version = "0.6.2", optional = true}
 
-nom = {version = "^2.2", optional = true}
+nom = { version = "^2.2", optional = true }
 ncurses = {version = "^5.85.0", optional = true}
 
 [profile.dev]
@@ -52,5 +55,5 @@ debug = false
 rpath = false
 lto = true
 debug-assertions = false
-# codegen-units = 1
+codegen-units = 1
 panic = 'unwind'
