@@ -248,9 +248,12 @@ impl Cpu {
     }
 
     pub fn channel1_inc_sound_length(&mut self) {
+        if !self.channel1_sound_length_enabled() {
+            return;
+        }
         let mut val = self.mem[0xFF11_u16] & 0x3F;
         val += 1;
-        if val >= 64 && self.channel1_sound_length_enabled() {
+        if val >= 64 {
             self.unset_sound1();
         }
         self.mem[0xFF11] &= !0x3F;
@@ -308,9 +311,12 @@ impl Cpu {
     }
 
     pub fn channel2_inc_sound_length(&mut self) {
+        if !self.channel2_sound_length_enabled() {
+            return;
+        }
         let mut val = self.mem[0xFF16_u16] & 0x3F;
         val += 1;
-        if val >= 64 && self.channel2_sound_length_enabled() {
+        if val >= 64 {
             self.unset_sound2();
         }
         self.mem[0xFF16] &= !0x3F;
@@ -356,11 +362,6 @@ impl Cpu {
         byte_to_u16(lower, higher)
     }
 
-    pub fn channel2_counter_consecutive_selection(&self) -> bool {
-        //TODO:
-        false
-    }
-
     pub fn channel2_sound_length_enabled(&self) -> bool {
         ((self.mem[0xFF19_u16] >> 6) & 1) == 1
     }
@@ -371,6 +372,23 @@ impl Cpu {
 
     pub fn channel3_sound_length(&self) -> u8 {
         self.mem[0xFF1B_u16]
+    }
+
+    pub fn channel3_inc_sound_length(&mut self) {
+        // REVIEW: do we care about DAC here?
+        if !self.channel3_sound_length_enabled()
+        /*|| self.mem[0xFF1A_u16] >> 7 == 0*/
+        {
+            return;
+        }
+        let mut val = self.mem[0xFF1B_u16];
+        if val == 0xFF {
+            val = 0;
+            self.unset_sound3();
+        } else {
+            val += 1;
+        }
+        self.mem[0xFF1B] = val;
     }
 
     pub fn channel3_output_level(&self) {
@@ -394,13 +412,8 @@ impl Cpu {
         }
     }
 
-    pub fn channel3_counter_consecutive_selection(&self) -> bool {
-        //TODO:
-        false
-    }
-
-    pub fn channel3_restart_sound(&self) -> bool {
-        ((self.mem[0xFF1D_u16] >> 7) & 1) == 1
+    pub fn channel3_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF1E_u16] >> 6) & 1) == 1
     }
 
     pub fn channel3_wave_pattern_ram(&self) -> [u8; 32] {
@@ -410,6 +423,27 @@ impl Cpu {
         }
 
         ret
+    }
+
+    pub fn channel4_sound_length(&self) -> u8 {
+        self.mem[0xFF20_u16] & 0x3F
+    }
+
+    pub fn channel4_inc_sound_length(&mut self) {
+        if !self.channel4_sound_length_enabled() {
+            return;
+        }
+        let mut val = self.mem[0xFF20_u16] & 0x3F;
+        val += 1;
+        if val >= 64 {
+            self.unset_sound4();
+        }
+        self.mem[0xFF20] &= !0x3F;
+        self.mem[0xFF20] |= val & 0x3F;
+    }
+
+    pub fn channel4_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF23_u16] >> 6) & 1) == 1
     }
 
     /// Abstracts the logic of the timer
@@ -1055,10 +1089,90 @@ impl Cpu {
                 }
             }
 
+            // channel 1: NR11
+            0xFF11 => {
+                if value & 0x3F == 0 {
+                    //self.unset_sound1();
+                    self.mem[0xFF11] = value; // | 0x3F;
+                } else {
+                    self.mem[0xFF11] = value;
+                }
+            }
+
+            // channel 2: NR21
+            0xFF16 => {
+                if value & 0x3F == 0 {
+                    //self.unset_sound2();
+                    self.mem[0xFF16] = value; // | 0x3F;
+                } else {
+                    self.mem[0xFF16] = value;
+                }
+            }
+
+            // channel 3: NR31
+            0xFF1B => {
+                if value == 0 {
+                    //self.unset_sound3();
+                }
+                self.mem[0xFF1B] = value;
+            }
+
+            // channel 4: NR41
+            0xFF20 => {
+                if value & 0x3F == 0 {
+                    //self.unset_sound4();
+                }
+                self.mem[0xFF20] = value;
+            }
+
+            // channel 1: NR12
+            0xFF12 => {
+                if value >> 3 == 0 {
+                    self.unset_sound1();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF12] = value;
+            }
+
+            // channel 2: NR22
+            0xFF17 => {
+                if value >> 3 == 0 {
+                    self.unset_sound2();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF17] = value;
+            }
+
+            // channel 4: NR42
+            0xFF21 => {
+                if value >> 3 == 0 {
+                    self.unset_sound4();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF21] = value;
+            }
+
+            // channel 3: NR30
+            0xFF1A => {
+                if value >> 7 == 1 {
+                    // DAC does not trigger the channel
+                    //self.set_sound3();
+                } else {
+                    self.unset_sound3();
+                }
+                self.mem[0xFF1A] = value;
+            }
+
             // channel 1: NR14
             0xFF14 => {
                 if value >> 7 == 1 {
-                    self.set_sound1();
+                    // ensure DAC is enabled
+                    if self.mem[0xFF12_u16] >> 3 != 0 {
+                        self.set_sound1();
+                    }
                 }
                 self.mem[0xFF14] = value;
             }
@@ -1066,9 +1180,34 @@ impl Cpu {
             // channel 2: NR24
             0xFF19 => {
                 if value >> 7 == 1 {
-                    self.set_sound2();
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF17_u16] >> 3 != 0 {
+                        self.set_sound2();
+                    }
                 }
                 self.mem[0xFF19] = value;
+            }
+
+            // channel 3: NR34
+            0xFF1E => {
+                if value >> 7 == 1 {
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF1A_u16] >> 7 == 1 {
+                        self.set_sound3();
+                    }
+                }
+                self.mem[0xFF1E] = value;
+            }
+
+            // channel 4: NR44
+            0xFF23 => {
+                if value >> 7 == 1 {
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF21_u16] >> 3 != 0 {
+                        self.set_sound4();
+                    }
+                }
+                self.mem[0xFF23] = value;
             }
 
             // Sound

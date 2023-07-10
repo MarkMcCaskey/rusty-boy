@@ -324,6 +324,8 @@ impl ApplicationState {
                         if self.div_apu & 1 == 0 {
                             self.gameboy.channel1_inc_sound_length();
                             self.gameboy.channel2_inc_sound_length();
+                            self.gameboy.channel3_inc_sound_length();
+                            self.gameboy.channel4_inc_sound_length();
                         }
                     }
                 }
