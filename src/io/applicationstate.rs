@@ -81,6 +81,8 @@ impl ApplicationState {
                 208,
             )
         };
+        let audio_timing_cycles = cycles_per_second / 256;
+        let mut sound_cycles = 0;
         let mut scanline_cycles: u32 = 0;
         let mut y = 0;
         let mut window_counter: u16 = 0;
@@ -228,6 +230,12 @@ impl ApplicationState {
                         vblank_iterations += 1;
                     }
                 }
+            }
+            sound_cycles += cycles_this_loop as u64;
+            // Audio timing
+            if sound_cycles >= audio_timing_cycles as u64 {
+                self.renderer.audio_step(&self.gameboy);
+                sound_cycles -= cycles_this_loop as u64;
             }
 
             // FF04 (DIV) Divider Register stepping

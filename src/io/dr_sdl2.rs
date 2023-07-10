@@ -15,7 +15,7 @@ use crate::io::sound::*;
 
 pub struct Sdl2Renderer {
     sdl_context: Sdl,
-    _sound_system: sdl2::audio::AudioDevice<GBSound>,
+    sound_system: sdl2::audio::AudioDevice<GBSound>,
     canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
     _sound_cycles: u64,
@@ -102,7 +102,7 @@ impl Sdl2Renderer {
 
         Ok(Sdl2Renderer {
             sdl_context,
-            _sound_system: sound_system,
+            sound_system,
             canvas: renderer,
             controller,
             _sound_cycles: 0,
@@ -386,5 +386,33 @@ impl Renderer for Sdl2Renderer {
         }
 
         return ret_vec;
+    }
+
+    fn audio_step(&mut self, gb: &Cpu) {
+        // TODO:
+        /*
+        if gb.get_sound1() || gb.get_sound2() || gb.get_sound3() || gb.get_sound4() {
+            dbg!("Resume");
+            self.sound_system.resume();
+        } else {
+            dbg!("Pause");
+            self.sound_system.pause();
+        }
+        */
+        self.sound_system.resume();
+        let mut sound_system = self.sound_system.lock();
+        // TODO move this to channel.update() or something
+        sound_system.channel1.wave_duty = gb.channel1_wave_pattern_duty();
+        let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel1_frequency() as f32));
+        sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
+
+        // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
+        let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel2_frequency() as f32));
+        sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
+
+        let channel3_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel3_frequency() as f32));
+        sound_system.channel3.shift_amount = gb.channel3_shift_amount();
+        sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
+        sound_system.channel3.wave_ram = gb.channel3_wave_pattern_ram();
     }
 }
