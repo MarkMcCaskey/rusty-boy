@@ -15,14 +15,17 @@ pub struct GBSound {
 /// Envelopes and sweeps should be implemented as traits to allow this to
 /// remain generic
 pub struct SquareWave {
+    /// Whether or not the channel is enabled
+    pub enabled: bool,
     /// The amount by which the `phase` is changed at each callback
     pub phase_inc: f32,
 
     /// The "current" value of the wave
     pub phase: f32,
 
+    pub volume: f32,
     /// Multiplier for wave between 0 and 1 (functions as volume (0 is off))
-    volume: f32,
+    base_volume: f32,
 
     /// TODO: document this
     pub wave_duty: f32,
@@ -32,14 +35,17 @@ pub struct SquareWave {
 }
 
 pub struct SquareWaveRam {
+    /// Whether or not the channel is enabled
+    pub enabled: bool,
     /// The amount by which the `phase` is changed at each callback
     pub phase_inc: f32,
 
     /// The "current" value of the wave
     pub phase: f32,
 
+    pub volume: f32,
     /// Multiplier for wave between 0 and 1 (functions as volume (0 is off))
-    volume: f32,
+    base_volume: f32,
 
     /// TODO: document this
     pub wave_duty: f32,
@@ -59,10 +65,13 @@ trait SoundChannel {
 
 impl SoundChannel for SquareWave {
     fn generate_sample(&mut self) -> f32 {
+        if !self.enabled {
+            return 0.0;
+        }
         let out = if self.phase <= self.wave_duty {
-            self.volume
+            self.base_volume * self.volume
         } else {
-            -self.volume
+            -self.base_volume * self.volume
         };
         self.phase = (self.phase + self.phase_inc) % 1.0;
         // To make it sound slightly nicer
@@ -72,13 +81,17 @@ impl SoundChannel for SquareWave {
 
 impl SoundChannel for SquareWaveRam {
     fn generate_sample(&mut self) -> f32 {
+        if !self.enabled {
+            return 0.0;
+        }
         let out =
             if self.phase <= ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) {
-                self.volume * self.phase
+                self.base_volume * self.volume * self.phase
             } else {
                 0.0
             };
 
+        self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
         /*        self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
         // To make it sound slightly nicer
          */
@@ -126,23 +139,29 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
         GBSound {
             out_freq: spec.freq as f32,
             channel1: SquareWave {
+                enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                volume: 0.025,
+                base_volume: 0.050,
+                volume: 1.0,
                 wave_duty: 0.25,
                 add: true,
             },
             channel2: SquareWave {
+                enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                volume: 0.025,
+                base_volume: 0.050,
+                volume: 1.0,
                 wave_duty: 0.25,
                 add: true,
             },
             channel3: SquareWaveRam {
+                enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                volume: 0.025,
+                base_volume: 0.050,
+                volume: 1.0,
                 wave_duty: 0.25,
                 add: true,
                 wave_ram: [0u8; 32],

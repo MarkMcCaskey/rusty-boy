@@ -391,28 +391,39 @@ impl Renderer for Sdl2Renderer {
     fn audio_step(&mut self, gb: &Cpu) {
         // TODO:
         /*
-        if gb.get_sound1() || gb.get_sound2() || gb.get_sound3() || gb.get_sound4() {
-            dbg!("Resume");
-            self.sound_system.resume();
-        } else {
-            dbg!("Pause");
-            self.sound_system.pause();
-        }
+               if gb.get_sound_all() && (gb.get_sound1() || gb.get_sound2() || gb.get_sound3() || gb.get_sound4()) {
+                   //dbg!("Resume");
+                   self.sound_system.resume();
+               } else {
+                   //dbg!("Pause");
+                   self.sound_system.pause();
+               }
         */
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        sound_system.channel1.wave_duty = gb.channel1_wave_pattern_duty();
-        let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel1_frequency() as f32));
-        sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
+        sound_system.channel1.enabled = gb.get_sound1();
+        sound_system.channel2.enabled = gb.get_sound2();
+        sound_system.channel3.enabled = gb.get_sound3();
+        if gb.get_sound1() {
+            sound_system.channel1.volume = gb.channel1_envelope_volume() as f32 / 15.0;
+            sound_system.channel1.wave_duty = gb.channel1_wave_pattern_duty();
+            let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel1_frequency() as f32));
+            sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
+        }
 
-        // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
-        let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel2_frequency() as f32));
-        sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
+        if gb.get_sound2() {
+            // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
+            sound_system.channel2.volume = gb.channel2_envelope_volume() as f32 / 15.0;
+            let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel2_frequency() as f32));
+            sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
+        }
 
-        let channel3_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel3_frequency() as f32));
-        sound_system.channel3.shift_amount = gb.channel3_shift_amount();
-        sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
-        sound_system.channel3.wave_ram = gb.channel3_wave_pattern_ram();
+        if gb.get_sound3() {
+            let channel3_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel3_frequency() as f32));
+            sound_system.channel3.shift_amount = gb.channel3_shift_amount();
+            sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
+            sound_system.channel3.wave_ram = gb.channel3_wave_pattern_ram();
+        }
     }
 }
