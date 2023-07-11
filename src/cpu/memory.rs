@@ -144,7 +144,7 @@ impl Memory {
         self.logger = Some(DeqCpuEventLogger::new(Some(&mem_buffer[..])));
     }
 
-    pub fn reset(&mut self, sgb_mode: bool) {
+    pub fn reset(&mut self, _sgb_mode: bool) {
         self[0xFF00] = 0xCF;
         self[0xFF01] = 0x00;
         self[0xFF02] = 0x7E;
@@ -153,6 +153,9 @@ impl Memory {
         self[0xFF06] = 0x00;
         self[0xFF07] = 0xF8;
         self[0xFF0F] = 0xE1;
+        // these values moved into APU:
+        // delete after verifying these addresses are never accessed this way
+        /*
         self[0xFF10] = 0x80;
         self[0xFF11] = 0xBF;
         self[0xFF12] = 0xF3;
@@ -173,6 +176,7 @@ impl Memory {
         self[0xFF24] = 0x77;
         self[0xFF25] = 0xF3;
         self[0xFF26] = if sgb_mode { 0xF0 } else { 0xF1 };
+        */
         self[0xFF40] = 0x91;
         self[0xFF41] = 0x85;
         self[0xFF42] = 0x00;

@@ -136,14 +136,11 @@ impl AudioCallback for GBSound {
 
     fn callback(&mut self, out: &mut [f32]) {
         for x in out.iter_mut() {
-            // FIXME is just adding them is the right way to do it?
-            // Maybe for floats it is?
             let val = self.channel1.generate_sample()
                 + self.channel2.generate_sample()
                 + self.channel3.generate_sample()
                 + self.channel4.generate_sample();
-            *x = val;
-            // TODO mix other channels here
+            *x = val / 4.;
         }
     }
 }
@@ -171,7 +168,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                base_volume: 0.050,
+                base_volume: 0.100,
                 volume: 1.0,
                 wave_duty: 0.25,
                 add: true,
@@ -180,7 +177,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                base_volume: 0.050,
+                base_volume: 0.100,
                 volume: 1.0,
                 wave_duty: 0.25,
                 add: true,
@@ -189,7 +186,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                base_volume: 0.050,
+                base_volume: 0.100,
                 volume: 1.0,
                 add: true,
                 wave_ram: [0u8; 32],
@@ -200,7 +197,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 enabled: false,
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                base_volume: 0.050,
+                base_volume: 0.100,
                 volume: 1.0,
                 add: true,
                 lfsr_width: false,
