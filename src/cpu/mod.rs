@@ -391,25 +391,30 @@ impl Cpu {
         self.mem[0xFF1B] = val;
     }
 
-    pub fn channel3_output_level(&self) {
-        unimplemented!();
-    }
-
-    pub fn channel3_frequency(&self) -> u16 {
-        let lower = self.mem[0xFF1C_u16];
-        let higher = self.mem[0xFF1D_u16] & 0x7;
-
-        byte_to_u16(lower, higher)
+    pub fn channel3_output_level(&self) -> f32 {
+        match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
+            0 => 0.0,
+            1 => 1.0,
+            2 => 0.5,
+            3 => 0.25,
+            _ => unreachable!(),
+        }
     }
 
     pub fn channel3_shift_amount(&self) -> u8 {
         match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
-            0 => 4, //to mute
-            1 => 0,
+            0 | 1 => 0,
             2 => 1,
             3 => 2,
             _ => unreachable!(),
         }
+    }
+
+    pub fn channel3_frequency(&self) -> u16 {
+        let lower = self.mem[0xFF1D_u16];
+        let higher = self.mem[0xFF1E_u16] & 0x7;
+
+        byte_to_u16(lower, higher)
     }
 
     pub fn channel3_sound_length_enabled(&self) -> bool {
@@ -419,7 +424,7 @@ impl Cpu {
     pub fn channel3_wave_pattern_ram(&self) -> [u8; 32] {
         let mut ret = [0u8; 32];
         for i in 0..32 {
-            ret[i] = (self.mem[0xFF30 + (i / 2)] >> ((i % 2) * 4)) & 0xF;
+            ret[i] = (self.mem[0xFF30 + (i / 2)] >> (((i + 1) % 2) * 4)) & 0xF;
         }
 
         ret
@@ -551,6 +556,10 @@ impl Cpu {
         self.unset_sound3();
         self.unset_sound4();
         self.mem[0xFF26] &= !(0x80);
+        // zero all audio registers
+        for i in 0xFF10..=0xFF25 {
+            self.mem[i] = 0;
+        }
     }
 
     set_interrupt_enabled!(set_vblank_interrupt_enabled, 0x1);
@@ -1016,6 +1025,27 @@ impl Cpu {
                     _ => self.mem[address],
                 },*/
             }
+            0xFF10 => self.mem[0xFF10_u16] | 0x80,
+            0xFF11 => self.mem[0xFF11_u16] | 0x3F, //& 0b1100_0000,
+            // write only audio register
+            0xFF13 => 0xFF,
+            0xFF14 => self.mem[0xFF14_u16] | !0b0100_0000,
+            // NR20: unused channel 2 register
+            0xFF15 => 0xFF,
+            0xFF16 => self.mem[0xFF16_u16] | !0b1100_0000,
+            0xFF18 => 0xFF,
+            0xFF19 => self.mem[0xFF19_u16] | !0b0100_0000,
+            0xFF1A => self.mem[0xFF1A_u16] | !0b1000_0000,
+            0xFF1B => 0xFF,
+            0xFF1C => self.mem[0xFF1C_u16] | !0b0110_0000,
+            0xFF1D => 0xFF,
+            0xFF1E => self.mem[0xFF1E_u16] | !0b0100_0000,
+            // NR40: unused channel 4 register
+            0xFF1F => 0xFF,
+            0xFF20 => 0xFF,
+            0xFF23 => self.mem[0xFF23_u16] | !0b0100_0000,
+            0xFF26 => self.mem[0xFF26_u16] | !0b1000_1111,
+            0xFF27..=0xFF2F => 0xFF,
             0xFF69 if self.gbc_mode => {
                 self.mem.gbc_background_color_palette[(self.mem[0xFF68_u16] & 0x3F) as usize]
             }
@@ -1036,6 +1066,11 @@ impl Cpu {
 
         if let Some(ref mut logger) = self.mem.logger {
             logger.log_write(self.cycles, address, value);
+        }
+        // writes are ignored if APU is off.
+        // TODO: DMG allows writing to part of length registers
+        if !self.get_sound_all() && (0xFF10..=0xFF25).contains(&address) {
+            return;
         }
 
         let address = address as usize;
@@ -1081,7 +1116,7 @@ impl Cpu {
             // writes to 0xFF44
             0xFF10 => {
                 let old_sweep_pace = self.channel1_sweep_pace();
-                self.mem[0xFF10] = value;
+                self.mem[0xFF10] = value & 0x7F;
                 let new_sweep_pace = self.channel1_sweep_pace();
 
                 if old_sweep_pace == 0 && new_sweep_pace != 0 {
@@ -1304,7 +1339,7 @@ impl Cpu {
             CpuRegister::E => Some(self.e),
             CpuRegister::H => Some(self.h),
             CpuRegister::L => Some(self.l),
-            CpuRegister::HL => Some(self.mem[self.hl() as usize]),
+            CpuRegister::HL => Some(self.get_mem(self.hl())),
             _ => None,
         }
     }
