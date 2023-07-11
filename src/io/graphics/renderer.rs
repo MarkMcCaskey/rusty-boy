@@ -14,4 +14,8 @@ pub trait Renderer {
         unimplemented!();
     }
     fn handle_events(&mut self, _: &mut Cpu) -> Vec<EventResponse>;
+
+    fn audio_step(&mut self, _gb: &Cpu) {
+        unimplemented!();
+    }
 }

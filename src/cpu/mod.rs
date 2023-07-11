@@ -180,6 +180,9 @@ impl Cpu {
         let old_val = self.mem[0xFF04_u16];
         self.mem[0xFF04] = old_val.wrapping_add(1);
     }
+    pub fn get_div(&self) -> u8 {
+        self.mem[0xFF04_u16]
+    }
 
     /// The speed at which the timer runs, settable by the program by
     /// writing to 0xFF07
@@ -199,12 +202,35 @@ impl Cpu {
         (((self.mem[0xFF10_u16] >> 4) & 0x7) as f32) / 128.0
     }
 
+    // number is multiplied by 128 and is the hz of how often it's updated.
+    pub fn channel1_sweep_pace(&self) -> u8 {
+        (self.mem[0xFF10_u16] >> 4) & 0x7
+    }
+
     pub fn channel1_sweep_increase(&self) -> bool {
         ((self.mem[0xFF10_u16] >> 3) & 1) == 0
     }
 
     pub fn channel1_sweep_shift(&self) -> u8 {
         self.mem[0xFF10_u16] & 0x7
+    }
+
+    // Runs the sweep logic
+    pub fn channel1_sweep_step(&mut self) {
+        let freq = self.channel1_frequency();
+        let shift = self.channel1_sweep_shift();
+        let new_value = if self.channel1_sweep_increase() {
+            let n = freq + (freq >> shift);
+            if n > 0x7FF {
+                self.unset_sound1();
+            }
+            n & 0x7FF
+        } else {
+            freq - (freq >> shift)
+        };
+        self.mem[0xFF13] = (new_value & 0xFF) as u8;
+        self.mem[0xFF14] &= !0x7;
+        self.mem[0xFF14] |= ((new_value >> 8) & 0x7) as u8;
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
@@ -221,15 +247,48 @@ impl Cpu {
         self.mem[0xFF11_u16] & 0x3F
     }
 
-    pub fn channel1_envelope_initial_volume(&self) -> u8 {
+    pub fn channel1_inc_sound_length(&mut self) {
+        if !self.channel1_sound_length_enabled() {
+            return;
+        }
+        let mut val = self.mem[0xFF11_u16] & 0x3F;
+        val += 1;
+        if val >= 64 {
+            self.unset_sound1();
+        }
+        self.mem[0xFF11] &= !0x3F;
+        self.mem[0xFF11] |= val & 0x3F;
+    }
+
+    pub fn channel1_envelope_volume(&self) -> u8 {
         (self.mem[0xFF12_u16] >> 4) & 0xF
+    }
+
+    pub fn channel1_step_envelope(&mut self) {
+        let val = self.channel1_envelope_volume();
+        let new_val = if self.channel1_envelope_increasing() {
+            let n = val + 1;
+            if n >= 0xF {
+                0xF
+            } else {
+                n
+            }
+        } else {
+            if val == 0 {
+                0
+            } else {
+                val - 1
+            }
+        };
+        self.mem[0xFF12] &= !0xF0;
+        self.mem[0xFF12] |= new_val << 4;
     }
 
     pub fn channel1_envelope_increasing(&self) -> bool {
         ((self.mem[0xFF12_u16] >> 3) & 0x1) == 1
     }
 
-    pub fn channel1_envelope_sweep(&self) -> u8 {
+    pub fn channel1_envelope_sweep_pace(&self) -> u8 {
         self.mem[0xFF12_u16] & 0x7
     }
 
@@ -239,13 +298,8 @@ impl Cpu {
         byte_to_u16(lower, higher)
     }
 
-    pub fn channel1_counter_consecutive_selection(&self) -> bool {
-        //TODO:
-        false
-    }
-
-    pub fn channel1_restart_sound(&self) -> bool {
-        ((self.mem[0xFF14_u16] >> 7) & 1) == 1
+    pub fn channel1_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF14_u16] >> 6) & 1) == 1
     }
 
     pub fn channel2_wave_pattern_duty(&self) -> u8 {
@@ -256,15 +310,48 @@ impl Cpu {
         self.mem[0xFF16_u16] & 0x3F
     }
 
-    pub fn channel2_envelope_initial_volume(&self) -> u8 {
+    pub fn channel2_inc_sound_length(&mut self) {
+        if !self.channel2_sound_length_enabled() {
+            return;
+        }
+        let mut val = self.mem[0xFF16_u16] & 0x3F;
+        val += 1;
+        if val >= 64 {
+            self.unset_sound2();
+        }
+        self.mem[0xFF16] &= !0x3F;
+        self.mem[0xFF16] |= val & 0x3F;
+    }
+
+    pub fn channel2_envelope_volume(&self) -> u8 {
         (self.mem[0xFF17_u16] >> 4) & 0xF
+    }
+
+    pub fn channel2_step_envelope(&mut self) {
+        let val = self.channel2_envelope_volume();
+        let new_val = if self.channel2_envelope_increasing() {
+            let n = val + 1;
+            if n >= 0xF {
+                0xF
+            } else {
+                n
+            }
+        } else {
+            if val == 0 {
+                0
+            } else {
+                val - 1
+            }
+        };
+        self.mem[0xFF17] &= !0xF0;
+        self.mem[0xFF17] |= new_val << 4;
     }
 
     pub fn channel2_envelope_increasing(&self) -> bool {
         ((self.mem[0xFF17_u16] >> 3) & 0x1) == 1
     }
 
-    pub fn channel2_envelope_sweep(&self) -> u8 {
+    pub fn channel2_envelope_sweep_pace(&self) -> u8 {
         self.mem[0xFF17_u16] & 0x7
     }
 
@@ -275,13 +362,8 @@ impl Cpu {
         byte_to_u16(lower, higher)
     }
 
-    pub fn channel2_counter_consecutive_selection(&self) -> bool {
-        //TODO:
-        false
-    }
-
-    pub fn channel2_restart_sound(&self) -> bool {
-        ((self.mem[0xFF19_u16] >> 7) & 1) == 1
+    pub fn channel2_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF19_u16] >> 6) & 1) == 1
     }
 
     pub fn channel3_on(&self) -> bool {
@@ -292,20 +374,36 @@ impl Cpu {
         self.mem[0xFF1B_u16]
     }
 
-    pub fn channel3_output_level(&self) {
-        unimplemented!();
+    pub fn channel3_inc_sound_length(&mut self) {
+        // REVIEW: do we care about DAC here?
+        if !self.channel3_sound_length_enabled()
+        /*|| self.mem[0xFF1A_u16] >> 7 == 0*/
+        {
+            return;
+        }
+        let mut val = self.mem[0xFF1B_u16];
+        if val == 0xFF {
+            val = 0;
+            self.unset_sound3();
+        } else {
+            val += 1;
+        }
+        self.mem[0xFF1B] = val;
     }
 
-    pub fn channel3_frequency(&self) -> u16 {
-        let lower = self.mem[0xFF1C_u16];
-        let higher = self.mem[0xFF1D_u16] & 0x7;
-
-        byte_to_u16(lower, higher)
+    pub fn channel3_output_level(&self) -> f32 {
+        match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
+            0 => 0.0,
+            1 => 1.0,
+            2 => 0.5,
+            3 => 0.25,
+            _ => unreachable!(),
+        }
     }
 
     pub fn channel3_shift_amount(&self) -> u8 {
         match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
-            0 => 4, //to mute
+            0 => 4,
             1 => 0,
             2 => 1,
             3 => 2,
@@ -313,22 +411,92 @@ impl Cpu {
         }
     }
 
-    pub fn channel3_counter_consecutive_selection(&self) -> bool {
-        //TODO:
-        false
+    pub fn channel3_frequency(&self) -> u16 {
+        let lower = self.mem[0xFF1D_u16];
+        let higher = self.mem[0xFF1E_u16] & 0x7;
+
+        byte_to_u16(lower, higher)
     }
 
-    pub fn channel3_restart_sound(&self) -> bool {
-        ((self.mem[0xFF1D_u16] >> 7) & 1) == 1
+    pub fn channel3_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF1E_u16] >> 6) & 1) == 1
     }
 
     pub fn channel3_wave_pattern_ram(&self) -> [u8; 32] {
         let mut ret = [0u8; 32];
         for i in 0..32 {
-            ret[i] = (self.mem[0xFF30 + (i / 2)] >> ((i % 2) * 4)) & 0xF;
+            ret[i] = (self.mem[0xFF30 + (i / 2)] >> (((i + 1) % 2) * 4)) & 0xF;
         }
 
         ret
+    }
+
+    pub fn channel4_sound_length(&self) -> u8 {
+        self.mem[0xFF20_u16] & 0x3F
+    }
+
+    pub fn channel4_inc_sound_length(&mut self) {
+        if !self.channel4_sound_length_enabled() {
+            return;
+        }
+        let mut val = self.mem[0xFF20_u16] & 0x3F;
+        val += 1;
+        if val >= 64 {
+            self.unset_sound4();
+        }
+        self.mem[0xFF20] &= !0x3F;
+        self.mem[0xFF20] |= val & 0x3F;
+    }
+
+    pub fn channel4_sound_length_enabled(&self) -> bool {
+        ((self.mem[0xFF23_u16] >> 6) & 1) == 1
+    }
+
+    pub fn channel4_envelope_volume(&self) -> u8 {
+        (self.mem[0xFF21_u16] >> 4) & 0xF
+    }
+
+    pub fn channel4_step_envelope(&mut self) {
+        let val = self.channel4_envelope_volume();
+        let new_val = if self.channel4_envelope_increasing() {
+            let n = val + 1;
+            if n >= 0xF {
+                0xF
+            } else {
+                n
+            }
+        } else {
+            if val == 0 {
+                0
+            } else {
+                val - 1
+            }
+        };
+        self.mem[0xFF21] &= !0xF0;
+        self.mem[0xFF21] |= new_val << 4;
+    }
+
+    pub fn channel4_envelope_increasing(&self) -> bool {
+        ((self.mem[0xFF21_u16] >> 3) & 0x1) == 1
+    }
+
+    pub fn channel4_envelope_sweep_pace(&self) -> u8 {
+        self.mem[0xFF21_u16] & 0x7
+    }
+
+    pub fn channel4_clock_shift(&self) -> u8 {
+        (self.mem[0xFF22_u16] >> 4) & 0xF
+    }
+
+    pub fn channel4_lfsr_width(&self) -> bool {
+        ((self.mem[0xFF22_u16] >> 3) & 0x1) == 1
+    }
+
+    pub fn channel4_clock_divider(&self) -> f32 {
+        match self.mem[0xFF22_u16] & 0x7 {
+            0 => 0.5,
+            n => n as f32,
+        }
     }
 
     /// Abstracts the logic of the timer
@@ -384,6 +552,9 @@ impl Cpu {
      * SOUND:
      */
 
+    // TODO: read protection based on FF26 bit 7
+
+    // TODO: bits 0-3 are supposed to be read only
     set_sound_on!(set_sound1, 0x1);
     set_sound_on!(set_sound2, 0x2);
     set_sound_on!(set_sound3, 0x4);
@@ -433,6 +604,10 @@ impl Cpu {
         self.unset_sound3();
         self.unset_sound4();
         self.mem[0xFF26] &= !(0x80);
+        // zero all audio registers
+        for i in 0xFF10..=0xFF25 {
+            self.mem[i] = 0;
+        }
     }
 
     set_interrupt_enabled!(set_vblank_interrupt_enabled, 0x1);
@@ -898,6 +1073,27 @@ impl Cpu {
                     _ => self.mem[address],
                 },*/
             }
+            0xFF10 => self.mem[0xFF10_u16] | 0x80,
+            0xFF11 => self.mem[0xFF11_u16] | 0x3F, //& 0b1100_0000,
+            // write only audio register
+            0xFF13 => 0xFF,
+            0xFF14 => self.mem[0xFF14_u16] | !0b0100_0000,
+            // NR20: unused channel 2 register
+            0xFF15 => 0xFF,
+            0xFF16 => self.mem[0xFF16_u16] | !0b1100_0000,
+            0xFF18 => 0xFF,
+            0xFF19 => self.mem[0xFF19_u16] | !0b0100_0000,
+            0xFF1A => self.mem[0xFF1A_u16] | !0b1000_0000,
+            0xFF1B => 0xFF,
+            0xFF1C => self.mem[0xFF1C_u16] | !0b0110_0000,
+            0xFF1D => 0xFF,
+            0xFF1E => self.mem[0xFF1E_u16] | !0b0100_0000,
+            // NR40: unused channel 4 register
+            0xFF1F => 0xFF,
+            0xFF20 => 0xFF,
+            0xFF23 => self.mem[0xFF23_u16] | !0b0100_0000,
+            0xFF26 => self.mem[0xFF26_u16] | !0b1000_1111,
+            0xFF27..=0xFF2F => 0xFF,
             0xFF69 if self.gbc_mode => {
                 self.mem.gbc_background_color_palette[(self.mem[0xFF68_u16] & 0x3F) as usize]
             }
@@ -918,6 +1114,11 @@ impl Cpu {
 
         if let Some(ref mut logger) = self.mem.logger {
             logger.log_write(self.cycles, address, value);
+        }
+        // writes are ignored if APU is off.
+        // TODO: DMG allows writing to part of length registers
+        if !self.get_sound_all() && (0xFF10..=0xFF25).contains(&address) {
+            return;
         }
 
         let address = address as usize;
@@ -961,6 +1162,120 @@ impl Cpu {
             0xFF04 => self.mem[0xFF04] = 0,
             // TODO: Check whether vblank should be turned off on
             // writes to 0xFF44
+            0xFF10 => {
+                let old_sweep_pace = self.channel1_sweep_pace();
+                self.mem[0xFF10] = value & 0x7F;
+                let new_sweep_pace = self.channel1_sweep_pace();
+
+                if old_sweep_pace == 0 && new_sweep_pace != 0 {
+                    // TODO: iterations should be instantly restarted and pace must be reread. we need to siganl this to the timing logic
+                }
+            }
+
+            // channel 1: NR11
+            0xFF11 => {
+                self.mem[0xFF11] = value;
+            }
+
+            // channel 2: NR21
+            0xFF16 => {
+                self.mem[0xFF16] = value;
+            }
+
+            // channel 3: NR31
+            0xFF1B => {
+                self.mem[0xFF1B] = value;
+            }
+
+            // channel 4: NR41
+            0xFF20 => {
+                self.mem[0xFF20] = value;
+            }
+
+            // channel 1: NR12
+            0xFF12 => {
+                if value >> 3 == 0 {
+                    self.unset_sound1();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF12] = value;
+            }
+
+            // channel 2: NR22
+            0xFF17 => {
+                if value >> 3 == 0 {
+                    self.unset_sound2();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF17] = value;
+            }
+
+            // channel 4: NR42
+            0xFF21 => {
+                if value >> 3 == 0 {
+                    self.unset_sound4();
+                }
+                // TODO: APU rewrite:
+                // writes here require retriggering to take effect
+                self.mem[0xFF21] = value;
+            }
+
+            // channel 3: NR30
+            0xFF1A => {
+                if value >> 7 == 1 {
+                    // DAC does not trigger the channel
+                    //self.set_sound3();
+                } else {
+                    self.unset_sound3();
+                }
+                self.mem[0xFF1A] = value;
+            }
+
+            // channel 1: NR14
+            0xFF14 => {
+                if value >> 7 == 1 {
+                    // ensure DAC is enabled
+                    if self.mem[0xFF12_u16] >> 3 != 0 {
+                        self.set_sound1();
+                    }
+                }
+                self.mem[0xFF14] = value;
+            }
+
+            // channel 2: NR24
+            0xFF19 => {
+                if value >> 7 == 1 {
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF17_u16] >> 3 != 0 {
+                        self.set_sound2();
+                    }
+                }
+                self.mem[0xFF19] = value;
+            }
+
+            // channel 3: NR34
+            0xFF1E => {
+                if value >> 7 == 1 {
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF1A_u16] >> 7 == 1 {
+                        self.set_sound3();
+                    }
+                }
+                self.mem[0xFF1E] = value;
+            }
+
+            // channel 4: NR44
+            0xFF23 => {
+                if value >> 7 == 1 {
+                    // ensure that the DAC is enabled here before triggering
+                    if self.mem[0xFF21_u16] >> 3 != 0 {
+                        self.set_sound4();
+                    }
+                }
+                self.mem[0xFF23] = value;
+            }
 
             // Sound
             // NR52
@@ -974,6 +1289,7 @@ impl Cpu {
                 if (value >> 7) & 1 == 0 {
                     self.unset_sound_all();
                 } else if (value >> 7) & 1 == 1 {
+                    // TODO: clear wave ram on power on too
                     self.set_sound_all();
                 }
             }
@@ -1056,7 +1372,7 @@ impl Cpu {
             CpuRegister::E => Some(self.e),
             CpuRegister::H => Some(self.h),
             CpuRegister::L => Some(self.l),
-            CpuRegister::HL => Some(self.mem[self.hl() as usize]),
+            CpuRegister::HL => Some(self.get_mem(self.hl())),
             _ => None,
         }
     }
