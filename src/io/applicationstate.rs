@@ -69,7 +69,7 @@ impl ApplicationState {
             channel2_envelope_counter: 0,
             channel4_envelope_pace: 0,
             channel4_envelope_counter: 0,
-            div_apu: 0,
+            div_apu: 7,
             _screenshot_frame_num: Wrapping(0),
             renderer,
         };
@@ -296,7 +296,7 @@ impl ApplicationState {
                     let new_div_val = self.gameboy.get_div();
                     if (new_div_val >> div_bit) & 1 == 0 {
                         self.div_apu = (self.div_apu + 1) & 0x7;
-                        if self.div_apu == 0 {
+                        if self.div_apu == 7 {
                             // envelope sweep
                             if self.channel1_envelope_pace != 0 {
                                 self.channel1_envelope_counter += 1;
@@ -324,7 +324,7 @@ impl ApplicationState {
                             }
                         }
                         // trigger on 3 and 7
-                        if (self.div_apu & 0x3) == 0x3 {
+                        if (self.div_apu & 0x3) == 0x2 {
                             // channel1 sweep logic
                             if self.channel1_sweep_pace != 0 {
                                 self.channel1_sweep_counter += 1;
@@ -336,7 +336,7 @@ impl ApplicationState {
                             }
                         }
                         // trigger on every other time
-                        if self.div_apu & 1 == 1 {
+                        if self.div_apu & 1 == 0 {
                             self.gameboy.channel1_inc_sound_length();
                             self.gameboy.channel2_inc_sound_length();
                             self.gameboy.channel3_inc_sound_length();

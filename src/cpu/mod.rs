@@ -484,6 +484,21 @@ impl Cpu {
         self.mem[0xFF21_u16] & 0x7
     }
 
+    pub fn channel4_clock_shift(&self) -> u8 {
+        (self.mem[0xFF22_u16] >> 4) & 0xF
+    }
+
+    pub fn channel4_lfsr_width(&self) -> bool {
+        ((self.mem[0xFF22_u16] >> 3) & 0x1) == 1
+    }
+
+    pub fn channel4_clock_divider(&self) -> f32 {
+        match self.mem[0xFF22_u16] & 0x7 {
+            0 => 0.5,
+            n => n as f32,
+        }
+    }
+
     /// Abstracts the logic of the timer
     /// Call this from the loop when the timer should be incremented
     /// NOTE: does not appear to take timer frequency into account...

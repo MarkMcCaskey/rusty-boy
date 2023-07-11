@@ -64,9 +64,8 @@ pub struct Noise {
     pub volume: f32,
     base_volume: f32,
     pub add: bool,
-    pub clock_shift: u8,
     pub lfsr_width: bool,
-    pub clock_divider: u8,
+    pub lfsr: u16,
 }
 
 trait SoundChannel {
@@ -113,8 +112,20 @@ impl SoundChannel for Noise {
         if !self.enabled {
             return 0.0;
         }
-        let out = 0.0;
+        let out_int = (!(self.lfsr & 1)) & 1;
+        let out = out_int as f32 * self.base_volume * self.volume;
+
+        let v = self.phase + self.phase_inc;
         self.phase = (self.phase + self.phase_inc) % 1.0;
+        if v >= 1.0 {
+            if !self.lfsr_width {
+                let bot_bit = (self.lfsr & 1) ^ ((self.lfsr >> 1) & 1);
+                self.lfsr = (self.lfsr >> 1) | (bot_bit << 15);
+            } else {
+                let bot_bit = (self.lfsr & 1) ^ ((self.lfsr >> 1) & 1);
+                self.lfsr = ((self.lfsr >> 1) & 0x7F7F) | (bot_bit << 15) | (bot_bit << 7);
+            }
+        }
 
         out
     }
@@ -192,9 +203,8 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 base_volume: 0.050,
                 volume: 1.0,
                 add: true,
-                clock_shift: 0,
                 lfsr_width: false,
-                clock_divider: 0,
+                lfsr: 0,
             },
         }
     })

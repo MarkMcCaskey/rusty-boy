@@ -422,8 +422,6 @@ impl Renderer for Sdl2Renderer {
 
         if gb.get_sound3() {
             let channel3_freq = 2097152.0 / (2048.0 - gb.channel3_frequency() as f32);
-            //let channel3_freq = 4194304.0 / (4.0 * 32.0 * (2048.0 - gb.channel3_frequency() as f32));
-            //let channel3_freq = 65536. / (2048.0 - gb.channel3_frequency() as f32);
             sound_system.channel3.volume = gb.channel3_output_level() as f32;
             sound_system.channel3.shift_amount = gb.channel3_shift_amount();
             sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
@@ -431,13 +429,11 @@ impl Renderer for Sdl2Renderer {
         }
         if gb.get_sound4() {
             sound_system.channel4.volume = gb.channel4_envelope_volume() as f32 / 15.0;
-            /*
-            let channel4_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel4_frequency() as f32));
+            let clock_div = gb.channel4_clock_divider();
+            let clock_shift = gb.channel4_clock_shift();
+            let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
             sound_system.channel4.phase_inc = channel4_freq / sound_system.out_freq;
-            sound_system.channel4.clock_shift = gb.channel4_clock_shift();
             sound_system.channel4.lfsr_width = gb.channel4_lfsr_width();
-            sound_system.channel4.clock_divider = gb.channel4_clock_divider();
-            */
         }
     }
 }
