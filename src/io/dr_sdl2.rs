@@ -402,9 +402,9 @@ impl Renderer for Sdl2Renderer {
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        sound_system.channel1.enabled = gb.get_sound1();
+        /*sound_system.channel1.enabled = gb.get_sound1();
         sound_system.channel2.enabled = gb.get_sound2();
-        sound_system.channel3.enabled = gb.get_sound3();
+        sound_system.channel3.enabled = gb.get_sound3();*/
         sound_system.channel4.enabled = gb.get_sound4();
         if gb.get_sound1() {
             sound_system.channel1.volume = gb.channel1_envelope_volume() as f32 / 15.0;
@@ -431,7 +431,8 @@ impl Renderer for Sdl2Renderer {
             sound_system.channel4.volume = gb.channel4_envelope_volume() as f32 / 15.0;
             let clock_div = gb.channel4_clock_divider();
             let clock_shift = gb.channel4_clock_shift();
-            let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
+            //let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
+            let channel4_freq = 262144. / (clock_div * (2_u32.pow(clock_shift as _)) as f32);
             sound_system.channel4.phase_inc = channel4_freq / sound_system.out_freq;
             sound_system.channel4.lfsr_width = gb.channel4_lfsr_width();
         } else {
