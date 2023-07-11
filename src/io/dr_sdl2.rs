@@ -405,6 +405,7 @@ impl Renderer for Sdl2Renderer {
         sound_system.channel1.enabled = gb.get_sound1();
         sound_system.channel2.enabled = gb.get_sound2();
         sound_system.channel3.enabled = gb.get_sound3();
+        /*
         if gb.get_sound1() {
             sound_system.channel1.volume = gb.channel1_envelope_volume() as f32 / 15.0;
             sound_system.channel1.wave_duty = gb.channel1_wave_pattern_duty();
@@ -418,9 +419,11 @@ impl Renderer for Sdl2Renderer {
             let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
         }
+        */
 
         if gb.get_sound3() {
-            let channel3_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel3_frequency() as f32));
+            let channel3_freq = 2097152.0 / (2048.0 - gb.channel3_frequency() as f32);
+            //let channel3_freq = 4194304.0 / (4.0 * 32.0 * (2048.0 - gb.channel3_frequency() as f32));
             //let channel3_freq = 65536. / (2048.0 - gb.channel3_frequency() as f32);
             sound_system.channel3.volume = gb.channel3_output_level() as f32;
             sound_system.channel3.shift_amount = gb.channel3_shift_amount();

@@ -1257,6 +1257,7 @@ impl Cpu {
                 if (value >> 7) & 1 == 0 {
                     self.unset_sound_all();
                 } else if (value >> 7) & 1 == 1 {
+                    // TODO: clear wave ram on power on too
                     self.set_sound_all();
                 }
             }

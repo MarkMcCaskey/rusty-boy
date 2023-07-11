@@ -84,17 +84,18 @@ impl SoundChannel for SquareWaveRam {
         if !self.enabled {
             return 0.0;
         }
-        let adj = (self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32 - 7.5;
-        let out = adj / 7.5;
+        let adj = (self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32 / 15.; // - 7.5;
+        let out = adj;
         let out = if self.phase <= self.wave_duty {
             //((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) {
             //if self.phase * ((self.wave_ram[self.wave_ram_index] >> self.shift_amount) as f32) <= self.wave_duty { // {
             //self.base_volume * self.volume * self.phase
-            self.base_volume * out * self.phase
+            self.base_volume * out // * self.phase
         } else {
             //-self.base_volume * self.volume * self.phase
             //self.base_volume * out
-            0.0
+            -1. * self.base_volume * out // * self.phase
+                                         //0.0
         };
 
         // self.phase = (self.phase_inc + (1.0 / self.wave_ram[self.wave_ram_index] as f32)) % 1.0;
@@ -102,9 +103,12 @@ impl SoundChannel for SquareWaveRam {
         // To make it sound slightly nicer
          */
 
+        let v = self.phase + self.phase_inc;
         self.phase = (self.phase + self.phase_inc) % 1.0;
 
-        self.wave_ram_index = (self.wave_ram_index + 1) % 32;
+        if v >= 1.0 {
+            self.wave_ram_index = (self.wave_ram_index + 1) % 32;
+        }
         out //.sin()
     }
 }
