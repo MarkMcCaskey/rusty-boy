@@ -402,8 +402,8 @@ impl Renderer for Sdl2Renderer {
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        sound_system.channel1.enabled = gb.get_sound1();
-        sound_system.channel2.enabled = gb.get_sound2();
+        //sound_system.channel1.enabled = gb.get_sound1();
+        //sound_system.channel2.enabled = gb.get_sound2();
         sound_system.channel3.enabled = gb.get_sound3();
         /*
         if gb.get_sound1() {
