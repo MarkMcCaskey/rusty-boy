@@ -116,10 +116,8 @@ impl ApplicationState {
                 208,
             )
         };
-        // channel 3 timing
-        //2097152. / 2048. - self.gameboy.channel3_frequency()
         self.cycles_per_second = cycles_per_second;
-        let audio_timing_cycles = cycles_per_second / 256;
+        let audio_timing_cycles = cycles_per_second / 512; //256;
         let mut scanline_cycles: u32 = 0;
         let mut y = 0;
         let mut window_counter: u16 = 0;

@@ -112,7 +112,7 @@ impl SoundChannel for Noise {
         if !self.enabled {
             return 0.0;
         }
-        let out_int = (!(self.lfsr & 1)) & 1;
+        let out_int = (self.lfsr & 1) & 1;
         let out = out_int as f32 * self.base_volume * self.volume;
 
         let v = self.phase + self.phase_inc;
@@ -120,10 +120,10 @@ impl SoundChannel for Noise {
         if v >= 1.0 {
             if !self.lfsr_width {
                 let bot_bit = (self.lfsr & 1) ^ ((self.lfsr >> 1) & 1);
-                self.lfsr = (self.lfsr >> 1) | (bot_bit << 15);
+                self.lfsr = (self.lfsr >> 1) | (bot_bit << 14);
             } else {
                 let bot_bit = (self.lfsr & 1) ^ ((self.lfsr >> 1) & 1);
-                self.lfsr = ((self.lfsr >> 1) & 0x7F7F) | (bot_bit << 15) | (bot_bit << 7);
+                self.lfsr = ((self.lfsr >> 1) & 0xBFBF) | (bot_bit << 14) | (bot_bit << 6);
             }
         }
 
@@ -157,7 +157,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
-        samples: None,
+        samples: Some(64),
     };
 
     audio_subsystem.open_playback(None, &desired_spec, |spec| {
@@ -204,7 +204,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 volume: 1.0,
                 add: true,
                 lfsr_width: false,
-                lfsr: 0xFFFF,
+                lfsr: 0x7FFF,
             },
         }
     })

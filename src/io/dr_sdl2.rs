@@ -402,9 +402,9 @@ impl Renderer for Sdl2Renderer {
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        /*sound_system.channel1.enabled = gb.get_sound1();
+        sound_system.channel1.enabled = gb.get_sound1();
         sound_system.channel2.enabled = gb.get_sound2();
-        sound_system.channel3.enabled = gb.get_sound3();*/
+        sound_system.channel3.enabled = gb.get_sound3();
         sound_system.channel4.enabled = gb.get_sound4();
         if gb.get_sound1() {
             sound_system.channel1.volume = gb.channel1_envelope_volume() as f32 / 15.0;
@@ -437,7 +437,7 @@ impl Renderer for Sdl2Renderer {
             sound_system.channel4.lfsr_width = gb.channel4_lfsr_width();
         } else {
             // HACK: this is because we can't do it on trigger until we refactor APU
-            sound_system.channel4.lfsr = 0xFFFF;
+            sound_system.channel4.lfsr = 0x7FFF;
         }
     }
 }
