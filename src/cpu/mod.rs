@@ -402,10 +402,11 @@ impl Cpu {
     }
 
     pub fn channel3_shift_amount(&self) -> u8 {
-        match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
-            0 | 1 => 0,
-            2 => 1,
-            3 => 2,
+        match (self.mem[0xFF1C_u16] >> 4) & 0x3 {
+            0 => 4,
+            1 => 0,
+            2 => 2,
+            3 => 1,
             _ => unreachable!(),
         }
     }
