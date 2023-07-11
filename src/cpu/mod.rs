@@ -351,7 +351,7 @@ impl Cpu {
         ((self.mem[0xFF17_u16] >> 3) & 0x1) == 1
     }
 
-    pub fn channel2_envelope_sweep(&self) -> u8 {
+    pub fn channel2_envelope_sweep_pace(&self) -> u8 {
         self.mem[0xFF17_u16] & 0x7
     }
 
@@ -449,6 +449,38 @@ impl Cpu {
 
     pub fn channel4_sound_length_enabled(&self) -> bool {
         ((self.mem[0xFF23_u16] >> 6) & 1) == 1
+    }
+
+    pub fn channel4_envelope_volume(&self) -> u8 {
+        (self.mem[0xFF21_u16] >> 4) & 0xF
+    }
+
+    pub fn channel4_step_envelope(&mut self) {
+        let val = self.channel4_envelope_volume();
+        let new_val = if self.channel4_envelope_increasing() {
+            let n = val + 1;
+            if n >= 0xF {
+                0xF
+            } else {
+                n
+            }
+        } else {
+            if val == 0 {
+                0
+            } else {
+                val - 1
+            }
+        };
+        self.mem[0xFF21] &= !0xF0;
+        self.mem[0xFF21] |= new_val << 4;
+    }
+
+    pub fn channel4_envelope_increasing(&self) -> bool {
+        ((self.mem[0xFF21_u16] >> 3) & 0x1) == 1
+    }
+
+    pub fn channel4_envelope_sweep_pace(&self) -> u8 {
+        self.mem[0xFF21_u16] & 0x7
     }
 
     /// Abstracts the logic of the timer

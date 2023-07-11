@@ -35,6 +35,8 @@ pub struct ApplicationState {
     channel1_envelope_counter: u8,
     channel2_envelope_pace: u8,
     channel2_envelope_counter: u8,
+    channel4_envelope_pace: u8,
+    channel4_envelope_counter: u8,
     /// counter tied to DIV used for sound timing.
     /// TODO: this likely should live in the CPU
     div_apu: u8,
@@ -65,6 +67,8 @@ impl ApplicationState {
             channel1_envelope_counter: 0,
             channel2_envelope_pace: 0,
             channel2_envelope_counter: 0,
+            channel4_envelope_pace: 0,
+            channel4_envelope_counter: 0,
             div_apu: 0,
             _screenshot_frame_num: Wrapping(0),
             renderer,
@@ -77,7 +81,8 @@ impl ApplicationState {
     fn update_channel_vars(&mut self) {
         self.channel1_sweep_pace = self.gameboy.channel1_sweep_pace();
         self.channel1_envelope_pace = self.gameboy.channel1_envelope_sweep_pace();
-        self.channel2_envelope_pace = self.gameboy.channel1_envelope_sweep_pace();
+        self.channel2_envelope_pace = self.gameboy.channel2_envelope_sweep_pace();
+        self.channel4_envelope_pace = self.gameboy.channel4_envelope_sweep_pace();
     }
 
     /// Runs the emulator for 1 frame and requests that frame to be drawn.
@@ -307,6 +312,14 @@ impl ApplicationState {
                                 if self.channel2_envelope_counter == self.channel2_envelope_pace {
                                     self.gameboy.channel2_step_envelope();
                                     self.channel2_envelope_counter = 0;
+                                }
+                            }
+                            if self.channel4_envelope_pace != 0 {
+                                self.channel4_envelope_counter += 1;
+                                self.channel4_envelope_counter &= 0x7;
+                                if self.channel4_envelope_counter == self.channel4_envelope_pace {
+                                    self.gameboy.channel4_step_envelope();
+                                    self.channel4_envelope_counter = 0;
                                 }
                             }
                         }
