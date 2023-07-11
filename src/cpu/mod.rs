@@ -1174,37 +1174,21 @@ impl Cpu {
 
             // channel 1: NR11
             0xFF11 => {
-                if value & 0x3F == 0 {
-                    //self.unset_sound1();
-                    self.mem[0xFF11] = value; // | 0x3F;
-                } else {
-                    self.mem[0xFF11] = value;
-                }
+                self.mem[0xFF11] = value;
             }
 
             // channel 2: NR21
             0xFF16 => {
-                if value & 0x3F == 0 {
-                    //self.unset_sound2();
-                    self.mem[0xFF16] = value; // | 0x3F;
-                } else {
-                    self.mem[0xFF16] = value;
-                }
+                self.mem[0xFF16] = value;
             }
 
             // channel 3: NR31
             0xFF1B => {
-                if value == 0 {
-                    //self.unset_sound3();
-                }
                 self.mem[0xFF1B] = value;
             }
 
             // channel 4: NR41
             0xFF20 => {
-                if value & 0x3F == 0 {
-                    //self.unset_sound4();
-                }
                 self.mem[0xFF20] = value;
             }
 
