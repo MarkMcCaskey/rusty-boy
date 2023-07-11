@@ -434,6 +434,9 @@ impl Renderer for Sdl2Renderer {
             let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
             sound_system.channel4.phase_inc = channel4_freq / sound_system.out_freq;
             sound_system.channel4.lfsr_width = gb.channel4_lfsr_width();
+        } else {
+            // HACK: this is because we can't do it on trigger until we refactor APU
+            sound_system.channel4.lfsr = 0xFFFF;
         }
     }
 }

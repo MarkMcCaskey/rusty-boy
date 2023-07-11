@@ -204,7 +204,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 volume: 1.0,
                 add: true,
                 lfsr_width: false,
-                lfsr: 0,
+                lfsr: 0xFFFF,
             },
         }
     })
