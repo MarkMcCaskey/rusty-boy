@@ -405,8 +405,8 @@ impl Cpu {
         match (self.mem[0xFF1C_u16] >> 5) & 0x3 {
             0 => 4,
             1 => 0,
-            2 => 2,
-            3 => 3,
+            2 => 1,
+            3 => 2,
             _ => unreachable!(),
         }
     }
