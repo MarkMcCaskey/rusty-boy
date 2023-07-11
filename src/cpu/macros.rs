@@ -35,7 +35,6 @@ macro_rules! setter_unsetter_and_getter {
 //NOTE: look into separate sound on/off storage outside of
 // GB memory to prevent subtle "bug"/non-correct behavior
 
-setter_unsetter_and_getter!(set_sound_on, unset_sound_on, get_sound_on, 0xFF26);
 setter_unsetter_and_getter!(
     set_interrupt_bit,
     unset_interrupt_bit,

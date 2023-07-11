@@ -28,18 +28,6 @@ pub struct ApplicationState {
     cycles_per_second: u64,
     /// counts cycles since last sound update
     sound_cycles: u64,
-    channel1_sweep_pace: u8,
-    channel1_sweep_counter: u8,
-    //channel1_sweep_cycles: u64,
-    channel1_envelope_pace: u8,
-    channel1_envelope_counter: u8,
-    channel2_envelope_pace: u8,
-    channel2_envelope_counter: u8,
-    channel4_envelope_pace: u8,
-    channel4_envelope_counter: u8,
-    /// counter tied to DIV used for sound timing.
-    /// TODO: this likely should live in the CPU
-    div_apu: u8,
     _screenshot_frame_num: Wrapping<u64>,
     pub renderer: Box<dyn Renderer>,
 }
@@ -50,7 +38,7 @@ impl ApplicationState {
         // Set up gameboy and other state
         let gameboy = cpu::Cpu::new();
 
-        let mut app_state = ApplicationState {
+        Ok(ApplicationState {
             gameboy,
             //sound_system: device,
             cycle_count: 0,
@@ -59,31 +47,19 @@ impl ApplicationState {
             div_timer_cycles: 0,
             cycles_per_second: CPU_CYCLES_PER_SECOND,
             sound_cycles: 0,
-            // TODO: this APU logic probably should be moved into CPU or
-            // somewhere accessible by CPU
-            channel1_sweep_pace: 0,
-            channel1_sweep_counter: 0,
-            channel1_envelope_pace: 0,
-            channel1_envelope_counter: 0,
-            channel2_envelope_pace: 0,
-            channel2_envelope_counter: 0,
-            channel4_envelope_pace: 0,
-            channel4_envelope_counter: 0,
-            div_apu: 7,
             _screenshot_frame_num: Wrapping(0),
             renderer,
-        };
-        //app_state.update_channel1_sweep_step();
-        app_state.update_channel_vars();
-        Ok(app_state)
+        })
     }
 
+    /*
     fn update_channel_vars(&mut self) {
         self.channel1_sweep_pace = self.gameboy.channel1_sweep_pace();
         self.channel1_envelope_pace = self.gameboy.channel1_envelope_sweep_pace();
         self.channel2_envelope_pace = self.gameboy.channel2_envelope_sweep_pace();
         self.channel4_envelope_pace = self.gameboy.channel4_envelope_sweep_pace();
     }
+    */
 
     /// Runs the emulator for 1 frame and requests that frame to be drawn.
     pub fn step(&mut self) {
@@ -202,7 +178,6 @@ impl ApplicationState {
                         frame[y as usize] = scanline;
                         y += 1;
                         self.gameboy.inc_ly();
-                        //run_inc_ly_logic(&mut self.gameboy);
 
                         scanline_cycles -= hblank_cycles + vram_scan_cycles + oam_scan_cycles;
                         assert!(
@@ -261,7 +236,6 @@ impl ApplicationState {
                     } else {
                         scanline_cycles -= hblank_cycles + vram_scan_cycles + oam_scan_cycles;
                         self.gameboy.inc_ly();
-                        //run_inc_ly_logic(&mut self.gameboy);
                         vblank_iterations += 1;
                     }
                 }
@@ -273,7 +247,7 @@ impl ApplicationState {
                 // TODO: trigger this properly based on writes to registers
                 //   and APU state (i.e. not here, somewhere CPU accessible)
                 // HACK: we just update it randomly
-                self.update_channel_vars();
+                //self.update_channel_vars();
                 self.renderer.audio_step(&self.gameboy);
                 self.sound_cycles -= audio_timing_cycles as u64;
             }
@@ -293,53 +267,8 @@ impl ApplicationState {
                 if (old_div_val >> div_bit) & 1 == 1 {
                     let new_div_val = self.gameboy.get_div();
                     if (new_div_val >> div_bit) & 1 == 0 {
-                        self.div_apu = (self.div_apu + 1) & 0x7;
-                        if self.div_apu == 7 {
-                            // envelope sweep
-                            if self.channel1_envelope_pace != 0 {
-                                self.channel1_envelope_counter += 1;
-                                self.channel1_envelope_counter &= 0x7;
-                                if self.channel1_envelope_counter == self.channel1_envelope_pace {
-                                    self.gameboy.channel1_step_envelope();
-                                    self.channel1_envelope_counter = 0;
-                                }
-                            }
-                            if self.channel2_envelope_pace != 0 {
-                                self.channel2_envelope_counter += 1;
-                                self.channel2_envelope_counter &= 0x7;
-                                if self.channel2_envelope_counter == self.channel2_envelope_pace {
-                                    self.gameboy.channel2_step_envelope();
-                                    self.channel2_envelope_counter = 0;
-                                }
-                            }
-                            if self.channel4_envelope_pace != 0 {
-                                self.channel4_envelope_counter += 1;
-                                self.channel4_envelope_counter &= 0x7;
-                                if self.channel4_envelope_counter == self.channel4_envelope_pace {
-                                    self.gameboy.channel4_step_envelope();
-                                    self.channel4_envelope_counter = 0;
-                                }
-                            }
-                        }
-                        // trigger on 3 and 7
-                        if (self.div_apu & 0x3) == 0x2 {
-                            // channel1 sweep logic
-                            if self.channel1_sweep_pace != 0 {
-                                self.channel1_sweep_counter += 1;
-                                self.channel1_sweep_counter &= 0x7;
-                                if self.channel1_sweep_counter == self.channel1_sweep_pace {
-                                    self.gameboy.channel1_sweep_step();
-                                    self.channel1_sweep_counter = 0;
-                                }
-                            }
-                        }
-                        // trigger on every other time
-                        if self.div_apu & 1 == 0 {
-                            self.gameboy.channel1_inc_sound_length();
-                            self.gameboy.channel2_inc_sound_length();
-                            self.gameboy.channel3_inc_sound_length();
-                            self.gameboy.channel4_inc_sound_length();
-                        }
+                        // falling edge
+                        self.gameboy.apu.step();
                     }
                 }
             }

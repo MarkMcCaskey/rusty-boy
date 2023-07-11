@@ -402,39 +402,41 @@ impl Renderer for Sdl2Renderer {
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        sound_system.channel1.enabled = gb.get_sound1();
-        sound_system.channel2.enabled = gb.get_sound2();
-        sound_system.channel3.enabled = gb.get_sound3();
-        sound_system.channel4.enabled = gb.get_sound4();
-        if gb.get_sound1() {
-            sound_system.channel1.volume = gb.channel1_envelope_volume() as f32 / 15.0;
-            sound_system.channel1.wave_duty = gb.channel1_wave_pattern_duty();
-            let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel1_frequency() as f32));
+        sound_system.channel1.enabled = gb.apu.get_sound1();
+        sound_system.channel2.enabled = gb.apu.get_sound2();
+        sound_system.channel3.enabled = gb.apu.get_sound3();
+        sound_system.channel4.enabled = gb.apu.get_sound4();
+        if gb.apu.get_sound1() {
+            sound_system.channel1.volume = gb.apu.channel1_envelope_volume() as f32 / 15.0;
+            sound_system.channel1.wave_duty = gb.apu.channel1_wave_pattern_duty();
+            let channel1_freq =
+                4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel1_frequency() as f32));
             sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
         }
 
-        if gb.get_sound2() {
+        if gb.apu.get_sound2() {
             // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
-            sound_system.channel2.volume = gb.channel2_envelope_volume() as f32 / 15.0;
-            let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.channel2_frequency() as f32));
+            sound_system.channel2.volume = gb.apu.channel2_envelope_volume() as f32 / 15.0;
+            let channel2_freq =
+                4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel2_frequency() as f32));
             sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
         }
 
-        if gb.get_sound3() {
-            let channel3_freq = 2097152.0 / (2048.0 - gb.channel3_frequency() as f32);
-            sound_system.channel3.volume = gb.channel3_output_level() as f32;
-            sound_system.channel3.shift_amount = gb.channel3_shift_amount();
+        if gb.apu.get_sound3() {
+            let channel3_freq = 2097152.0 / (2048.0 - gb.apu.channel3_frequency() as f32);
+            sound_system.channel3.volume = gb.apu.channel3_output_level() as f32;
+            sound_system.channel3.shift_amount = gb.apu.channel3_shift_amount();
             sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
-            sound_system.channel3.wave_ram = gb.channel3_wave_pattern_ram();
+            sound_system.channel3.wave_ram = gb.apu.channel3_wave_pattern_ram();
         }
-        if gb.get_sound4() {
-            sound_system.channel4.volume = gb.channel4_envelope_volume() as f32 / 15.0;
-            let clock_div = gb.channel4_clock_divider();
-            let clock_shift = gb.channel4_clock_shift();
+        if gb.apu.get_sound4() {
+            sound_system.channel4.volume = gb.apu.channel4_envelope_volume() as f32 / 15.0;
+            let clock_div = gb.apu.channel4_clock_divider();
+            let clock_shift = gb.apu.channel4_clock_shift();
             //let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
             let channel4_freq = 262144. / (clock_div * (2_u32.pow(clock_shift as _)) as f32);
             sound_system.channel4.phase_inc = channel4_freq / sound_system.out_freq;
-            sound_system.channel4.lfsr_width = gb.channel4_lfsr_width();
+            sound_system.channel4.lfsr_width = gb.apu.channel4_lfsr_width();
         } else {
             // HACK: this is because we can't do it on trigger until we refactor APU
             sound_system.channel4.lfsr = 0x7FFF;
