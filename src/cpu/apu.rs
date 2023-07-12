@@ -349,7 +349,9 @@ impl Apu {
         let shift = self.channel1_sweep_shift();
         let new_value = if self.channel1_sweep_increase() {
             let n = freq + (freq >> shift);
-            if n > 0x7FF /*|| shift == 0*/ {
+            if n > 0x7FF
+            /*|| shift == 0*/
+            {
                 self.unset_sound1();
                 return;
                 //freq
@@ -671,13 +673,13 @@ impl Apu {
         self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_sweep_counter = 0;
         self.channel1_envelope_counter = 0;
-        self.channel1_sweep_enabled = self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
+        self.channel1_sweep_enabled =
+            self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
 
         if self.channel1_sweep_shift() > 0 {
             self.channel1_sweep_step();
         }
-        if self.channel1_sweep_shift() == 0 && self.channel1_sweep_pace() > 0 {
-        }
+        if self.channel1_sweep_shift() == 0 && self.channel1_sweep_pace() > 0 {}
     }
     pub fn set_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 1;
