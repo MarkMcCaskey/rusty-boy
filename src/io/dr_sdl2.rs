@@ -414,7 +414,7 @@ impl Renderer for Sdl2Renderer {
         //}
 
         //if gb.apu.get_sound2() {
-        // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
+        sound_system.channel2.wave_duty = gb.apu.channel2_wave_pattern_duty();
         sound_system.channel2.volume = gb.apu.channel2_envelope_volume as f32 / 15.0;
         let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel2_frequency() as f32));
         sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;

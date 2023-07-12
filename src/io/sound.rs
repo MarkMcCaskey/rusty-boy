@@ -166,7 +166,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
             out_freq: spec.freq as f32,
             channel1: SquareWave {
                 enabled: false,
-                phase_inc: 440.0 / spec.freq as f32,
+                phase_inc: 0.0,
                 phase: 0.0,
                 base_volume: 0.100,
                 volume: 1.0,
@@ -175,7 +175,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
             },
             channel2: SquareWave {
                 enabled: false,
-                phase_inc: 440.0 / spec.freq as f32,
+                phase_inc: 0.0,
                 phase: 0.0,
                 base_volume: 0.100,
                 volume: 1.0,
@@ -184,7 +184,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
             },
             channel3: SquareWaveRam {
                 enabled: false,
-                phase_inc: 440.0 / spec.freq as f32,
+                phase_inc: 0.0,
                 phase: 0.0,
                 base_volume: 0.100,
                 volume: 1.0,
@@ -195,7 +195,7 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
             },
             channel4: Noise {
                 enabled: false,
-                phase_inc: 440.0 / spec.freq as f32,
+                phase_inc: 0.0,
                 phase: 0.0,
                 base_volume: 0.100,
                 volume: 1.0,

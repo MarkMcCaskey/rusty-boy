@@ -458,8 +458,14 @@ impl Apu {
         ((self.apu_mem[0xFF14 - APU_BASE] >> 6) & 1) == 1
     }
 
-    pub fn channel2_wave_pattern_duty(&self) -> u8 {
-        (self.apu_mem[0xFF16 - APU_BASE] >> 6) & 0x3
+    pub fn channel2_wave_pattern_duty(&self) -> f32 {
+        match (self.apu_mem[0xFF16 - APU_BASE] >> 6) & 0x3 {
+            0 => 0.125,
+            1 => 0.25,
+            2 => 0.5,
+            3 => 0.75,
+            _ => unreachable!(),
+        }
     }
 
     pub fn channel2_sound_length(&self) -> u8 {
