@@ -41,6 +41,18 @@ pub fn read_arguments<'input>() -> ArgMatches<'input> {
                 .long("visualize")
                 .help("Turns on interactive memory visualization")
                 .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("disasm")
+                .long("disasm")
+                .help("Disassemble a ROM, print it, and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("remove-nops")
+                .long("remove-nops")
+                .help("Don't show NOPs in disassembly output (disassembler only)")
+                .takes_value(false),
         );
 
     #[cfg(feature = "debugger")]

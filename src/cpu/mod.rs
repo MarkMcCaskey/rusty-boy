@@ -777,7 +777,17 @@ impl Cpu {
                     self.mem[0xFF00] = value | (self.input_state & 0x0F);
                 }
             }
-            0xFF04 => self.mem[0xFF04] = 0,
+            0xFF04 => {
+                let old_div_val = self.mem[0xFF04_u16];
+                self.mem[0xFF04] = 0;
+
+                let div_bit = if self.double_speed { 5 } else { 4 };
+                // Update APU-DIV
+                if (old_div_val >> div_bit) & 1 == 1 {
+                    // falling edge
+                    self.apu.step();
+                }
+            }
             // TODO: Check whether vblank should be turned off on
             // writes to 0xFF44
 
@@ -1371,8 +1381,16 @@ impl Cpu {
             self.double_speed = speed_mode;
             self.mem[0xFF4D] = (speed_mode as u8) << 7;
         } else {
+            let old_div_val = self.mem[0xFF04_u16];
+            let div_bit = if self.double_speed { 5 } else { 4 };
             // reset div
             self.mem[0xFF04] = 0;
+            // Update APU-DIV
+            if (old_div_val >> div_bit) & 1 == 1 {
+                // falling edge
+                self.apu.step();
+            }
+
             self.state = CpuState::Stop;
         }
     }
@@ -1669,7 +1687,7 @@ impl Cpu {
     }
 
     fn inc_pc(&mut self) {
-        self.pc = (Wrapping(self.pc) + Wrapping(1)).0;
+        self.pc = self.pc.wrapping_add(1);
     }
 
     fn handle_interrupts(&mut self) {

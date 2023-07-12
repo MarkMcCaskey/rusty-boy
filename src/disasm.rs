@@ -252,7 +252,7 @@ pub fn pp_opcode(first_byte: u8, second_byte: u8, third_byte: u8, pc: u16) -> (S
 }
 
 #[allow(dead_code)]
-fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
+fn disasm_rom(rom: [u8; 0x8000], rom_size: usize, hide_nops: bool) {
     let mut pc = 0;
 
     let crash_preventing_size = rom_size - 2; // FIXME
@@ -260,6 +260,10 @@ fn disasm_rom(rom: [u8; 0x8000], rom_size: usize) {
         let b1 = rom[pc];
         let b2 = rom[pc + 1];
         let b3 = rom[pc + 2];
+        if hide_nops && b1 == 0x00 {
+            pc += 1;
+            continue;
+        }
         let (mnemonic, size) = pp_opcode(b1, b2, b3, pc as u16);
         print!("\t{:25}; ${:04X} ", mnemonic, pc);
         match size {
@@ -287,9 +291,8 @@ pub fn disasm_rom_to_vec(rom: [u8; 0x8000], rom_size: usize) -> Vec<(String, u16
     ret
 }
 
-#[cfg(cli)]
-#[allow(dead_code)]
-fn main() {
+#[cfg(feature = "cli")]
+pub fn disasm_main<'input>(args: &clap::ArgMatches<'input>) {
     // // Print "[prefix] opcode size mnemonic" table
     // for i in 0..255 {
     //     let (mnemonic, size) = pp_opcode(i, 0xF2, 0x02, 0x2FFF);
@@ -299,25 +302,17 @@ fn main() {
     //     let (mnemonic, size) = pp_opcode(0xCB, i, 0x02, 0x2FFF);
     //     println!("0xCB 0x{:02X} {} {:?}", i, size, mnemonic);
     // }
-    use clap::{App, Arg};
     use std::fs::File;
     use std::io::Read;
 
-    let matches = App::new("disasm")
-        .version("0.1")
-        .author("spawnedartifact")
-        .about("GB z80 disassembler")
-        .arg(
-            Arg::with_name("game")
-                .index(1)
-                .value_name("FILE")
-                .help("Specifies ROM to disassemble")
-                .takes_value(true),
-        )
-        .get_matches();
-
-    let file_path = matches.value_of("game").expect("Could not open rom");
-    let mut rom = File::open(file_path).expect("Could not open rom file");
+    let Some(game) = args
+        .value_of("game")
+         .clone() else {
+            eprintln!("Fatal error: ROM file path required for disassembly");
+            std::process::exit(1);
+        };
+    let hide_nops = args.is_present("remove-nops");
+    let mut rom = File::open(game).expect("Could not open rom file");
     let mut rom_buffer: [u8; 0x8000] = [0u8; 0x8000];
 
     let rom_size = match rom.read(&mut rom_buffer) {
@@ -329,5 +324,5 @@ fn main() {
         }
     };
 
-    disasm_rom(rom_buffer, rom_size);
+    disasm_rom(rom_buffer, rom_size, hide_nops);
 }

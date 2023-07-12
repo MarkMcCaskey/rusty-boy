@@ -6,6 +6,7 @@ const APU_BASE: usize = 0xFF10;
 pub struct Apu {
     pub channel1_sweep_pace: u8,
     pub channel1_sweep_counter: u8,
+    pub channel1_sweep_enabled: bool,
     pub channel1_envelope_pace: u8,
     pub channel1_envelope_counter: u8,
     pub channel2_envelope_pace: u8,
@@ -24,6 +25,7 @@ impl Apu {
         Self {
             channel1_sweep_pace: 0,
             channel1_sweep_counter: 0,
+            channel1_sweep_enabled: true,
             channel1_envelope_pace: 0,
             channel1_envelope_counter: 0,
             channel2_envelope_pace: 0,
@@ -31,6 +33,7 @@ impl Apu {
             channel4_envelope_pace: 0,
             channel4_envelope_counter: 0,
             div_apu: 7,
+            //div_apu: 0,
             apu_mem: [0; 0x30],
         }
     }
@@ -62,6 +65,13 @@ impl Apu {
         self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
         self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
 
+        self.div_apu = 7;
+        //self.div_apu = 0;
+        self.channel1_sweep_counter = 0;
+        self.channel1_envelope_counter = 0;
+        self.channel2_envelope_counter = 0;
+        self.channel4_envelope_counter = 0;
+
         // TOOD: rest of the reset
     }
 
@@ -75,6 +85,7 @@ impl Apu {
                 if self.channel1_envelope_counter == self.channel1_envelope_pace {
                     self.channel1_step_envelope();
                     self.channel1_envelope_counter = 0;
+                    self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
                 }
             }
             if self.channel2_envelope_pace != 0 {
@@ -83,6 +94,7 @@ impl Apu {
                 if self.channel2_envelope_counter == self.channel2_envelope_pace {
                     self.channel2_step_envelope();
                     self.channel2_envelope_counter = 0;
+                    self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
                 }
             }
             if self.channel4_envelope_pace != 0 {
@@ -91,13 +103,14 @@ impl Apu {
                 if self.channel4_envelope_counter == self.channel4_envelope_pace {
                     self.channel4_step_envelope();
                     self.channel4_envelope_counter = 0;
+                    self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
                 }
             }
         }
-        // trigger on 3 and 7
+        // trigger on 2 and 6
         if (self.div_apu & 0x3) == 0x2 {
             // channel1 sweep logic
-            if self.channel1_sweep_pace != 0 {
+            if self.channel1_sweep_pace != 0 && self.channel1_sweep_enabled {
                 self.channel1_sweep_counter += 1;
                 self.channel1_sweep_counter &= 0x7;
                 if self.channel1_sweep_counter == self.channel1_sweep_pace {
@@ -218,24 +231,57 @@ impl Apu {
 
             // channel 1: NR14
             0xFF14 => {
+                let old_sound_length_enabled = self.channel1_sound_length_enabled();
+                self.apu_mem[0xFF14 - APU_BASE] = value;
+
+                if self.channel1_sound_length_enabled()
+                    && !old_sound_length_enabled
+                    && self.div_apu & 1 != 1
+                    && self.channel1_sound_length() != 0
+                {
+                    self.channel1_inc_sound_length();
+                }
                 if value >> 7 == 1 {
+                    if self.channel1_sound_length() == 0 {
+                        //self.set_channel1_sound_length(0);
+
+                        if self.channel1_sound_length_enabled() && self.div_apu & 1 != 1 {
+                            self.channel1_inc_sound_length();
+                        }
+                    }
+                    self.set_sound1();
                     // ensure DAC is enabled
-                    if self.apu_mem[0xFF12 - APU_BASE] >> 3 != 0 {
-                        self.set_sound1();
+                    if self.apu_mem[0xFF12 - APU_BASE] >> 3 == 0 {
+                        self.unset_sound1();
                     }
                 }
-                self.apu_mem[0xFF14 - APU_BASE] = value;
             }
 
             // channel 2: NR24
             0xFF19 => {
+                let old_sound_length_enabled = self.channel2_sound_length_enabled();
+                self.apu_mem[0xFF19 - APU_BASE] = value;
+
+                if self.channel2_sound_length_enabled()
+                    && !old_sound_length_enabled
+                    && self.div_apu & 1 != 1
+                    && self.channel2_sound_length() != 0
+                {
+                    self.channel2_inc_sound_length();
+                }
                 if value >> 7 == 1 {
+                    if self.channel2_sound_length() == 0 {
+                        //self.set_channel1_sound_length(0);
+
+                        if self.channel2_sound_length_enabled() && self.div_apu & 1 != 1 {
+                            self.channel2_inc_sound_length();
+                        }
+                    }
                     // ensure that the DAC is enabled here before triggering
                     if self.apu_mem[0xFF17 - APU_BASE] >> 3 != 0 {
                         self.set_sound2();
                     }
                 }
-                self.apu_mem[0xFF19 - APU_BASE] = value;
             }
 
             // channel 3: NR34
@@ -296,20 +342,30 @@ impl Apu {
 
     // Runs the sweep logic
     pub fn channel1_sweep_step(&mut self) {
+        if !self.channel1_sweep_enabled {
+            return;
+        }
         let freq = self.channel1_frequency();
         let shift = self.channel1_sweep_shift();
         let new_value = if self.channel1_sweep_increase() {
             let n = freq + (freq >> shift);
-            if n > 0x7FF {
+            if n > 0x7FF
+            /*|| shift == 0*/
+            {
                 self.unset_sound1();
+                return;
+                //freq
+            } else {
+                n
             }
-            n & 0x7FF
         } else {
             freq - (freq >> shift)
         };
+        //if shift != 0 {
         self.apu_mem[0xFF13 - APU_BASE] = (new_value & 0xFF) as u8;
         self.apu_mem[0xFF14 - APU_BASE] &= !0x7;
         self.apu_mem[0xFF14 - APU_BASE] |= ((new_value >> 8) & 0x7) as u8;
+        //}
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
@@ -610,12 +666,20 @@ impl Apu {
     }
     pub fn set_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1;
+        //self.apu_mem[0xFF26 - APU_BASE] |= 1;
         // set length counter to max if it's 0 on trigger
         // TODO: is this correct?
         self.channel1_sweep_pace = self.channel1_sweep_pace();
         self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_sweep_counter = 0;
         self.channel1_envelope_counter = 0;
+        self.channel1_sweep_enabled =
+            self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
+
+        if self.channel1_sweep_shift() > 0 {
+            self.channel1_sweep_step();
+        }
+        if self.channel1_sweep_shift() == 0 && self.channel1_sweep_pace() > 0 {}
     }
     pub fn set_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 1;
@@ -631,13 +695,17 @@ impl Apu {
         self.channel4_envelope_counter = 0;
     }
     pub fn set_sound_all(&mut self) {
+        if !self.get_sound_all() {
+            self.div_apu = 7;
+            //self.div_apu = 0;
+            //self.reset(false);
+        }
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 7;
     }
-    /// FIXME: 0xFF26's lower 4 bits should be protected in set_mem
     pub fn unset_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !1;
         // on reset, clear value at
-        self.apu_mem[0xFF13 - APU_BASE] = 0;
+        //self.apu_mem[0xFF13 - APU_BASE] = 0;
         /*
         if self.channel1_sound_length() == 0 {
             self.set_channel1_sound_length(64);
@@ -666,7 +734,7 @@ impl Apu {
         self.unset_sound4();
         self.apu_mem[0xFF26 - APU_BASE] &= !(0x80);
         // zero all audio registers
-        for i in 0xFF10..=0xFF25 {
+        for i in 0xFF10..=0xFF2F {
             self.apu_mem[i - APU_BASE] = 0;
         }
     }

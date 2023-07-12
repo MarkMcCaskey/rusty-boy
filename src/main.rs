@@ -37,6 +37,13 @@ use crate::io::graphics::renderer::Renderer;
 #[allow(unused_variables)]
 fn main() {
     let arguments = io::arguments::read_arguments();
+
+    // disassembly thanks to Twitch viewer SpawnedArtifact
+    if arguments.is_present("disasm") {
+        disasm::disasm_main(&arguments);
+        std::process::exit(0);
+    }
+
     let application_settings = match ApplicationSettings::new(&arguments) {
         Ok(app_settings) => app_settings,
         Err(e) => {
