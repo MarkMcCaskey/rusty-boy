@@ -7,6 +7,7 @@ pub struct Apu {
     pub channel1_sweep_pace: u8,
     pub channel1_sweep_counter: u8,
     pub channel1_sweep_enabled: bool,
+    pub channel1_frequency: u16,
     pub channel1_envelope_pace: u8,
     pub channel1_envelope_counter: u8,
     pub channel1_envelope_increasing: bool,
@@ -32,6 +33,7 @@ impl Apu {
             channel1_sweep_pace: 0,
             channel1_sweep_counter: 0,
             channel1_sweep_enabled: true,
+            channel1_frequency: 0,
             channel1_envelope_pace: 0,
             channel1_envelope_counter: 0,
             channel1_envelope_increasing: true,
@@ -76,6 +78,7 @@ impl Apu {
         self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_envelope_increasing = self.channel1_envelope_increasing();
         self.channel1_envelope_volume = self.channel1_envelope_volume();
+        self.channel1_frequency = self.channel1_frequency();
         self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
         self.channel2_envelope_increasing = self.channel2_envelope_increasing();
         self.channel2_envelope_volume = self.channel2_envelope_volume();
@@ -99,7 +102,7 @@ impl Apu {
             // envelope sweep
             if self.channel1_envelope_pace != 0 {
                 self.channel1_envelope_counter += 1;
-                self.channel1_envelope_counter &= 0x7;
+                //self.channel1_envelope_counter &= 0x7;
                 if self.channel1_envelope_counter == self.channel1_envelope_pace {
                     self.channel1_step_envelope();
                     self.channel1_envelope_counter = 0;
@@ -108,7 +111,7 @@ impl Apu {
             }
             if self.channel2_envelope_pace != 0 {
                 self.channel2_envelope_counter += 1;
-                self.channel2_envelope_counter &= 0x7;
+                //self.channel2_envelope_counter &= 0x7;
                 if self.channel2_envelope_counter == self.channel2_envelope_pace {
                     self.channel2_step_envelope();
                     self.channel2_envelope_counter = 0;
@@ -117,7 +120,7 @@ impl Apu {
             }
             if self.channel4_envelope_pace != 0 {
                 self.channel4_envelope_counter += 1;
-                self.channel4_envelope_counter &= 0x7;
+                //self.channel4_envelope_counter &= 0x7;
                 if self.channel4_envelope_counter == self.channel4_envelope_pace {
                     self.channel4_step_envelope();
                     self.channel4_envelope_counter = 0;
@@ -130,7 +133,7 @@ impl Apu {
             // channel1 sweep logic
             if self.channel1_sweep_pace != 0 && self.channel1_sweep_enabled {
                 self.channel1_sweep_counter += 1;
-                self.channel1_sweep_counter &= 0x7;
+                //self.channel1_sweep_counter &= 0x7;
                 if self.channel1_sweep_counter == self.channel1_sweep_pace {
                     self.channel1_sweep_step();
                     self.channel1_sweep_counter = 0;
@@ -184,12 +187,15 @@ impl Apu {
         match addr {
             0xFF10 => {
                 let old_sweep_pace = self.channel1_sweep_pace();
+                let old_negate = !self.channel1_sweep_increase();
                 self.apu_mem[0xFF10 - APU_BASE] = value & 0x7F;
                 let new_sweep_pace = self.channel1_sweep_pace();
+                let new_negate = value >> 3 & 1 == 1;
 
                 if old_sweep_pace == 0 && new_sweep_pace != 0 {
                     self.channel1_sweep_pace = self.channel1_sweep_pace();
                 }
+                if !old_negate && new_negate {}
             }
 
             // channel 1: NR11
@@ -347,7 +353,12 @@ impl Apu {
 
     // number is multiplied by 128 and is the hz of how often it's updated.
     pub fn channel1_sweep_pace(&self) -> u8 {
-        (self.apu_mem[0xFF10 - APU_BASE] >> 4) & 0x7
+        let n = (self.apu_mem[0xFF10 - APU_BASE] >> 4) & 0x7;
+        if n == 0 {
+            8
+        } else {
+            n
+        }
     }
 
     pub fn channel1_sweep_increase(&self) -> bool {
@@ -363,7 +374,7 @@ impl Apu {
         if !self.channel1_sweep_enabled {
             return;
         }
-        let freq = self.channel1_frequency();
+        let freq = self.channel1_frequency;
         let shift = self.channel1_sweep_shift();
         let new_value = if self.channel1_sweep_increase() {
             let n = freq + (freq >> shift);
@@ -379,11 +390,16 @@ impl Apu {
         } else {
             freq - (freq >> shift)
         };
-        //if shift != 0 {
-        self.apu_mem[0xFF13 - APU_BASE] = (new_value & 0xFF) as u8;
-        self.apu_mem[0xFF14 - APU_BASE] &= !0x7;
-        self.apu_mem[0xFF14 - APU_BASE] |= ((new_value >> 8) & 0x7) as u8;
-        //}
+        if self.channel1_sweep_pace != 0 && self.channel1_sweep_pace != 8
+        /*shift != 0*/
+        {
+            self.channel1_frequency = new_value;
+            /*
+            self.apu_mem[0xFF13 - APU_BASE] = (new_value & 0xFF) as u8;
+            self.apu_mem[0xFF14 - APU_BASE] &= !0x7;
+            self.apu_mem[0xFF14 - APU_BASE] |= ((new_value >> 8) & 0x7) as u8;
+            */
+        }
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
@@ -445,10 +461,15 @@ impl Apu {
     }
 
     pub fn channel1_envelope_sweep_pace(&self) -> u8 {
-        self.apu_mem[0xFF12 - APU_BASE] & 0x7
+        let n = self.apu_mem[0xFF12 - APU_BASE] & 0x7;
+        if n == 0 {
+            8
+        } else {
+            n
+        }
     }
 
-    pub fn channel1_frequency(&self) -> u16 {
+    fn channel1_frequency(&self) -> u16 {
         let lower = self.apu_mem[0xFF13 - APU_BASE];
         let higher = self.apu_mem[0xFF14 - APU_BASE] & 0x7;
         (higher as u16) << 8 | (lower as u16)
@@ -517,7 +538,12 @@ impl Apu {
     }
 
     pub fn channel2_envelope_sweep_pace(&self) -> u8 {
-        self.apu_mem[0xFF17 - APU_BASE] & 0x7
+        let n = self.apu_mem[0xFF17 - APU_BASE] & 0x7;
+        if n == 0 {
+            8
+        } else {
+            n
+        }
     }
 
     pub fn channel2_frequency(&self) -> u16 {
@@ -652,7 +678,12 @@ impl Apu {
     }
 
     pub fn channel4_envelope_sweep_pace(&self) -> u8 {
-        self.apu_mem[0xFF21 - APU_BASE] & 0x7
+        let n = self.apu_mem[0xFF21 - APU_BASE] & 0x7;
+        if n == 0 {
+            8
+        } else {
+            n
+        }
     }
 
     pub fn channel4_clock_shift(&self) -> u8 {
@@ -696,6 +727,7 @@ impl Apu {
         self.channel1_envelope_counter = 0;
         self.channel1_envelope_increasing = self.channel1_envelope_increasing();
         self.channel1_envelope_volume = self.channel1_envelope_volume();
+        self.channel1_frequency = self.channel1_frequency();
         self.channel1_sweep_enabled =
             self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
 
