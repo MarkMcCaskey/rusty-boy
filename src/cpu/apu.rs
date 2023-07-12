@@ -13,8 +13,12 @@ pub struct Apu {
     pub channel1_envelope_volume: u8,
     pub channel2_envelope_pace: u8,
     pub channel2_envelope_counter: u8,
+    pub channel2_envelope_increasing: bool,
+    pub channel2_envelope_volume: u8,
     pub channel4_envelope_pace: u8,
     pub channel4_envelope_counter: u8,
+    pub channel4_envelope_increasing: bool,
+    pub channel4_envelope_volume: u8,
     // TODO: each channel's NRX2, etc must be cached as changes to registers
     // don't take effect until the channel is triggered again
     pub div_apu: u8,
@@ -34,8 +38,12 @@ impl Apu {
             channel1_envelope_volume: 0,
             channel2_envelope_pace: 0,
             channel2_envelope_counter: 0,
+            channel2_envelope_increasing: true,
+            channel2_envelope_volume: 0,
             channel4_envelope_pace: 0,
             channel4_envelope_counter: 0,
+            channel4_envelope_increasing: true,
+            channel4_envelope_volume: 0,
             div_apu: 7,
             //div_apu: 0,
             apu_mem: [0; 0x30],
@@ -69,7 +77,11 @@ impl Apu {
         self.channel1_envelope_increasing = self.channel1_envelope_increasing();
         self.channel1_envelope_volume = self.channel1_envelope_volume();
         self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
+        self.channel2_envelope_increasing = self.channel2_envelope_increasing();
+        self.channel2_envelope_volume = self.channel2_envelope_volume();
         self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
+        self.channel4_envelope_increasing = self.channel4_envelope_increasing();
+        self.channel4_envelope_volume = self.channel4_envelope_volume();
 
         self.div_apu = 7;
         //self.div_apu = 0;
@@ -426,8 +438,6 @@ impl Apu {
             }
         };
         self.channel1_envelope_volume = new_val;
-        //self.apu_mem[0xFF12 - APU_BASE] &= !0xF0;
-        // self.apu_mem[0xFF12 - APU_BASE] |= new_val << 4;
     }
 
     fn channel1_envelope_increasing(&self) -> bool {
@@ -473,13 +483,13 @@ impl Apu {
         self.apu_mem[0xFF16 - APU_BASE] |= val & 0x3F;
     }
 
-    pub fn channel2_envelope_volume(&self) -> u8 {
+    fn channel2_envelope_volume(&self) -> u8 {
         (self.apu_mem[0xFF17 - APU_BASE] >> 4) & 0xF
     }
 
     pub fn channel2_step_envelope(&mut self) {
-        let val = self.channel2_envelope_volume();
-        let new_val = if self.channel2_envelope_increasing() {
+        let val = self.channel2_envelope_volume;
+        let new_val = if self.channel2_envelope_increasing {
             let n = val + 1;
             if n >= 0xF {
                 0xF
@@ -493,11 +503,10 @@ impl Apu {
                 val - 1
             }
         };
-        self.apu_mem[0xFF17 - APU_BASE] &= !0xF0;
-        self.apu_mem[0xFF17 - APU_BASE] |= new_val << 4;
+        self.channel2_envelope_volume = new_val;
     }
 
-    pub fn channel2_envelope_increasing(&self) -> bool {
+    fn channel2_envelope_increasing(&self) -> bool {
         ((self.apu_mem[0xFF17 - APU_BASE] >> 3) & 0x1) == 1
     }
 
@@ -609,13 +618,13 @@ impl Apu {
         ((self.apu_mem[0xFF23 - APU_BASE] >> 6) & 1) == 1
     }
 
-    pub fn channel4_envelope_volume(&self) -> u8 {
+    fn channel4_envelope_volume(&self) -> u8 {
         (self.apu_mem[0xFF21 - APU_BASE] >> 4) & 0xF
     }
 
     pub fn channel4_step_envelope(&mut self) {
-        let val = self.channel4_envelope_volume();
-        let new_val = if self.channel4_envelope_increasing() {
+        let val = self.channel4_envelope_volume;
+        let new_val = if self.channel4_envelope_increasing {
             let n = val + 1;
             if n >= 0xF {
                 0xF
@@ -629,11 +638,10 @@ impl Apu {
                 val - 1
             }
         };
-        self.apu_mem[0xFF21 - APU_BASE] &= !0xF0;
-        self.apu_mem[0xFF21 - APU_BASE] |= new_val << 4;
+        self.channel4_envelope_volume = new_val;
     }
 
-    pub fn channel4_envelope_increasing(&self) -> bool {
+    fn channel4_envelope_increasing(&self) -> bool {
         ((self.apu_mem[0xFF21 - APU_BASE] >> 3) & 0x1) == 1
     }
 
@@ -694,6 +702,8 @@ impl Apu {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 1;
         self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
         self.channel2_envelope_counter = 0;
+        self.channel2_envelope_increasing = self.channel2_envelope_increasing();
+        self.channel2_envelope_volume = self.channel2_envelope_volume();
     }
     pub fn set_sound3(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 2;
@@ -702,6 +712,8 @@ impl Apu {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 3;
         self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
         self.channel4_envelope_counter = 0;
+        self.channel4_envelope_increasing = self.channel4_envelope_increasing();
+        self.channel4_envelope_volume = self.channel4_envelope_volume();
     }
     pub fn set_sound_all(&mut self) {
         if !self.get_sound_all() {

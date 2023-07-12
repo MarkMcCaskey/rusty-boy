@@ -415,7 +415,7 @@ impl Renderer for Sdl2Renderer {
 
         //if gb.apu.get_sound2() {
         // sound_system.channel2.wave_duty = gameboy.channel2_wave_pattern_duty();
-        sound_system.channel2.volume = gb.apu.channel2_envelope_volume() as f32 / 15.0;
+        sound_system.channel2.volume = gb.apu.channel2_envelope_volume as f32 / 15.0;
         let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel2_frequency() as f32));
         sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
         //}
@@ -433,7 +433,7 @@ impl Renderer for Sdl2Renderer {
             sound_system.channel3.wave_ram_index = 0;
         }
         //if gb.apu.get_sound4() {
-        sound_system.channel4.volume = gb.apu.channel4_envelope_volume() as f32 / 15.0;
+        sound_system.channel4.volume = gb.apu.channel4_envelope_volume as f32 / 15.0;
         let clock_div = gb.apu.channel4_clock_divider();
         let clock_shift = gb.apu.channel4_clock_shift();
         //let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
