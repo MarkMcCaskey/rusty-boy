@@ -407,7 +407,7 @@ impl Renderer for Sdl2Renderer {
         sound_system.channel3.enabled = gb.apu.get_sound3();
         sound_system.channel4.enabled = gb.apu.get_sound4();
         //if gb.apu.get_sound1() {
-        sound_system.channel1.volume = gb.apu.channel1_envelope_volume() as f32 / 15.0;
+        sound_system.channel1.volume = gb.apu.channel1_envelope_volume as f32 / 15.0;
         sound_system.channel1.wave_duty = gb.apu.channel1_wave_pattern_duty();
         let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel1_frequency() as f32));
         sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
