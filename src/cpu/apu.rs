@@ -4,15 +4,19 @@ const APU_BASE: usize = 0xFF10;
 
 #[derive(Clone)]
 pub struct Apu {
-    pub channel1_sweep_pace: u8,
     pub channel1_sweep_counter: u8,
     pub channel1_sweep_enabled: bool,
-    pub channel1_envelope_pace: u8,
+    pub channel1_frequency: u16,
+    pub channel1_negate_executed: bool,
     pub channel1_envelope_counter: u8,
-    pub channel2_envelope_pace: u8,
+    pub channel1_envelope_increasing: bool,
+    pub channel1_envelope_volume: u8,
     pub channel2_envelope_counter: u8,
-    pub channel4_envelope_pace: u8,
+    pub channel2_envelope_increasing: bool,
+    pub channel2_envelope_volume: u8,
     pub channel4_envelope_counter: u8,
+    pub channel4_envelope_increasing: bool,
+    pub channel4_envelope_volume: u8,
     // TODO: each channel's NRX2, etc must be cached as changes to registers
     // don't take effect until the channel is triggered again
     pub div_apu: u8,
@@ -23,15 +27,19 @@ pub struct Apu {
 impl Apu {
     pub fn new() -> Self {
         Self {
-            channel1_sweep_pace: 0,
-            channel1_sweep_counter: 0,
+            channel1_sweep_counter: 8,
             channel1_sweep_enabled: true,
-            channel1_envelope_pace: 0,
-            channel1_envelope_counter: 0,
-            channel2_envelope_pace: 0,
-            channel2_envelope_counter: 0,
-            channel4_envelope_pace: 0,
-            channel4_envelope_counter: 0,
+            channel1_frequency: 0,
+            channel1_negate_executed: false,
+            channel1_envelope_counter: 8,
+            channel1_envelope_increasing: true,
+            channel1_envelope_volume: 0,
+            channel2_envelope_counter: 8,
+            channel2_envelope_increasing: true,
+            channel2_envelope_volume: 0,
+            channel4_envelope_counter: 8,
+            channel4_envelope_increasing: true,
+            channel4_envelope_volume: 0,
             div_apu: 7,
             //div_apu: 0,
             apu_mem: [0; 0x30],
@@ -60,17 +68,20 @@ impl Apu {
         self.apu_mem[0xFF25 - APU_BASE] = 0xF3;
         self.apu_mem[0xFF26 - APU_BASE] = if sgb_mode { 0xF0 } else { 0xF1 };
 
-        self.channel1_sweep_pace = self.channel1_sweep_pace();
-        self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
-        self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
-        self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
+        self.channel1_envelope_increasing = self.channel1_envelope_increasing();
+        self.channel1_envelope_volume = self.channel1_envelope_volume();
+        self.channel1_frequency = self.channel1_frequency();
+        self.channel2_envelope_increasing = self.channel2_envelope_increasing();
+        self.channel2_envelope_volume = self.channel2_envelope_volume();
+        self.channel4_envelope_increasing = self.channel4_envelope_increasing();
+        self.channel4_envelope_volume = self.channel4_envelope_volume();
 
         self.div_apu = 7;
         //self.div_apu = 0;
-        self.channel1_sweep_counter = 0;
-        self.channel1_envelope_counter = 0;
-        self.channel2_envelope_counter = 0;
-        self.channel4_envelope_counter = 0;
+        self.channel1_sweep_counter = 8;
+        self.channel1_envelope_counter = 8;
+        self.channel2_envelope_counter = 8;
+        self.channel4_envelope_counter = 8;
 
         // TOOD: rest of the reset
     }
@@ -79,44 +90,54 @@ impl Apu {
         self.div_apu = (self.div_apu + 1) & 0x7;
         if self.div_apu == 7 {
             // envelope sweep
-            if self.channel1_envelope_pace != 0 {
-                self.channel1_envelope_counter += 1;
-                self.channel1_envelope_counter &= 0x7;
-                if self.channel1_envelope_counter == self.channel1_envelope_pace {
-                    self.channel1_step_envelope();
-                    self.channel1_envelope_counter = 0;
-                    self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
+            if self.get_sound1() {
+                self.channel1_envelope_counter -= 1;
+                if self.channel1_envelope_counter == 0 {
+                    if self.channel1_envelope_sweep_pace() != 0 {
+                        self.channel1_envelope_counter = self.channel1_envelope_sweep_pace();
+                        self.channel1_step_envelope();
+                    } else {
+                        self.channel1_envelope_counter = 8;
+                    }
                 }
             }
-            if self.channel2_envelope_pace != 0 {
-                self.channel2_envelope_counter += 1;
-                self.channel2_envelope_counter &= 0x7;
-                if self.channel2_envelope_counter == self.channel2_envelope_pace {
-                    self.channel2_step_envelope();
-                    self.channel2_envelope_counter = 0;
-                    self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
+            if self.get_sound2() {
+                self.channel2_envelope_counter -= 1;
+                if self.channel2_envelope_counter == 0 {
+                    if self.channel2_envelope_sweep_pace() != 0 {
+                        self.channel2_envelope_counter = self.channel2_envelope_sweep_pace();
+                        self.channel2_step_envelope();
+                    } else {
+                        self.channel2_envelope_counter = 8;
+                    }
                 }
             }
-            if self.channel4_envelope_pace != 0 {
-                self.channel4_envelope_counter += 1;
-                self.channel4_envelope_counter &= 0x7;
-                if self.channel4_envelope_counter == self.channel4_envelope_pace {
-                    self.channel4_step_envelope();
-                    self.channel4_envelope_counter = 0;
-                    self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
+            if self.get_sound4() {
+                self.channel4_envelope_counter -= 1;
+                if self.channel4_envelope_counter == 0 {
+                    if self.channel4_envelope_sweep_pace() != 0 {
+                        self.channel4_envelope_counter = self.channel4_envelope_sweep_pace();
+                        self.channel4_step_envelope();
+                    } else {
+                        self.channel4_envelope_counter = 8;
+                    }
                 }
             }
         }
         // trigger on 2 and 6
         if (self.div_apu & 0x3) == 0x2 {
             // channel1 sweep logic
-            if self.channel1_sweep_pace != 0 && self.channel1_sweep_enabled {
-                self.channel1_sweep_counter += 1;
-                self.channel1_sweep_counter &= 0x7;
-                if self.channel1_sweep_counter == self.channel1_sweep_pace {
-                    self.channel1_sweep_step();
-                    self.channel1_sweep_counter = 0;
-                    self.channel1_sweep_pace = self.channel1_sweep_pace();
+            if self.channel1_sweep_enabled && self.get_sound1() {
+                self.channel1_sweep_counter = self.channel1_sweep_counter.wrapping_sub(1);
+                if self.channel1_sweep_counter == 0 {
+                    // checking the regiter value and not the cached value is required
+                    // to pass CGB sound test 5
+                    if self.channel1_sweep_pace() != 0 {
+                        self.channel1_sweep_counter = self.channel1_sweep_pace();
+                        self.channel1_sweep_step();
+                    } else {
+                        self.channel1_sweep_counter = 8;
+                    }
                 }
             }
         }
@@ -165,12 +186,15 @@ impl Apu {
         }
         match addr {
             0xFF10 => {
-                let old_sweep_pace = self.channel1_sweep_pace();
+                let old_direction_is_subtract = !self.channel1_sweep_increase();
                 self.apu_mem[0xFF10 - APU_BASE] = value & 0x7F;
-                let new_sweep_pace = self.channel1_sweep_pace();
+                let new_direction_is_add = self.channel1_sweep_increase();
 
-                if old_sweep_pace == 0 && new_sweep_pace != 0 {
-                    self.channel1_sweep_pace = self.channel1_sweep_pace();
+                if old_direction_is_subtract
+                    && new_direction_is_add
+                    && self.channel1_negate_executed
+                {
+                    self.unset_sound1();
                 }
             }
 
@@ -241,6 +265,8 @@ impl Apu {
                 {
                     self.channel1_inc_sound_length();
                 }
+                // TODO: add envelope timing triggering here too
+                // "If a channel is triggered when the frame sequencer's next step will clock the volume envelope, the envelope's timer is reloaded with one greater than it would have been."
                 if value >> 7 == 1 {
                     if self.channel1_sound_length() == 0 {
                         //self.set_channel1_sound_length(0);
@@ -340,32 +366,45 @@ impl Apu {
         self.apu_mem[0xFF10 - APU_BASE] & 0x7
     }
 
+    fn channel1_sweep_step_overflow_logic(&mut self) {
+        // extra compute on shadow register
+        let freq = self.channel1_frequency;
+        let shift = self.channel1_sweep_shift();
+        if self.channel1_sweep_increase() {
+            let n = freq + (freq >> shift);
+            if n > 0x7FF {
+                self.unset_sound1();
+                return;
+            }
+        } else {
+            self.channel1_negate_executed = true;
+        }
+    }
+
     // Runs the sweep logic
     pub fn channel1_sweep_step(&mut self) {
-        if !self.channel1_sweep_enabled {
-            return;
-        }
-        let freq = self.channel1_frequency();
+        let freq = self.channel1_frequency;
         let shift = self.channel1_sweep_shift();
         let new_value = if self.channel1_sweep_increase() {
             let n = freq + (freq >> shift);
-            if n > 0x7FF
-            /*|| shift == 0*/
-            {
+            if n > 0x7FF {
                 self.unset_sound1();
                 return;
-                //freq
             } else {
                 n
             }
         } else {
+            self.channel1_negate_executed = true;
             freq - (freq >> shift)
         };
-        //if shift != 0 {
-        self.apu_mem[0xFF13 - APU_BASE] = (new_value & 0xFF) as u8;
-        self.apu_mem[0xFF14 - APU_BASE] &= !0x7;
-        self.apu_mem[0xFF14 - APU_BASE] |= ((new_value >> 8) & 0x7) as u8;
-        //}
+        if shift != 0 {
+            self.channel1_frequency = new_value;
+            self.apu_mem[0xFF13 - APU_BASE] = (new_value & 0xFF) as u8;
+            self.apu_mem[0xFF14 - APU_BASE] &= !0x7;
+            self.apu_mem[0xFF14 - APU_BASE] |= ((new_value >> 8) & 0x7) as u8;
+
+            self.channel1_sweep_step_overflow_logic();
+        }
     }
 
     pub fn channel1_wave_pattern_duty(&self) -> f32 {
@@ -399,13 +438,13 @@ impl Apu {
         self.apu_mem[0xFF11 - APU_BASE] |= val & 0x3F;
     }
 
-    pub fn channel1_envelope_volume(&self) -> u8 {
+    fn channel1_envelope_volume(&self) -> u8 {
         (self.apu_mem[0xFF12 - APU_BASE] >> 4) & 0xF
     }
 
     pub fn channel1_step_envelope(&mut self) {
-        let val = self.channel1_envelope_volume();
-        let new_val = if self.channel1_envelope_increasing() {
+        let val = self.channel1_envelope_volume;
+        let new_val = if self.channel1_envelope_increasing {
             let n = val + 1;
             if n >= 0xF {
                 0xF
@@ -419,11 +458,10 @@ impl Apu {
                 val - 1
             }
         };
-        self.apu_mem[0xFF12 - APU_BASE] &= !0xF0;
-        self.apu_mem[0xFF12 - APU_BASE] |= new_val << 4;
+        self.channel1_envelope_volume = new_val;
     }
 
-    pub fn channel1_envelope_increasing(&self) -> bool {
+    fn channel1_envelope_increasing(&self) -> bool {
         ((self.apu_mem[0xFF12 - APU_BASE] >> 3) & 0x1) == 1
     }
 
@@ -431,7 +469,7 @@ impl Apu {
         self.apu_mem[0xFF12 - APU_BASE] & 0x7
     }
 
-    pub fn channel1_frequency(&self) -> u16 {
+    fn channel1_frequency(&self) -> u16 {
         let lower = self.apu_mem[0xFF13 - APU_BASE];
         let higher = self.apu_mem[0xFF14 - APU_BASE] & 0x7;
         (higher as u16) << 8 | (lower as u16)
@@ -441,8 +479,14 @@ impl Apu {
         ((self.apu_mem[0xFF14 - APU_BASE] >> 6) & 1) == 1
     }
 
-    pub fn channel2_wave_pattern_duty(&self) -> u8 {
-        (self.apu_mem[0xFF16 - APU_BASE] >> 6) & 0x3
+    pub fn channel2_wave_pattern_duty(&self) -> f32 {
+        match (self.apu_mem[0xFF16 - APU_BASE] >> 6) & 0x3 {
+            0 => 0.125,
+            1 => 0.25,
+            2 => 0.5,
+            3 => 0.75,
+            _ => unreachable!(),
+        }
     }
 
     pub fn channel2_sound_length(&self) -> u8 {
@@ -466,13 +510,13 @@ impl Apu {
         self.apu_mem[0xFF16 - APU_BASE] |= val & 0x3F;
     }
 
-    pub fn channel2_envelope_volume(&self) -> u8 {
+    fn channel2_envelope_volume(&self) -> u8 {
         (self.apu_mem[0xFF17 - APU_BASE] >> 4) & 0xF
     }
 
     pub fn channel2_step_envelope(&mut self) {
-        let val = self.channel2_envelope_volume();
-        let new_val = if self.channel2_envelope_increasing() {
+        let val = self.channel2_envelope_volume;
+        let new_val = if self.channel2_envelope_increasing {
             let n = val + 1;
             if n >= 0xF {
                 0xF
@@ -486,11 +530,10 @@ impl Apu {
                 val - 1
             }
         };
-        self.apu_mem[0xFF17 - APU_BASE] &= !0xF0;
-        self.apu_mem[0xFF17 - APU_BASE] |= new_val << 4;
+        self.channel2_envelope_volume = new_val;
     }
 
-    pub fn channel2_envelope_increasing(&self) -> bool {
+    fn channel2_envelope_increasing(&self) -> bool {
         ((self.apu_mem[0xFF17 - APU_BASE] >> 3) & 0x1) == 1
     }
 
@@ -602,13 +645,13 @@ impl Apu {
         ((self.apu_mem[0xFF23 - APU_BASE] >> 6) & 1) == 1
     }
 
-    pub fn channel4_envelope_volume(&self) -> u8 {
+    fn channel4_envelope_volume(&self) -> u8 {
         (self.apu_mem[0xFF21 - APU_BASE] >> 4) & 0xF
     }
 
     pub fn channel4_step_envelope(&mut self) {
-        let val = self.channel4_envelope_volume();
-        let new_val = if self.channel4_envelope_increasing() {
+        let val = self.channel4_envelope_volume;
+        let new_val = if self.channel4_envelope_increasing {
             let n = val + 1;
             if n >= 0xF {
                 0xF
@@ -622,11 +665,10 @@ impl Apu {
                 val - 1
             }
         };
-        self.apu_mem[0xFF21 - APU_BASE] &= !0xF0;
-        self.apu_mem[0xFF21 - APU_BASE] |= new_val << 4;
+        self.channel4_envelope_volume = new_val;
     }
 
-    pub fn channel4_envelope_increasing(&self) -> bool {
+    fn channel4_envelope_increasing(&self) -> bool {
         ((self.apu_mem[0xFF21 - APU_BASE] >> 3) & 0x1) == 1
     }
 
@@ -666,66 +708,70 @@ impl Apu {
     }
     pub fn set_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1;
-        //self.apu_mem[0xFF26 - APU_BASE] |= 1;
-        // set length counter to max if it's 0 on trigger
-        // TODO: is this correct?
-        self.channel1_sweep_pace = self.channel1_sweep_pace();
-        self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
-        self.channel1_sweep_counter = 0;
-        self.channel1_envelope_counter = 0;
+        self.channel1_frequency = self.channel1_frequency();
+        self.channel1_sweep_counter = if self.channel1_sweep_pace() != 0 {
+            self.channel1_sweep_pace()
+        } else {
+            8
+        };
+        if (self.div_apu + 1) == 7 {
+            self.channel1_envelope_counter += 1;
+        }
+        self.channel1_envelope_counter = if self.channel1_envelope_sweep_pace() != 0 {
+            self.channel1_envelope_sweep_pace()
+        } else {
+            8
+        };
+        self.channel1_envelope_increasing = self.channel1_envelope_increasing();
+        self.channel1_envelope_volume = self.channel1_envelope_volume();
+        self.channel1_negate_executed = false;
         self.channel1_sweep_enabled =
             self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
 
         if self.channel1_sweep_shift() > 0 {
-            self.channel1_sweep_step();
+            self.channel1_sweep_step_overflow_logic();
         }
-        if self.channel1_sweep_shift() == 0 && self.channel1_sweep_pace() > 0 {}
     }
     pub fn set_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 1;
-        self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
-        self.channel2_envelope_counter = 0;
+        self.channel2_envelope_counter = if self.channel2_envelope_sweep_pace() != 0 {
+            self.channel2_envelope_sweep_pace()
+        } else {
+            8
+        };
+        self.channel2_envelope_increasing = self.channel2_envelope_increasing();
+        self.channel2_envelope_volume = self.channel2_envelope_volume();
     }
     pub fn set_sound3(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 2;
     }
     pub fn set_sound4(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 3;
-        self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
-        self.channel4_envelope_counter = 0;
+        self.channel4_envelope_counter = if self.channel4_envelope_sweep_pace() != 0 {
+            self.channel4_envelope_sweep_pace()
+        } else {
+            8
+        };
+        self.channel4_envelope_increasing = self.channel4_envelope_increasing();
+        self.channel4_envelope_volume = self.channel4_envelope_volume();
     }
     pub fn set_sound_all(&mut self) {
         if !self.get_sound_all() {
             self.div_apu = 7;
-            //self.div_apu = 0;
-            //self.reset(false);
         }
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 7;
     }
     pub fn unset_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !1;
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
-        /*
-        if self.channel1_sound_length() == 0 {
-            self.set_channel1_sound_length(64);
-        }
-        */
     }
     pub fn unset_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 1);
-        // on reset, clear value at
-        //        self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound3(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 2);
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound4(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 3);
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound_all(&mut self) {
         self.unset_sound1();
@@ -739,12 +785,3 @@ impl Apu {
         }
     }
 }
-
-/*
-fn update_channel_vars(&mut self) {
-    self.channel1_sweep_pace = self.gameboy.channel1_sweep_pace();
-    self.channel1_envelope_pace = self.gameboy.channel1_envelope_sweep_pace();
-    self.channel2_envelope_pace = self.gameboy.channel2_envelope_sweep_pace();
-    self.channel4_envelope_pace = self.gameboy.channel4_envelope_sweep_pace();
-}
-*/
