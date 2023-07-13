@@ -6,7 +6,10 @@ const APU_BASE: usize = 0xFF10;
 pub struct Apu {
     pub channel1_sweep_counter: u8,
     pub channel1_sweep_enabled: bool,
-    pub channel1_frequency: u16,
+    /// The shadow frequency used for computations.
+    /// Consumers of audio should use the value in NR13 and NR14
+    /// via `Self::channel1_frequency()` instead.
+    channel1_frequency: u16,
     pub channel1_negate_executed: bool,
     pub channel1_envelope_counter: u8,
     pub channel1_envelope_increasing: bool,
@@ -469,7 +472,9 @@ impl Apu {
         self.apu_mem[0xFF12 - APU_BASE] & 0x7
     }
 
-    fn channel1_frequency(&self) -> u16 {
+    /// The actual value of Square 1's frequency.
+    /// We must read from this and not the shadow frequency var.
+    pub fn channel1_frequency(&self) -> u16 {
         let lower = self.apu_mem[0xFF13 - APU_BASE];
         let higher = self.apu_mem[0xFF14 - APU_BASE] & 0x7;
         (higher as u16) << 8 | (lower as u16)
