@@ -4,7 +4,6 @@ const APU_BASE: usize = 0xFF10;
 
 #[derive(Clone)]
 pub struct Apu {
-    pub channel1_sweep_pace: u8,
     pub channel1_sweep_counter: u8,
     pub channel1_sweep_enabled: bool,
     pub channel1_frequency: u16,
@@ -31,7 +30,6 @@ pub struct Apu {
 impl Apu {
     pub fn new() -> Self {
         Self {
-            channel1_sweep_pace: 0,
             channel1_sweep_counter: 8,
             channel1_sweep_enabled: true,
             channel1_frequency: 0,
@@ -76,7 +74,6 @@ impl Apu {
         self.apu_mem[0xFF25 - APU_BASE] = 0xF3;
         self.apu_mem[0xFF26 - APU_BASE] = if sgb_mode { 0xF0 } else { 0xF1 };
 
-        self.channel1_sweep_pace = self.channel1_sweep_pace();
         self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_envelope_increasing = self.channel1_envelope_increasing();
         self.channel1_envelope_volume = self.channel1_envelope_volume();
@@ -148,8 +145,7 @@ impl Apu {
                     // checking the regiter value and not the cached value is required
                     // to pass CGB sound test 5
                     if self.channel1_sweep_pace() != 0 {
-                        self.channel1_sweep_pace = self.channel1_sweep_pace();
-                        self.channel1_sweep_counter = self.channel1_sweep_pace;
+                        self.channel1_sweep_counter = self.channel1_sweep_pace();
                         self.channel1_sweep_step();
                     } else {
                         self.channel1_sweep_counter = 8;
@@ -202,15 +198,10 @@ impl Apu {
         }
         match addr {
             0xFF10 => {
-                let old_sweep_pace = self.channel1_sweep_pace();
                 let old_direction_is_subtract = !self.channel1_sweep_increase();
                 self.apu_mem[0xFF10 - APU_BASE] = value & 0x7F;
-                let new_sweep_pace = self.channel1_sweep_pace();
                 let new_direction_is_add = self.channel1_sweep_increase();
 
-                if old_sweep_pace == 0 && new_sweep_pace != 0 {
-                    self.channel1_sweep_pace = self.channel1_sweep_pace();
-                }
                 if old_direction_is_subtract
                     && new_direction_is_add
                     && self.channel1_negate_executed
@@ -286,6 +277,8 @@ impl Apu {
                 {
                     self.channel1_inc_sound_length();
                 }
+                // TODO: add envelope timing triggering here too
+                // "If a channel is triggered when the frame sequencer's next step will clock the volume envelope, the envelope's timer is reloaded with one greater than it would have been."
                 if value >> 7 == 1 {
                     if self.channel1_sound_length() == 0 {
                         //self.set_channel1_sound_length(0);
@@ -728,13 +721,15 @@ impl Apu {
     pub fn set_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1;
         self.channel1_frequency = self.channel1_frequency();
-        self.channel1_sweep_pace = self.channel1_sweep_pace();
         self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
-        self.channel1_sweep_counter = if self.channel1_sweep_pace != 0 {
-            self.channel1_sweep_pace
+        self.channel1_sweep_counter = if self.channel1_sweep_pace() != 0 {
+            self.channel1_sweep_pace()
         } else {
             8
         };
+        if (self.div_apu + 1) == 7 {
+            self.channel1_envelope_counter += 1;
+        }
         self.channel1_envelope_counter = if self.channel1_envelope_pace != 0 {
             self.channel1_envelope_pace
         } else {
@@ -744,7 +739,7 @@ impl Apu {
         self.channel1_envelope_volume = self.channel1_envelope_volume();
         self.channel1_negate_executed = false;
         self.channel1_sweep_enabled =
-            self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace > 0;
+            self.channel1_sweep_shift() > 0 || self.channel1_sweep_pace() > 0;
 
         if self.channel1_sweep_shift() > 0 {
             self.channel1_sweep_step_overflow_logic();
@@ -778,35 +773,20 @@ impl Apu {
     pub fn set_sound_all(&mut self) {
         if !self.get_sound_all() {
             self.div_apu = 7;
-            //self.div_apu = 0;
-            //self.reset(false);
         }
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 7;
     }
     pub fn unset_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !1;
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
-        /*
-        if self.channel1_sound_length() == 0 {
-            self.set_channel1_sound_length(64);
-        }
-        */
     }
     pub fn unset_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 1);
-        // on reset, clear value at
-        //        self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound3(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 2);
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound4(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] &= !(1 << 3);
-        // on reset, clear value at
-        //self.apu_mem[0xFF13 - APU_BASE] = 0;
     }
     pub fn unset_sound_all(&mut self) {
         self.unset_sound1();
@@ -820,12 +800,3 @@ impl Apu {
         }
     }
 }
-
-/*
-fn update_channel_vars(&mut self) {
-    self.channel1_sweep_pace = self.gameboy.channel1_sweep_pace();
-    self.channel1_envelope_pace = self.gameboy.channel1_envelope_sweep_pace();
-    self.channel2_envelope_pace = self.gameboy.channel2_envelope_sweep_pace();
-    self.channel4_envelope_pace = self.gameboy.channel4_envelope_sweep_pace();
-}
-*/
