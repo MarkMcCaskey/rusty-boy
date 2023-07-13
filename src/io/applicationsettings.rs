@@ -5,12 +5,6 @@ use app_dirs::*;
 use clap::ArgMatches;
 use std::path::PathBuf;
 
-use log::LevelFilter;
-use log4rs;
-use log4rs::append::console::ConsoleAppender;
-use log4rs::config::{Appender, Config, Root};
-use log4rs::encode::pattern::PatternEncoder;
-
 pub const APP_INFO: AppInfo = AppInfo {
     name: "rusty-boy",
     author: "Mark McCaskey, SpawnedArtifact, and friends",
@@ -41,30 +35,15 @@ impl ApplicationSettings {
         let memvis_mode = arguments.is_present("visualize");
         let vulkan_mode = arguments.is_present("vulkan");
 
-        // Set up logging
-        let stdout = ConsoleAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{h({l})} {m} {n}")))
-            .build();
-
-        let config = Config::builder()
-            .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(
-                Root::builder()
-                    .appender("stdout")
-                    .build(match (trace_mode, debug_mode) {
-                        (true, _) => LevelFilter::Trace,
-                        (false, true) => LevelFilter::Debug,
-                        _ => LevelFilter::Info,
-                    }),
-            )
-            .or_else(|_| Err("Could not build Config".to_string()))?;
-
         // Set up debugging or command-line logging
         let (should_debugger, _handle) = if debug_mode && cfg!(feature = "debugger") {
             info!("Running in debug mode");
             (true, None)
         } else {
-            let handle = log4rs::init_config(config).or_else(|_| Err("Could not init Config"))?;
+            let env = env_logger::Env::default()
+                .filter_or("GAMEBOY_LOG_LEVEL", "info")
+                .write_style_or("GAMEBOY_LOG_STYLE", "always");
+            let handle = env_logger::init_from_env(env);
             (false, Some(handle))
         };
 
