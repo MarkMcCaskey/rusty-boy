@@ -20,8 +20,6 @@ pub struct Apu {
     pub channel4_envelope_counter: u8,
     pub channel4_envelope_increasing: bool,
     pub channel4_envelope_volume: u8,
-    // TODO: each channel's NRX2, etc must be cached as changes to registers
-    // don't take effect until the channel is triggered again
     pub div_apu: u8,
     /// 0xFF10..=0xFF3F
     pub apu_mem: [u8; 0x30],
@@ -43,8 +41,8 @@ impl Apu {
             channel4_envelope_counter: 8,
             channel4_envelope_increasing: true,
             channel4_envelope_volume: 0,
+            // We default to 7 as the next tick wraps us back to 0
             div_apu: 7,
-            //div_apu: 0,
             apu_mem: [0; 0x30],
         }
     }
@@ -79,8 +77,8 @@ impl Apu {
         self.channel4_envelope_increasing = self.channel4_envelope_increasing();
         self.channel4_envelope_volume = self.channel4_envelope_volume();
 
+        // We default to 7 as the next tick wraps us back to 0
         self.div_apu = 7;
-        //self.div_apu = 0;
         self.channel1_sweep_counter = 8;
         self.channel1_envelope_counter = 8;
         self.channel2_envelope_counter = 8;
