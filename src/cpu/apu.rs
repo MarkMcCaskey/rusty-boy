@@ -8,15 +8,12 @@ pub struct Apu {
     pub channel1_sweep_enabled: bool,
     pub channel1_frequency: u16,
     pub channel1_negate_executed: bool,
-    pub channel1_envelope_pace: u8,
     pub channel1_envelope_counter: u8,
     pub channel1_envelope_increasing: bool,
     pub channel1_envelope_volume: u8,
-    pub channel2_envelope_pace: u8,
     pub channel2_envelope_counter: u8,
     pub channel2_envelope_increasing: bool,
     pub channel2_envelope_volume: u8,
-    pub channel4_envelope_pace: u8,
     pub channel4_envelope_counter: u8,
     pub channel4_envelope_increasing: bool,
     pub channel4_envelope_volume: u8,
@@ -34,15 +31,12 @@ impl Apu {
             channel1_sweep_enabled: true,
             channel1_frequency: 0,
             channel1_negate_executed: false,
-            channel1_envelope_pace: 0,
             channel1_envelope_counter: 8,
             channel1_envelope_increasing: true,
             channel1_envelope_volume: 0,
-            channel2_envelope_pace: 0,
             channel2_envelope_counter: 8,
             channel2_envelope_increasing: true,
             channel2_envelope_volume: 0,
-            channel4_envelope_pace: 0,
             channel4_envelope_counter: 8,
             channel4_envelope_increasing: true,
             channel4_envelope_volume: 0,
@@ -74,14 +68,11 @@ impl Apu {
         self.apu_mem[0xFF25 - APU_BASE] = 0xF3;
         self.apu_mem[0xFF26 - APU_BASE] = if sgb_mode { 0xF0 } else { 0xF1 };
 
-        self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_envelope_increasing = self.channel1_envelope_increasing();
         self.channel1_envelope_volume = self.channel1_envelope_volume();
         self.channel1_frequency = self.channel1_frequency();
-        self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
         self.channel2_envelope_increasing = self.channel2_envelope_increasing();
         self.channel2_envelope_volume = self.channel2_envelope_volume();
-        self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
         self.channel4_envelope_increasing = self.channel4_envelope_increasing();
         self.channel4_envelope_volume = self.channel4_envelope_volume();
 
@@ -102,9 +93,8 @@ impl Apu {
             if self.get_sound1() {
                 self.channel1_envelope_counter -= 1;
                 if self.channel1_envelope_counter == 0 {
-                    if self.channel1_envelope_pace != 0 {
-                        self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
-                        self.channel1_envelope_counter = self.channel1_envelope_pace;
+                    if self.channel1_envelope_sweep_pace() != 0 {
+                        self.channel1_envelope_counter = self.channel1_envelope_sweep_pace();
                         self.channel1_step_envelope();
                     } else {
                         self.channel1_envelope_counter = 8;
@@ -114,9 +104,8 @@ impl Apu {
             if self.get_sound2() {
                 self.channel2_envelope_counter -= 1;
                 if self.channel2_envelope_counter == 0 {
-                    if self.channel2_envelope_pace != 0 {
-                        self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
-                        self.channel2_envelope_counter = self.channel2_envelope_pace;
+                    if self.channel2_envelope_sweep_pace() != 0 {
+                        self.channel2_envelope_counter = self.channel2_envelope_sweep_pace();
                         self.channel2_step_envelope();
                     } else {
                         self.channel2_envelope_counter = 8;
@@ -126,9 +115,8 @@ impl Apu {
             if self.get_sound4() {
                 self.channel4_envelope_counter -= 1;
                 if self.channel4_envelope_counter == 0 {
-                    if self.channel4_envelope_pace != 0 {
-                        self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
-                        self.channel4_envelope_counter = self.channel4_envelope_pace;
+                    if self.channel4_envelope_sweep_pace() != 0 {
+                        self.channel4_envelope_counter = self.channel4_envelope_sweep_pace();
                         self.channel4_step_envelope();
                     } else {
                         self.channel4_envelope_counter = 8;
@@ -721,7 +709,6 @@ impl Apu {
     pub fn set_sound1(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1;
         self.channel1_frequency = self.channel1_frequency();
-        self.channel1_envelope_pace = self.channel1_envelope_sweep_pace();
         self.channel1_sweep_counter = if self.channel1_sweep_pace() != 0 {
             self.channel1_sweep_pace()
         } else {
@@ -730,8 +717,8 @@ impl Apu {
         if (self.div_apu + 1) == 7 {
             self.channel1_envelope_counter += 1;
         }
-        self.channel1_envelope_counter = if self.channel1_envelope_pace != 0 {
-            self.channel1_envelope_pace
+        self.channel1_envelope_counter = if self.channel1_envelope_sweep_pace() != 0 {
+            self.channel1_envelope_sweep_pace()
         } else {
             8
         };
@@ -747,9 +734,8 @@ impl Apu {
     }
     pub fn set_sound2(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 1;
-        self.channel2_envelope_pace = self.channel2_envelope_sweep_pace();
-        self.channel2_envelope_counter = if self.channel2_envelope_pace != 0 {
-            self.channel2_envelope_pace
+        self.channel2_envelope_counter = if self.channel2_envelope_sweep_pace() != 0 {
+            self.channel2_envelope_sweep_pace()
         } else {
             8
         };
@@ -761,9 +747,8 @@ impl Apu {
     }
     pub fn set_sound4(&mut self) {
         self.apu_mem[0xFF26 - APU_BASE] |= 1 << 3;
-        self.channel4_envelope_pace = self.channel4_envelope_sweep_pace();
-        self.channel4_envelope_counter = if self.channel4_envelope_pace != 0 {
-            self.channel4_envelope_pace
+        self.channel4_envelope_counter = if self.channel4_envelope_sweep_pace() != 0 {
+            self.channel4_envelope_sweep_pace()
         } else {
             8
         };
