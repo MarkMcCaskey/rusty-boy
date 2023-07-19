@@ -72,9 +72,16 @@ impl Sdl2Renderer {
         let video_subsystem = sdl_context.video()?;
 
         let window = {
+            // TODO: flag to toggle this
+            /*
             let (window_width, window_height) = (
                 ((GB_SCREEN_WIDTH as f32) * 3.0) as u32,
                 ((GB_SCREEN_HEIGHT as f32) * 3.0) as u32,
+            );
+            */
+            let (window_width, window_height) = (
+                ((GBA_SCREEN_WIDTH as f32) * 3.0) as u32,
+                ((GBA_SCREEN_HEIGHT as f32) * 3.0) as u32,
             );
 
             match video_subsystem
@@ -180,6 +187,72 @@ impl Renderer for Sdl2Renderer {
                     0,
                     GB_SCREEN_WIDTH as u32,
                     GB_SCREEN_HEIGHT as u32,
+                    //MEM_DISP_WIDTH as u32,
+                    //MEM_DISP_HEIGHT as u32,
+                )),
+            )
+            .unwrap();
+
+        // feature disabled while graphics are being generalized
+        // TODO add a way to enable/disable this while running
+        /*let record_screen = false;
+        if record_screen {
+            save_screenshot(&self.canvas,
+                            format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
+            self.screenshot_frame_num += Wrapping(1);
+        }*/
+
+        self.canvas.present();
+    }
+
+    fn draw_gba_frame(&mut self, frame: &[[(u8, u8, u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT]) {
+        let scale = 3.0;
+        //app_settings.ui_scale;
+        match self.canvas.set_scale(scale, scale) {
+            Ok(_) => (),
+            Err(_) => error!("Could not set render scale"),
+        }
+
+        self.canvas.set_draw_color(NICER_COLOR);
+        self.canvas.clear();
+
+        let tc = self.canvas.texture_creator();
+        let temp_surface = Surface::new(
+            (GBA_SCREEN_WIDTH as f32) as u32,
+            (GBA_SCREEN_HEIGHT as f32) as u32,
+            PixelFormatEnum::RGBA8888,
+        )
+        .unwrap();
+
+        let mut temp_canvas = temp_surface.into_canvas().unwrap();
+
+        for y in 0..GBA_SCREEN_HEIGHT {
+            for x in 0..GBA_SCREEN_WIDTH {
+                let (r, g, b) = frame[y][x];
+                let color = sdl2::pixels::Color::RGB(r, g, b);
+
+                temp_canvas.set_draw_color(color);
+                temp_canvas
+                    .draw_point(Point::new(x as i32, y as i32))
+                    .unwrap();
+            }
+        }
+
+        let mut texture = tc
+            .create_texture_from_surface(&temp_canvas.into_surface())
+            .unwrap();
+
+        texture.set_blend_mode(sdl2::render::BlendMode::None);
+
+        self.canvas
+            .copy(
+                &texture,
+                None,
+                Some(Rect::new(
+                    0,
+                    0,
+                    GBA_SCREEN_WIDTH as u32,
+                    GBA_SCREEN_HEIGHT as u32,
                     //MEM_DISP_WIDTH as u32,
                     //MEM_DISP_HEIGHT as u32,
                 )),

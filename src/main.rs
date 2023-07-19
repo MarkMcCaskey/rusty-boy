@@ -28,6 +28,8 @@ pub mod disasm;
 /// Functionality for making the Gameboy emulator useful
 pub mod io;
 
+pub mod gba;
+
 use crate::debugger::graphics::Debugger;
 use crate::io::applicationsettings::*;
 use crate::io::applicationstate::*;
@@ -78,6 +80,7 @@ fn main() {
     };
 
     trace!("loading ROM");
+    let is_gba = application_settings.rom_file_name.ends_with("gba");
     let rom_bytes = {
         use std::fs::File;
         use std::io::Read;
@@ -91,7 +94,23 @@ fn main() {
             .unwrap();
         rom_buffer
     };
-    appstate.gameboy.load_rom(rom_bytes);
+    if is_gba {
+        info!("GameBoy Advance ROM detected... Attempting to run");
+        appstate.gba.load_rom(rom_bytes);
+        if std::path::Path::new("../roms/gba_bios.bin").exists() {
+            use std::io::Read;
+            info!("Loading BIOS");
+            let mut bios = std::fs::File::open("../roms/gba_bios.bin").unwrap();
+            let mut bios_buffer = Vec::with_capacity(0x4000);
+            bios.read_to_end(&mut bios_buffer).unwrap();
+
+            appstate.gba.load_bios(&bios_buffer);
+        } else {
+            info!("No BIOS found, skipping");
+        }
+    } else {
+        appstate.gameboy.load_rom(rom_bytes);
+    }
     //    application_settings.data_path.clone(),
 
     // delay debugger so loading rom can be logged if need be
@@ -126,9 +145,13 @@ fn main() {
             }
         }
 
-        appstate.step();
-        if let Some(ref mut dbg) = debugger {
-            dbg.step(&mut appstate.gameboy);
+        if is_gba {
+            appstate.step_gba();
+        } else {
+            appstate.step();
+            if let Some(ref mut dbg) = debugger {
+                dbg.step(&mut appstate.gameboy);
+            }
         }
 
         /*//check for new controller every frame
