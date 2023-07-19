@@ -9,6 +9,28 @@ pub enum EventResponse {
     Reset,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Button {
+    A,
+    B,
+    Start,
+    Select,
+    Up,
+    Down,
+    Left,
+    Right,
+    R,
+    L,
+}
+
+pub trait InputReceiver {
+    fn press(&mut self, button: Button);
+    fn unpress(&mut self, button: Button);
+    fn reset(&mut self);
+    fn toggle_logger(&mut self) {}
+    fn reinit_logger(&mut self) {}
+}
+
 pub trait Renderer {
     fn draw_frame(&mut self, frame: &[[(u8, u8, u8); GB_SCREEN_WIDTH]; GB_SCREEN_HEIGHT]);
     fn draw_gba_frame(&mut self, frame: &[[(u8, u8, u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT]) {
@@ -18,7 +40,7 @@ pub trait Renderer {
     fn draw_memory_visualization(&mut self, _: &Cpu) {
         unimplemented!();
     }
-    fn handle_events(&mut self, _: &mut Cpu) -> Vec<EventResponse>;
+    fn handle_events(&mut self, _: &mut dyn InputReceiver) -> Vec<EventResponse>;
 
     fn audio_step(&mut self, _gb: &Cpu) {
         unimplemented!();

@@ -32,6 +32,7 @@ pub struct ApplicationState {
     /// counts cycles since last sound update
     sound_cycles: u64,
     _screenshot_frame_num: Wrapping<u64>,
+    gba_timers: [u16; 4],
     pub renderer: Box<dyn Renderer>,
 }
 
@@ -54,6 +55,7 @@ impl ApplicationState {
             cycles_per_second: CPU_CYCLES_PER_SECOND,
             sound_cycles: 0,
             _screenshot_frame_num: Wrapping(0),
+            gba_timers: [0, 0, 0, 0],
             renderer,
         })
     }
@@ -72,6 +74,12 @@ impl ApplicationState {
         let mut cycles = 0;
         let mut frame = [[(0u8, 0u8, 0u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT];
         let mut y = 0;
+        let timer_prescalers = [
+            self.gba.io_registers.timer0_prescaler(),
+            self.gba.io_registers.timer1_prescaler(),
+            self.gba.io_registers.timer2_prescaler(),
+            self.gba.io_registers.timer3_prescaler(),
+        ];
 
         #[derive(Debug, Clone, Copy)]
         enum GameBoyAdvanceMode {
@@ -85,6 +93,23 @@ impl ApplicationState {
             let cycles_from_opcode = self.gba.dispatch() as u64;
             cycles += cycles_from_opcode;
             hblank_cycles += cycles_from_opcode;
+
+            for (i, timer) in self.gba_timers.iter_mut().enumerate() {
+                if !self.gba.io_registers.timer_enabled(i as u8) {
+                    continue;
+                }
+                *timer += cycles_from_opcode as u16;
+                if *timer >= timer_prescalers[i] {
+                    *timer -= timer_prescalers[i];
+                    if self.gba.io_registers.increment_timer(i as u8)
+                        && self.gba.io_registers.timer_irq_enabled(i as u8)
+                        && self.gba.master_interrupts_enabled()
+                    {
+                        dbg!("TIMER INTERRUPT!");
+                        self.gba.set_timer_interrupt(i as u8, true);
+                    }
+                }
+            }
 
             if in_hblank {
                 if hblank_cycles >= 272 {

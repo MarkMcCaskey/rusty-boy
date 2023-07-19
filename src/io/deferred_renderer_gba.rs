@@ -39,25 +39,26 @@ pub fn deferred_renderer_draw_gba_scanline(
             nth_pixel = 7 - nth_pixel;
         }
 
-        // 16/16 mode
-        let tile_line = nth_line * 4;
+        if bg0_control.color_mode {
+            todo!()
+        } else {
+            // 16/16 mode
+            let tile_line = nth_line * 4;
 
-        let tile_start = tile_base_ptr as usize + (tile_num as usize * 32);
-        let tile_line_start = tile_start + tile_line as usize;
-        let tile_byte_start = tile_line_start + (nth_pixel >> 1) as usize;
-        let color_4bit = gba.vram[tile_byte_start] >> (nth_pixel & 0x1);
+            let tile_start = tile_base_ptr as usize + (tile_num as usize * 32);
+            let tile_line_start = tile_start + tile_line as usize;
+            let tile_byte_start = tile_line_start + (nth_pixel >> 1) as usize;
+            let color_4bit = gba.vram[tile_byte_start] >> (nth_pixel & 0x1);
 
-        let palette_start = palette_num as usize * 16;
-        let color_lo = gba.obj_palette_ram[palette_start + (color_4bit as usize * 2)];
-        let color_hi = gba.obj_palette_ram[palette_start + (color_4bit as usize * 2) + 1];
-        let red = color_lo & 0x1F;
-        let green = ((color_hi & 0x3) << 3) | (color_lo >> 5);
-        let blue = (color_hi >> 2) & 0x1F;
-        if (red | green | blue) != 0 {
-            panic!("COLOR!");
+            let palette_start = palette_num as usize * 16;
+            let color_lo = gba.obj_palette_ram[palette_start + (color_4bit as usize * 2)];
+            let color_hi = gba.obj_palette_ram[palette_start + (color_4bit as usize * 2) + 1];
+            let red = color_lo & 0x1F;
+            let green = ((color_hi & 0x3) << 3) | (color_lo >> 5);
+            let blue = (color_hi >> 2) & 0x1F;
+
+            bg_pixels[x as usize] = (red << 3, green << 3, blue << 3);
         }
-
-        bg_pixels[x as usize] = (red << 3, green << 3, blue << 3);
     }
 
     bg_pixels

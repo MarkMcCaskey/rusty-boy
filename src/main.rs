@@ -120,6 +120,46 @@ fn main() {
         None
     };
 
+    if is_gba {
+        loop {
+            let time_since_last_frame = std::time::Instant::now();
+            for event in appstate
+                .renderer
+                .handle_events(&mut appstate.gba /* , &application_settings*/)
+                .iter()
+            {
+                match *event {
+                    EventResponse::ProgramTerminated => {
+                        info!("Program exiting!");
+                        if let Some(ref mut debugger) = debugger {
+                            debugger.die();
+                        }
+                        /*
+                        appstate
+                            .gameboy
+                            .save_ram(application_settings.data_path.clone());
+                        */
+                        std::process::exit(0);
+                    }
+                    EventResponse::Reset => {
+                        info!("Resetting gameboy advance");
+                        todo!("GBA reset");
+                        //appstate.gba.reset();
+                    }
+                }
+            }
+
+            appstate.step_gba();
+            /*//check for new controller every frame
+            self.load_controller_if_none_exist();*/
+
+            let time_diff = time_since_last_frame.elapsed();
+            if time_diff < std::time::Duration::from_millis(16) {
+                std::thread::sleep(std::time::Duration::from_millis(16) - time_diff);
+            }
+        }
+    }
+
     loop {
         let time_since_last_frame = std::time::Instant::now();
         for event in appstate
@@ -145,13 +185,9 @@ fn main() {
             }
         }
 
-        if is_gba {
-            appstate.step_gba();
-        } else {
-            appstate.step();
-            if let Some(ref mut dbg) = debugger {
-                dbg.step(&mut appstate.gameboy);
-            }
+        appstate.step();
+        if let Some(ref mut dbg) = debugger {
+            dbg.step(&mut appstate.gameboy);
         }
 
         /*//check for new controller every frame

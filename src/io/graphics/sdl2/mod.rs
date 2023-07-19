@@ -15,10 +15,9 @@ use self::utility::PositionedFrame;
 use self::vidram::{VidRamBGDisplay, VidRamTileDisplay};
 use super::renderer;
 use super::renderer::EventResponse;
-use crate::cpu::Cpu;
 use crate::io::applicationsettings::ApplicationSettings;
 use crate::io::constants::*;
-use crate::io::graphics::renderer::Renderer;
+use crate::io::graphics::renderer::{Button, InputReceiver, Renderer};
 use crate::io::sound::*;
 
 use self::utility::*;
@@ -160,7 +159,7 @@ impl Renderer for Sdl2Renderer {
         todo!("do this later if we care")
     }
 
-    fn handle_events(&mut self, gameboy: &mut Cpu) -> Vec<renderer::EventResponse> {
+    fn handle_events(&mut self, ir: &mut dyn InputReceiver) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
@@ -174,29 +173,29 @@ impl Renderer for Sdl2Renderer {
                     match axis {
                         controller::Axis::LeftX if deadzone < (val as i32).abs() => {
                             if val < 0 {
-                                gameboy.press_left();
-                                gameboy.unpress_right();
+                                ir.press(Button::Left);
+                                ir.unpress(Button::Right);
                             } else {
-                                gameboy.press_right();
-                                gameboy.unpress_left();
+                                ir.press(Button::Right);
+                                ir.unpress(Button::Left);
                             };
                         }
                         controller::Axis::LeftX => {
-                            gameboy.unpress_left();
-                            gameboy.unpress_right();
+                            ir.unpress(Button::Left);
+                            ir.press(Button::Right);
                         }
                         controller::Axis::LeftY if deadzone < (val as i32).abs() => {
                             if val < 0 {
-                                gameboy.press_up();
-                                gameboy.unpress_down();
+                                ir.press(Button::Up);
+                                ir.unpress(Button::Down);
                             } else {
-                                gameboy.press_down();
-                                gameboy.unpress_up();
+                                ir.press(Button::Down);
+                                ir.unpress(Button::Up);
                             }
                         }
                         controller::Axis::LeftY => {
-                            gameboy.unpress_up();
-                            gameboy.unpress_down();
+                            ir.unpress(Button::Up);
+                            ir.unpress(Button::Down);
                         }
                         _ => {}
                     }
@@ -205,13 +204,13 @@ impl Renderer for Sdl2Renderer {
                     trace!("Button {:?} down", button);
                     match button {
                         controller::Button::A => {
-                            gameboy.press_a();
+                            ir.press(Button::A);
                             // TODO: sound
                             // device.resume();
                         }
-                        controller::Button::B => gameboy.press_b(),
-                        controller::Button::Back => gameboy.press_select(),
-                        controller::Button::Start => gameboy.press_start(),
+                        controller::Button::B => ir.press(Button::B),
+                        controller::Button::Back => ir.press(Button::Select),
+                        controller::Button::Start => ir.press(Button::Start),
                         _ => (),
                     }
                 }
@@ -220,11 +219,11 @@ impl Renderer for Sdl2Renderer {
                     trace!("Button {:?} up", button);
                     match button {
                         controller::Button::A => {
-                            gameboy.unpress_a();
+                            ir.unpress(Button::A);
                         }
-                        controller::Button::B => gameboy.unpress_b(),
-                        controller::Button::Back => gameboy.unpress_select(),
-                        controller::Button::Start => gameboy.unpress_start(),
+                        controller::Button::B => ir.unpress(Button::B),
+                        controller::Button::Back => ir.unpress(Button::Select),
+                        controller::Button::Start => ir.unpress(Button::Start),
                         _ => (),
                     }
                 }
@@ -268,15 +267,15 @@ impl Renderer for Sdl2Renderer {
                 } => {
                     if !repeat {
                         match keycode {
-                            Keycode::F3 => gameboy.toggle_logger(),
+                            Keycode::F3 => ir.toggle_logger(),
                             Keycode::R => {
                                 // Reset/reload emu
                                 // TODO Keep previous visualization settings
-                                gameboy.reset();
+                                ir.reset();
                                 ret_vec.push(EventResponse::Reset);
                                 //let gbcopy = self.initial_gameboy_state.clone();
                                 //gameboy = gbcopy;
-                                gameboy.reinit_logger();
+                                ir.reinit_logger();
 
                                 // // This way makes it possible to edit rom
                                 // // with external editor and see changes
@@ -284,14 +283,14 @@ impl Renderer for Sdl2Renderer {
                                 // gameboy = Cpu::new();
                                 // gameboy.load_rom(rom_file);
                             }
-                            Keycode::A => gameboy.press_a(),
-                            Keycode::S => gameboy.press_b(),
-                            Keycode::D => gameboy.press_select(),
-                            Keycode::F => gameboy.press_start(),
-                            Keycode::Up => gameboy.press_up(),
-                            Keycode::Down => gameboy.press_down(),
-                            Keycode::Left => gameboy.press_left(),
-                            Keycode::Right => gameboy.press_right(),
+                            Keycode::A => ir.press(Button::A),
+                            Keycode::S => ir.press(Button::B),
+                            Keycode::D => ir.press(Button::Select),
+                            Keycode::F => ir.press(Button::Start),
+                            Keycode::Up => ir.press(Button::Up),
+                            Keycode::Down => ir.press(Button::Down),
+                            Keycode::Left => ir.press(Button::Left),
+                            Keycode::Right => ir.press(Button::Right),
                             _ => (),
                         }
                     }
@@ -303,25 +302,26 @@ impl Renderer for Sdl2Renderer {
                 } => {
                     if !repeat {
                         match keycode {
-                            Keycode::A => gameboy.unpress_a(),
-                            Keycode::S => gameboy.unpress_b(),
-                            Keycode::D => gameboy.unpress_select(),
-                            Keycode::F => gameboy.unpress_start(),
-                            Keycode::Up => gameboy.unpress_up(),
-                            Keycode::Down => gameboy.unpress_down(),
-                            Keycode::Left => gameboy.unpress_left(),
-                            Keycode::Right => gameboy.unpress_right(),
-
+                            Keycode::A => ir.unpress(Button::A),
+                            Keycode::S => ir.unpress(Button::B),
+                            Keycode::D => ir.unpress(Button::Select),
+                            Keycode::F => ir.unpress(Button::Start),
+                            Keycode::Up => ir.unpress(Button::Up),
+                            Keycode::Down => ir.unpress(Button::Down),
+                            Keycode::Left => ir.unpress(Button::Left),
+                            Keycode::Right => ir.unpress(Button::Right),
                             _ => (),
                         }
                     }
                 }
                 Event::MouseButtonDown {
-                    x, y, mouse_btn, ..
+                    x: _x,
+                    y: _y,
+                    mouse_btn: _mouse_btn,
+                    ..
                 } => {
                     // Transform screen coordinates in UI coordinates
-                    let click_point =
-                        display_coords_to_ui_point(2. /*app_settings.ui_scale*/, x, y);
+                    /* let click_point = display_coords_to_ui_point(app_settings.ui_scale, x, y);
 
                     // Find clicked widget
                     for widget in &mut self.widgets {
@@ -329,7 +329,7 @@ impl Renderer for Sdl2Renderer {
                             widget.click(mouse_btn, click_point, gameboy);
                             break;
                         }
-                    }
+                    }*/
                 }
                 Event::MouseWheel { y: _y, .. } => {
                     //self.ui_scale += y as f32;
@@ -345,7 +345,7 @@ impl Renderer for Sdl2Renderer {
             }
         }
 
-        ret_vec
+        return ret_vec;
     }
 }
 
