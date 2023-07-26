@@ -30,6 +30,8 @@ pub mod io;
 
 pub mod gba;
 
+pub mod prelude;
+
 use crate::debugger::graphics::Debugger;
 use crate::io::applicationsettings::*;
 use crate::io::applicationstate::*;

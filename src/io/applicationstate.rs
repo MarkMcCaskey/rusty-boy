@@ -33,6 +33,7 @@ pub struct ApplicationState {
     sound_cycles: u64,
     _screenshot_frame_num: Wrapping<u64>,
     gba_timers: [u16; 4],
+    debug_gba_last_seen_ppu_bg_mode: Option<u8>,
     pub renderer: Box<dyn Renderer>,
 }
 
@@ -56,6 +57,7 @@ impl ApplicationState {
             sound_cycles: 0,
             _screenshot_frame_num: Wrapping(0),
             gba_timers: [0, 0, 0, 0],
+            debug_gba_last_seen_ppu_bg_mode: None,
             renderer,
         })
     }
@@ -146,18 +148,33 @@ impl ApplicationState {
             }
         }
         self.gba.ppu_set_vblank(false);
+        if Some(self.gba.ppu_bg_mode()) != self.debug_gba_last_seen_ppu_bg_mode {
+            debug!("PPU BG mode is {}", self.gba.ppu_bg_mode());
+            self.debug_gba_last_seen_ppu_bg_mode = Some(self.gba.ppu_bg_mode());
+        }
         /*
-            dbg!(
-                self.gba.ppu_bg_mode(),
-                self.gba.ppu_bg0_enabled(),
-            self.gba.ppu_bg1_enabled(),
-            self.gba.ppu_bg2_enabled(),
-            self.gba.ppu_bg3_enabled(),
-            self.gba.ppu_obj_enabled(),
-            self.gba.ppu_win0_enabled(),
-            self.gba.ppu_win1_enabled(),
-            self.gba.ppu_obj_win_enabled(),
-        );
+            if
+        self.gba.ppu_bg_mode() != 0 ||
+                    self.gba.ppu_bg0_enabled() ||
+                self.gba.ppu_bg1_enabled() ||
+                self.gba.ppu_bg2_enabled() ||
+                self.gba.ppu_bg3_enabled() ||
+                self.gba.ppu_obj_enabled() ||
+                self.gba.ppu_win0_enabled() ||
+                self.gba.ppu_win1_enabled() ||
+                self.gba.ppu_obj_win_enabled() {
+                dbg!(
+                    self.gba.ppu_bg_mode(),
+                    self.gba.ppu_bg0_enabled(),
+                self.gba.ppu_bg1_enabled(),
+                self.gba.ppu_bg2_enabled(),
+                self.gba.ppu_bg3_enabled(),
+                self.gba.ppu_obj_enabled(),
+                self.gba.ppu_win0_enabled(),
+                self.gba.ppu_win1_enabled(),
+                self.gba.ppu_obj_win_enabled(),
+            );
+        }
         */
         self.renderer.draw_gba_frame(&frame);
     }

@@ -11,6 +11,9 @@ pub struct GameboyAdvance {
     pub obj_palette_ram: [u8; 0x400],
     pub vram: [u8; 0x18000],
     pub oam: [u8; 0x400],
+    sram: [u8; 0x10000],
+    // used for "break points" for counting loops, etc while I debug the basics
+    debug_counter: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,6 +54,71 @@ impl PpuBgControl {
             display_area_overflow: (bits & 0x2000) != 0,
             screen_size: ((bits >> 14) & 0b11) as u8,
         }
+    }
+}
+
+/// Bit shifting rotation mechanism in the ARM7 CPU.
+/// In ARM mode these are bundled into some instructions.
+/// In Thumb mode this can be accessed with separate instructions.
+pub struct BarrelShifter;
+
+impl BarrelShifter {
+    pub fn lsl(val: u32, shift_amt: u32, registers: Option<&mut Registers>) -> u32 {
+        if shift_amt == 0 {
+            return val;
+        }
+        if shift_amt > 32 {
+            registers.map(|r| r.cpsr_set_carry_flag(false));
+            return 0;
+        }
+        if shift_amt == 32 {
+            registers.map(|r| r.cpsr_set_carry_flag(val & 1 == 1));
+            return 0;
+        }
+        registers.map(|r| r.cpsr_set_carry_flag((val >> (32 - shift_amt)) & 1 == 1));
+        val << shift_amt
+    }
+    pub fn lsr(val: u32, shift_amt: u32, registers: Option<&mut Registers>) -> u32 {
+        if shift_amt == 0 {
+            registers.map(|r| r.cpsr_set_carry_flag((val >> 31) & 1 == 1));
+            return 0;
+        }
+        if shift_amt > 32 {
+            registers.map(|r| r.cpsr_set_carry_flag(false));
+            return 0;
+        }
+        if shift_amt == 32 {
+            registers.map(|r| r.cpsr_set_carry_flag((val >> 31) & 1 == 1));
+            return 0;
+        }
+        registers.map(|r| r.cpsr_set_carry_flag((val >> (shift_amt - 1)) & 1 == 1));
+        val >> shift_amt
+    }
+    pub fn asr(val: u32, shift_amt: u32, registers: Option<&mut Registers>) -> u32 {
+        if shift_amt == 0 {
+            registers.map(|r| r.cpsr_set_carry_flag((val >> 31) & 1 == 1));
+            return ((val as i32) >> 31) as u32;
+        }
+        if shift_amt >= 32 {
+            registers.map(|r| r.cpsr_set_carry_flag((val >> 31) & 1 == 1));
+            return ((val as i32) >> 31) as u32;
+        }
+        registers.map(|r| r.cpsr_set_carry_flag((val >> (shift_amt - 1)) & 1 == 1));
+        ((val as i32) >> shift_amt) as u32
+    }
+    pub fn ror(val: u32, shift_amt: u32, registers: Option<&mut Registers>) -> u32 {
+        if shift_amt == 0 {
+            return val;
+        }
+        let out = val.rotate_right(shift_amt);
+        registers.map(|r| r.cpsr_set_carry_flag((out >> 31) & 1 == 1));
+        out
+    }
+    // acts like rrx1, do we need a general RRX?
+    pub fn rrx(val: u32, registers: Option<&mut Registers>, carry: bool) -> u32 {
+        let out = (val >> 1) | ((carry as u32) << 31);
+        registers.map(|r| r.cpsr_set_carry_flag(val & 1 == 1));
+        out
     }
 }
 
@@ -610,6 +678,7 @@ impl std::ops::Index<u8> for Registers {
                 RegisterMode::IRQ => &self.r13_irq,
                 RegisterMode::Undefined => &self.r13_und,
                 RegisterMode::User => &self.sp,
+                RegisterMode::System => &self.sp,
             },
             14 => match mode {
                 RegisterMode::FIQ => &self.r14_fiq,
@@ -618,6 +687,7 @@ impl std::ops::Index<u8> for Registers {
                 RegisterMode::IRQ => &self.r14_irq,
                 RegisterMode::Undefined => &self.r14_und,
                 RegisterMode::User => &self.lr,
+                RegisterMode::System => &self.lr,
             },
             15 => &self.pc,
             _ => unimplemented!("invalid register read"),
@@ -680,6 +750,7 @@ impl std::ops::IndexMut<u8> for Registers {
                 RegisterMode::IRQ => &mut self.r13_irq,
                 RegisterMode::Undefined => &mut self.r13_und,
                 RegisterMode::User => &mut self.sp,
+                RegisterMode::System => &mut self.sp,
             },
             14 => match mode {
                 RegisterMode::FIQ => &mut self.r14_fiq,
@@ -688,6 +759,7 @@ impl std::ops::IndexMut<u8> for Registers {
                 RegisterMode::IRQ => &mut self.r14_irq,
                 RegisterMode::Undefined => &mut self.r14_und,
                 RegisterMode::User => &mut self.lr,
+                RegisterMode::System => &mut self.lr,
             },
             15 => &mut self.pc,
             _ => unimplemented!("invalid register write"),
@@ -723,6 +795,8 @@ pub enum RegisterMode {
     Supervisor,
     Abort,
     Undefined,
+    /// Not described in GBA docs, but this is a real ARMv7 mode...
+    System,
 }
 
 impl RegisterMode {
@@ -736,7 +810,7 @@ impl RegisterMode {
             0b10111 => Some(Self::Abort),
             0b11011 => Some(Self::Undefined),
             // privileged user
-            0b11111 => Some(Self::User),
+            0b11111 => Some(Self::System),
             _ => None,
         }
     }
@@ -802,9 +876,9 @@ impl Registers {
             r10: 0,
             r11: 0,
             r12: 0,
-            sp: 0,
+            sp: 0x03007F00,
             lr: 0,
-            pc: 0, //0x08000000,
+            pc: 0x08000000,
             r8_fiq: 0,
             r9_fiq: 0,
             r10_fiq: 0,
@@ -812,11 +886,11 @@ impl Registers {
             r12_fiq: 0,
             r13_fiq: 0,
             r14_fiq: 0,
-            r13_svc: 0,
+            r13_svc: 0x03007FE0,
             r14_svc: 0,
             r13_abt: 0,
             r14_abt: 0,
-            r13_irq: 0,
+            r13_irq: 0x03007FA0,
             r14_irq: 0,
             r13_und: 0,
             r14_und: 0,
@@ -885,7 +959,7 @@ impl Registers {
     pub fn get_spsr(&self) -> u32 {
         let mode = self.register_mode().unwrap();
         match mode {
-            RegisterMode::User => unimplemented!("Is this possible?"),
+            RegisterMode::User | RegisterMode::System => unimplemented!("Is this possible?"),
             RegisterMode::FIQ => self.spsr_fiq,
             RegisterMode::Supervisor => self.spsr_svc,
             RegisterMode::Abort => self.spsr_abt,
@@ -896,7 +970,7 @@ impl Registers {
     pub fn get_spsr_mut(&mut self) -> &mut u32 {
         let mode = self.register_mode().unwrap();
         match mode {
-            RegisterMode::User => unimplemented!("Is this possible?"),
+            RegisterMode::User | RegisterMode::System => unimplemented!("Is this possible?"),
             RegisterMode::FIQ => &mut self.spsr_fiq,
             RegisterMode::Supervisor => &mut self.spsr_svc,
             RegisterMode::Abort => &mut self.spsr_abt,
@@ -921,6 +995,7 @@ impl Registers {
             RegisterMode::Abort => self.r14_abt,
             RegisterMode::IRQ => self.r14_irq,
             RegisterMode::Undefined => self.r14_und,
+            RegisterMode::System => self.lr,
         }
     }
     pub fn lr_mut(&mut self) -> &mut u32 {
@@ -932,6 +1007,7 @@ impl Registers {
             RegisterMode::Abort => &mut self.r14_abt,
             RegisterMode::IRQ => &mut self.r14_irq,
             RegisterMode::Undefined => &mut self.r14_und,
+            RegisterMode::System => &mut self.lr,
         }
     }
     pub fn sp(&self) -> u32 {
@@ -943,6 +1019,7 @@ impl Registers {
             RegisterMode::Abort => self.r13_abt,
             RegisterMode::IRQ => self.r13_irq,
             RegisterMode::Undefined => self.r13_und,
+            RegisterMode::System => self.sp,
         }
     }
     pub fn sp_mut(&mut self) -> &mut u32 {
@@ -954,6 +1031,7 @@ impl Registers {
             RegisterMode::Abort => &mut self.r13_abt,
             RegisterMode::IRQ => &mut self.r13_irq,
             RegisterMode::Undefined => &mut self.r13_und,
+            RegisterMode::System => &mut self.sp,
         }
     }
     pub fn split_pc(&self) -> (u8, (bool, bool), u32, Mode) {
@@ -980,6 +1058,8 @@ impl GameboyAdvance {
             obj_palette_ram: [0u8; 0x400],
             vram: [0u8; 0x18000],
             oam: [0u8; 0x400],
+            sram: [0u8; 0x10000],
+            debug_counter: 0,
         }
     }
 
@@ -1046,6 +1126,10 @@ impl GameboyAdvance {
         }
     }
 
+    // for modes 4 and 5
+    pub fn ppu_frame_select(&self) -> bool {
+        (self.io_registers[0] >> 4) & 1 == 1
+    }
     pub fn ppu_bg0_x_scroll(&self) -> u16 {
         ((self.io_registers[0x10] as u16) << 8) | (self.io_registers[0x11] as u16) & 0x1F
     }
@@ -1071,19 +1155,19 @@ impl GameboyAdvance {
         ((self.io_registers[0x1E] as u16) << 8) | (self.io_registers[0x1F] as u16) & 0x1F
     }
     pub fn ppu_bg0_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0x8] as u16) << 8) | (self.io_registers[0x9] as u16) & 0x1F;
+        let bits = ((self.io_registers[0x8] as u16) << 8) | (self.io_registers[0x9] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg1_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xA] as u16) << 8) | (self.io_registers[0xB] as u16) & 0x1F;
+        let bits = ((self.io_registers[0xA] as u16) << 8) | (self.io_registers[0xB] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg2_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xC] as u16) << 8) | (self.io_registers[0xD] as u16) & 0x1F;
+        let bits = ((self.io_registers[0xC] as u16) << 8) | (self.io_registers[0xD] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg3_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xE] as u16) << 8) | (self.io_registers[0xF] as u16) & 0x1F;
+        let bits = ((self.io_registers[0xE] as u16) << 8) | (self.io_registers[0xF] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg_mode(&self) -> u8 {
@@ -1139,7 +1223,7 @@ impl GameboyAdvance {
         self.io_registers[0x5]
     }
     pub fn ppu_set_readonly_vcounter(&mut self, ly: u8) {
-        self.io_registers[0x6] = ly;
+        self.io_registers[0x6] = ly as u8;
     }
 
     pub fn master_interrupts_enabled(&self) -> bool {
@@ -1338,11 +1422,16 @@ impl GameboyAdvance {
             0x06000000..=0x06FFFFFF => (self.vram[(address & 0x17FFF) as usize], 1),
             //0x07000000..=0x070003FF => (self.oam[(address & 0x3FF) as usize], 1),
             0x07000000..=0x07FFFFFF => (self.oam[(address & 0x3FF) as usize], 1),
-            0x08000000..=0x09FFFFFF => (self.entire_rom[(address & 0x1FFFFFF) as usize], 5),
+            0x08000000..=0x09FFFFFF => {
+                if (address - 0x0800_0000) > self.entire_rom.len() as u32 {
+                    return (0, 5);
+                }
+                (self.entire_rom[(address & 0x1FFFFFF) as usize], 5)
+            }
             0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
             0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2"),
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
-            0x0E000000..=0x0FFFFFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
+            0x0E000000..=0x0FFFFFFF => (self.sram[(address & 0xFFFF) as usize], 5),
             _ => (0, 0),
         }
     }
@@ -1350,7 +1439,7 @@ impl GameboyAdvance {
         let lo_bit_idx = address & !0x1;
         let hi_bit_idx = address | 0x1;
         match address {
-            0x00000000..=0x01FF3FFF => {
+            0x00000000..=0x01FFFFFF => {
                 //0x00000000..=0x00003FFF => {
                 // bios system ROM
                 // TODO: separate opcoed reading logic from these getters
@@ -1490,6 +1579,10 @@ impl GameboyAdvance {
                 (out, 1)
             }
             0x0A000000..=0x0BFFFFFF | 0x0C000000..=0x0DFFFFFF | 0x08000000..=0x09FFFFFF => {
+                // TODO: properly handle later bytes overflowing too
+                if bit1_idx & 0x1FFFFFF >= self.entire_rom.len() as u32 {
+                    return (0, 8);
+                }
                 let bit1 = self.entire_rom[(bit1_idx & 0x1FFFFFF) as usize] as u32;
                 let bit2 = self.entire_rom[(bit2_idx & 0x1FFFFFF) as usize] as u32;
                 let bit3 = self.entire_rom[(bit3_idx & 0x1FFFFFF) as usize] as u32;
@@ -1533,8 +1626,11 @@ impl GameboyAdvance {
             0x05000000..=0x050003FF => {
                 todo!("OBJ Pallete ram")
             }
-            0x06000000..=0x06017FFF => {
-                todo!("VRAM")
+            //0x06000000..=0x06017FFF => {
+            0x06000000..=0x06FFFFFF => {
+                // INACCUARY: GBA can't do 8 bit writes here
+                self.vram[(address & 0x17FFF) as usize] = val;
+                1
             }
             0x07000000..=0x070003FF => {
                 todo!("OAM")
@@ -1543,7 +1639,10 @@ impl GameboyAdvance {
             0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
             0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2"),
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
-            0x0E000000..=0x0FFFFFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
+            0x0E000000..=0x0FFFFFFF => {
+                self.sram[(address & 0xFFFF) as usize] = val;
+                5
+            }
             _ => 0,
         }
     }
@@ -1859,6 +1958,15 @@ impl GameboyAdvance {
     }
 
     pub fn dispatch(&mut self) -> u32 {
+        /*
+        if self.r.pc > 0x3FFF && self.r.pc < 0x2000000 {
+            panic!("PC is maybe OOB in bios: 0x{:X}", self.r.pc);
+        }
+        */
+        // HACK: ignore no-ops for this test ROM during dev
+        if self.r.pc == 0x8001EBC {
+            return 8;
+        }
         if self.r.pc >= 0x4000000 && self.r.pc <= 0x4FFFFFF {
             std::process::exit(0);
         }
@@ -1905,7 +2013,7 @@ impl GameboyAdvance {
             //  |_Cond__|0_0_0_0_1|U|A|S|_RdHi__|_RdLo__|__Rs___|1_0_0_1|__Rm___| MulLong
             0b000 => {
                 let multiply_end = ((opcode >> 4) & 0xF) == 0b1001;
-                let bits8to11 = ((opcode >> 8) & 0xF);
+                let bits8to11 = (opcode >> 8) & 0xF;
                 let multiply_next3 = (opcode >> 22) & 0x7;
                 let multiply_next2 = multiply_next3 >> 1;
                 match multiply_next2 {
@@ -1914,12 +2022,15 @@ impl GameboyAdvance {
                     0b10 if multiply_end && bits8to11 == 0 && ((opcode >> 20) & 0x3) == 0 => {
                         todo!("transswp12")
                     }
+                    0b10 if (opcode >> 20) & 1 == 0 && ((opcode >> 4) & 0xFF) == 0 => {
+                        self.dispatch_psr(opcode)
+                    }
                     _ => {
                         if (opcode >> 4) & 1 == 1 && (opcode >> 7) & 1 == 1 {
                             if (opcode >> 22) & 1 == 0 && (opcode >> 8) & 0xF == 0 {
-                                todo!("TransReg10")
+                                self.dispatch_data_trans(opcode)
                             } else {
-                                self.dispatch_data_trans_imm(opcode)
+                                self.dispatch_data_trans(opcode)
                             }
                         } else {
                             self.dispatch_alu(opcode)
@@ -1927,17 +2038,28 @@ impl GameboyAdvance {
                     }
                 }
             }
-            0b001 => self.dispatch_alu(opcode),
+            0b001 => {
+                let next2 = (opcode >> 23) & 0x3;
+                //if next2 == 0b10 && (opcode >> 20) & 3 == 0b10 {
+                if next2 == 0b10 && (opcode >> 20) & 1 == 0 {
+                    self.dispatch_psr(opcode)
+                } else {
+                    self.dispatch_alu(opcode)
+                }
+            }
             0b010 | 0b011 => self.dispatch_mem(opcode),
             0b100 => self.dispatch_block_data(opcode),
             // TODO: 0b100 block trans
             // TODO: 0b110 co data trans
-            0b111 => self.dispatch_codata_op(opcode),
-            /*
-            |_Cond__|1_1_1_0|_CPopc_|__CRn__|__CRd__|__CP#__|_CP__|0|__CRm__| CoDataOp
-            |_Cond__|1_1_1_0|CPopc|L|__CRn__|__Rd___|__CP#__|_CP__|1|__CRm__| CoRegTrans
-            |_Cond__|1_1_1_1|_____________Ignored_by_Processor______________| SWI
-                       */
+            0b111 => {
+                let next_bit = (opcode >> 24) & 1 == 1;
+                if next_bit {
+                    self.dispatch_software_interrupt(opcode)
+                } else {
+                    todo!("SWI with next bit not set");
+                }
+            }
+            //0b111 => self.dispatch_codata_op(opcode),
             _ => {
                 unimplemented!("0x{:X} ({:b}) at 0x{:X}", opcode, opcode_idx, self.r.pc);
             }
@@ -2000,8 +2122,7 @@ impl GameboyAdvance {
                 if next_bit {
                     let cond = (opcode >> 8) & 0xF;
                     if cond == 0b1111 {
-                        todo!("THUMB SWI");
-                        //self.dispatch_thumb_software_interrupt(opcode)
+                        self.dispatch_thumb_software_interrupt(opcode)
                     } else {
                         self.dispatch_thumb_conditional_branch(opcode)
                     }
@@ -2040,34 +2161,30 @@ impl GameboyAdvance {
             }
             0b0010 => {
                 trace!("LSL r{} = r{} << r{}", rd, rs, rd);
-                let result = self.r[rd] << ((self.r[rs] & 0xFF) % 32);
-                if self.r[rs] & 0xFF != 0 {
-                    // TODO: REVIEW
-                    self.r.cpsr_set_carry_flag(
-                        self.r[rs] & (1 << (32 - ((self.r[rs] & 0xFF) % 32))) != 0,
-                    );
-                }
-                self.r[rd] = result;
+                let shift_amt = self.r[rs] & 0xFF;
+                let val = self.r[rd];
+                self.r[rd] = BarrelShifter::lsl(val, shift_amt, Some(&mut self.r));
+
                 2
             }
             0b0011 => {
                 trace!("LSR r{} = r{} >> r{}", rd, rs, rd);
-                if self.r[rs] & 0xFF != 0 {
-                    // TODO: REVIEW
-                    self.r
-                        .cpsr_set_carry_flag(self.r[rs] & (1 << ((self.r[rs] & 0xFF) - 1)) != 0);
+                let shift_amt = self.r[rs] & 0xFF;
+                if shift_amt != 0 {
+                    let val = self.r[rd];
+                    self.r[rd] = BarrelShifter::lsr(val, shift_amt, Some(&mut self.r));
                 }
-                self.r[rd] = self.r[rd] >> (self.r[rs] & 0xFF);
+
                 2
             }
             0b0100 => {
                 trace!("ASR r{} = r{} >> r{}", rd, rs, rd);
-                if self.r[rs] & 0xFF != 0 {
-                    // TODO: REVIEW
-                    self.r
-                        .cpsr_set_carry_flag(self.r[rs] & (1 << ((self.r[rs] & 0xFF) - 1)) != 0);
+                let shift_amt = self.r[rs] & 0xFF;
+                if shift_amt != 0 {
+                    let val = self.r[rd];
+                    self.r[rd] = BarrelShifter::asr(val, shift_amt, Some(&mut self.r));
                 }
-                self.r[rd] = ((self.r[rd] as i32) >> (self.r[rs] & 0xFF)) as u32;
+
                 2
             }
             0b0101 => {
@@ -2090,17 +2207,16 @@ impl GameboyAdvance {
             }
             0b0110 => {
                 trace!("SBC r{} = r{} - r{} - C", rd, rs, rd);
-                // TODO: review what not carry means, does it just mean add the carry? or is it 32bit negation?
                 let op1 = self.r[rs];
                 let op2 = self.r[rd];
                 self.r[rd] = self.r[rd]
-                    .wrapping_sub(self.r[rs])
-                    .wrapping_add(1 - self.r.cpsr_carry_flag() as u32);
+                    .wrapping_sub(self.r[rs].wrapping_add(1 - self.r.cpsr_carry_flag() as u32));
+                let a = op2;
+                let b = !op1;
                 self.r
-                    .cpsr_set_overflow_flag((!(op1 ^ !op2) & (!op2 ^ self.r[rd])) >> 31 == 1);
+                    .cpsr_set_overflow_flag((!(a ^ b) & (b ^ self.r[rd])) >> 31 == 1);
                 self.r.cpsr_set_carry_flag(
-                    ((op1 as u64) + ((!op2) as u64) + (self.r.cpsr_carry_flag() as u64))
-                        > 0xFFFF_FFFF,
+                    ((a as u64) + (b as u64) + (self.r.cpsr_carry_flag() as u64)) > 0xFFFF_FFFF,
                 );
                 1
             }
@@ -2108,8 +2224,7 @@ impl GameboyAdvance {
                 trace!("ROR r{} = r{} ROR r{}", rd, rs, rd);
                 self.r[rd] = self.r[rd].rotate_right(self.r[rs] & 0xFF);
                 if self.r[rs] & 0xFF != 0 {
-                    todo!("Carry flag for THUMB ROR");
-                    //self.r.cpsr_set_carry_flag()
+                    self.r.cpsr_set_carry_flag(self.r[rd] >> 31 == 1);
                 }
                 2
             }
@@ -2134,11 +2249,11 @@ impl GameboyAdvance {
             }
             0b1010 => {
                 trace!("CMP r{} - r{}", rs, rd);
-                let op1 = self.r[rs];
-                let op2 = self.r[rd];
-                let result = self.r[rd].wrapping_sub(self.r[rs]);
+                let op1 = self.r[rd];
+                let op2 = self.r[rs];
+                let result = op1.wrapping_sub(op2);
                 self.r.cpsr_set_zero_flag(result == 0);
-                self.r.cpsr_set_sign_flag(result & 0x8000_0000 != 0);
+                self.r.cpsr_set_sign_flag((result >> 31) == 1);
                 self.r
                     .cpsr_set_overflow_flag((op1 as i32).overflowing_sub(op2 as i32).1);
                 self.r.cpsr_set_carry_flag(op2 <= op1);
@@ -2161,7 +2276,14 @@ impl GameboyAdvance {
                 1
             }
             0b1100 => {
-                trace!("ORR r{} = r{} | r{}", rd, rs, rd);
+                trace!(
+                    "ORR r{} = r{} (0x{:X}) | r{} (0x{:X})",
+                    rd,
+                    rs,
+                    self.r[rs],
+                    rd,
+                    self.r[rd]
+                );
                 self.r[rd] = self.r[rd] | self.r[rs];
                 1
             }
@@ -2185,7 +2307,7 @@ impl GameboyAdvance {
         };
         if !skip_end_flags {
             self.r.cpsr_set_zero_flag(self.r[rd] == 0);
-            self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
+            self.r.cpsr_set_sign_flag((self.r[rd] >> 31) & 1 == 1);
         }
         cycles
     }
@@ -2194,9 +2316,10 @@ impl GameboyAdvance {
         let rd = ((opcode >> 8) & 0x7) as u8;
         let nn = (opcode & 0xFF) << 2;
         let pc = (self.r.pc + 2) & !2;
-        trace!("LDR r{}, [PC, #{}]", rd, nn);
+        let addr = pc + nn as u32;
 
-        let o = self.get_mem32(pc + nn as u32);
+        let o = self.get_mem32(addr);
+        trace!("LDR r{}, [PC, #{} (0x{:X})] (0x{:X})", rd, nn, addr, o.0);
         self.r[rd] = o.0;
 
         2 + o.1
@@ -2237,10 +2360,14 @@ impl GameboyAdvance {
             0b11 => {
                 let x_flag = (opcode >> 7) & 1 == 1;
                 let thumb_mode = self.r[rs] & 1 == 1;
-                let addr = if thumb_mode && rs == 15 {
-                    self.r[rs] & !1
+                let (thumb_mode, addr) = if rs == 15 {
+                    (false, (self.r[rs] + 2) & !3)
                 } else {
-                    self.r[rs] & !3
+                    if thumb_mode {
+                        (true, self.r[rs] & !1)
+                    } else {
+                        (false, (self.r[rs] + 2) & !3)
+                    }
                 };
                 self.r.set_thumb(thumb_mode);
                 if x_flag {
@@ -2255,11 +2382,12 @@ impl GameboyAdvance {
                     */
                 } else {
                     trace!("BX r{} (0x{:X})", rs, addr);
-                    self.r.pc = addr + 4;
-                    /*
-                    self.r.pc = (self.r[rs] + 4) & !2;
-                    //self.r.pc = (self.r[rs] + 2) & !1;
-                    */
+                    // TODO(hello-world): check if this is correct
+                    self.r.pc = addr; //+ 4;
+                                      /*
+                                      self.r.pc = (self.r[rs] + 4) & !2;
+                                      //self.r.pc = (self.r[rs] + 2) & !1;
+                                      */
                 }
                 if old_thumb_enabled != thumb_mode {
                     if thumb_mode {
@@ -2424,6 +2552,7 @@ impl GameboyAdvance {
             for i in 0..8 {
                 if r_list & (1 << i) != 0 {
                     cycles += 1;
+                    //println!("Storing value 0x{:X} to address 0x{:X}", self.r[i as u8], self.r[rb]);
                     cycles += self.set_mem32(self.r[rb], self.r[i as u8]);
                     self.r[rb] = self.r[rb].wrapping_add(4);
                 }
@@ -2479,6 +2608,7 @@ impl GameboyAdvance {
                     let o = self.get_mem32(self.r.sp());
                     *self.r.sp_mut() += 4;
                     self.r[i as u8] = o.0;
+                    //println!("popping value 0x{:X} to r{}", o.0, i);
                     cycles += o.1;
                     cycles += 2;
                 }
@@ -2531,7 +2661,6 @@ impl GameboyAdvance {
         let sub_op_idx = (opcode >> 11) & 0x3;
         let rd = (opcode >> 8 & 0x7) as u8;
         let imm = (opcode & 0xFF) as u32;
-        let old_val = self.r[rd];
 
         match sub_op_idx {
             // MOV
@@ -2554,23 +2683,25 @@ impl GameboyAdvance {
             // ADD
             0b10 => {
                 trace!("ADD r{}, #{}", rd, imm);
-                self.r[rd] = self.r[rd].wrapping_add(imm);
-                self.r.cpsr_set_zero_flag(self.r[rd] == 0);
-                self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
+                let result = self.r[rd].wrapping_add(imm);
+                self.r.cpsr_set_zero_flag(result == 0);
+                self.r.cpsr_set_sign_flag(result & 0x8000_0000 != 0);
                 self.r
                     .cpsr_set_overflow_flag((self.r[rd] as i32).overflowing_add(imm as i32).1);
                 self.r
                     .cpsr_set_carry_flag(((self.r[rd] as u64) + (imm as u64)) > 0xFFFF_FFFF);
+                self.r[rd] = result;
             }
             // SUB
             0b11 => {
-                trace!("SUB r{}, #{}", rd, imm);
-                self.r[rd] = self.r[rd].wrapping_sub(imm);
-                self.r.cpsr_set_zero_flag(self.r[rd] == 0);
-                self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
+                trace!("SUB r{} = r{} (0x{:X}) - #{}", rd, rd, self.r[rd], imm);
+                let result = self.r[rd].wrapping_sub(imm);
+                self.r.cpsr_set_zero_flag(result == 0);
+                self.r.cpsr_set_sign_flag(result & 0x8000_0000 != 0);
                 self.r
                     .cpsr_set_overflow_flag((self.r[rd] as i32).overflowing_sub(imm as i32).1);
                 self.r.cpsr_set_carry_flag(imm <= self.r[rd]);
+                self.r[rd] = result;
             }
             _ => unreachable!(),
         }
@@ -2587,37 +2718,31 @@ impl GameboyAdvance {
             // LSL
             0b00 => {
                 trace!("LSL r{}, r{}, #{:X}", rd, rs, offset);
-                // shift of 0 = don't modify carry flag
-                if offset != 0 {
-                    // TODO: review this
-                    self.r
-                        .cpsr_set_carry_flag(self.r[rs] & (1 << (32 - offset)) != 0);
-                }
-                self.r[rd] = self.r[rs] << offset;
+                let val = self.r[rs];
+                let shift_amt = offset as u32;
+                let registers = Some(&mut self.r);
+                self.r[rd] = BarrelShifter::lsl(val, shift_amt, registers);
+
                 self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
                 self.r.cpsr_set_zero_flag(self.r[rd] == 0);
             }
             0b01 => {
                 trace!("LSR r{}, r{}, #{:X}", rd, rs, offset);
-                self.r[rd] = self.r[rs] >> offset;
-                // shift of 0 = don't modify carry flag
-                if offset != 0 {
-                    // TODO: review this
-                    self.r
-                        .cpsr_set_carry_flag(self.r[rs] & (1 << (offset - 1)) != 0);
-                }
+                let val = self.r[rs];
+                let shift_amt = if offset == 0 { 32 } else { offset as u32 };
+                let registers = Some(&mut self.r);
+                self.r[rd] = BarrelShifter::lsr(val, shift_amt, registers);
+
                 self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
                 self.r.cpsr_set_zero_flag(self.r[rd] == 0);
             }
             0b10 => {
                 trace!("ASR r{}, r{}, #{:X}", rd, rs, offset);
-                self.r[rd] = ((self.r[rs] as i32) >> offset) as u32;
-                // shift of 0 = don't modify carry flag
-                if offset != 0 {
-                    // TODO: review this
-                    self.r
-                        .cpsr_set_carry_flag(self.r[rs] & (1 << (offset - 1)) != 0);
-                }
+                let val = self.r[rs];
+                let shift_amt = if offset == 0 { 32 } else { offset as u32 };
+                let registers = Some(&mut self.r);
+                self.r[rd] = BarrelShifter::asr(val, shift_amt, registers);
+
                 self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
                 self.r.cpsr_set_zero_flag(self.r[rd] == 0);
             }
@@ -2631,58 +2756,81 @@ impl GameboyAdvance {
                         trace!("ADD r{}, r{}, r{}", rd, rs, reg_or_imm);
                         op2 = self.r[reg_or_imm as u8];
                         result = self.r[rs].wrapping_add(op2);
-                        self.r[rd] = result;
                         self.r.cpsr_set_overflow_flag(
-                            (self.r[rs] as i32).overflowing_sub(op2 as i32).1,
+                            (self.r[rs] as i32).overflowing_add(op2 as i32).1,
                         );
-                        self.r.cpsr_set_carry_flag(op2 < self.r[rs]);
+                        self.r
+                            .cpsr_set_carry_flag((self.r[rs] as u64) + (op2 as u64) > 0xFFFF_FFFF);
+                        self.r[rd] = result;
                     }
                     0b01 => {
                         trace!("SUB r{}, r{}, r{}", rd, rs, reg_or_imm);
                         op2 = self.r[reg_or_imm as u8];
                         result = self.r[rs].wrapping_sub(op2);
-                        self.r[rd] = result;
                         self.r.cpsr_set_overflow_flag(
                             (self.r[rs] as i32).overflowing_sub(op2 as i32).1,
                         );
                         self.r.cpsr_set_carry_flag(op2 <= self.r[rs]);
+                        self.r[rd] = result;
                     }
                     0b10 => {
                         trace!("ADD r{}, r{}, #{}", rd, rs, reg_or_imm);
                         op2 = reg_or_imm;
                         result = self.r[rs].wrapping_add(op2);
-                        self.r[rd] = result;
                         self.r.cpsr_set_overflow_flag(
                             (self.r[rs] as i32).overflowing_add(op2 as i32).1,
                         );
                         self.r.cpsr_set_carry_flag(
                             ((self.r[rs] as u64) + (op2 as u64)) > 0xFFFF_FFFF,
                         );
+                        self.r[rd] = result;
                     }
                     0b11 => {
                         trace!("SUB r{}, r{}, #{}", rd, rs, reg_or_imm);
                         op2 = reg_or_imm;
                         result = self.r[rs].wrapping_sub(op2);
-                        self.r[rd] = result;
                         self.r.cpsr_set_overflow_flag(
                             (self.r[rs] as i32).overflowing_sub(op2 as i32).1,
                         );
                         self.r.cpsr_set_carry_flag(op2 <= self.r[rs]);
+                        self.r[rd] = result;
                     }
                     _ => unreachable!(),
                 }
 
                 self.r.cpsr_set_zero_flag(self.r[rd] == 0);
                 self.r.cpsr_set_sign_flag(self.r[rd] & 0x8000_0000 != 0);
-                self.r.cpsr_set_overflow_flag(
-                    ((self.r[rs] ^ op2) & 0x8000_0000 == 0)
-                        && ((self.r[rs] ^ result) & 0x8000_0000 != 0),
-                );
             }
             _ => unreachable!(),
         }
 
         1
+    }
+
+    pub fn dispatch_software_interrupt(&mut self, _opcode: u32) -> u8 {
+        if self.master_interrupts_enabled() {
+            self.r.set_svc_mode();
+            *self.r.lr_mut() = self.r.pc;
+            *self.r.get_spsr_mut() = self.r.cpsr;
+            self.r.set_thumb(false);
+            self.r.cpsr_disable_irq();
+            self.r.pc = 0x08;
+        }
+
+        3
+    }
+
+    pub fn dispatch_thumb_software_interrupt(&mut self, _opcode: u16) -> u8 {
+        if self.master_interrupts_enabled() {
+            self.r.set_svc_mode();
+            *self.r.lr_mut() = self.r.pc | 0;
+            *self.r.get_spsr_mut() = self.r.cpsr;
+            self.r.set_thumb(false);
+            self.r.cpsr_disable_irq();
+            self.r.pc = 0x08;
+        }
+
+        3
     }
 
     pub fn dispatch_thumb_conditional_branch(&mut self, opcode: u16) -> u8 {
@@ -2717,27 +2865,44 @@ impl GameboyAdvance {
                 3
             }
             0b10 => {
+                let upper_n = (opcode & 0x7FF) as u32;
+                /*
+                let double_width_hack = false;
+                let next_op =  self.get_thumb_opcode();
+                if double_width_hack && next_op >> 11 == 0x1F {
+                    // just do the entire jump here
+                    let lower_n = (next_op & 0x7FF) as u32;
+                    let signed_offset = (((upper_n as i32) << 21) >> 9) | ((lower_n as i32) << 1);
+                    println!("{}, {:b}", signed_offset, signed_offset);
+                    *self.r.lr_mut() = (self.r.pc + 2) | 1;
+                    self.r.pc = ((self.r.pc as i32) + 2 + signed_offset) as u32;
+
+                    trace!("BL (32bit THUMB) to 0x{:X}", self.r.pc);
+                    4
+                } else {
+                    */
                 trace!("BL (part 1)");
-                let n = (opcode & 0x7FF) as u32;
-                *self.r.lr_mut() = self.r.pc /*+ 4*/ + 2 + (n << 12);
+                // TODO: review all other sign extension logic, apply this trick to them
+                let offset = ((upper_n as i32) << 21) >> 9;
+                *self.r.lr_mut() = ((self.r.pc as i32) + 2 + offset) as u32;
+
                 1
+                //}
             }
-            0b11 | 0b01 => {
+            0b11 /*| 0b01*/ => {
                 let n = (opcode & 0x7FF) as u32;
                 let old_pc = self.r.pc;
-                //let new_pc = (self.r.lr() + (n << 1)) & 0x3F_FFFF;
-                let new_pc = (self.r.lr() + (n << 1));
+                let new_pc = self.r.lr().wrapping_add(n << 1);
                 self.r.pc = new_pc;
                 trace!("BL to 0x{:X}", self.r.pc);
                 *self.r.lr_mut() = old_pc | 1;
+                //println!("old_pc = 0x{:X}, n = {} (0x{:X})", old_pc, n, n);
                 3
             }
             // I think 0b01 is only on ARM9, so let's just route it to the same BL
-            /*
             0b01 => {
                 todo!("Second opcode for THUMB branch long with link");
             }
-            */
             _ => unimplemented!("unknown sub-op-idx for THUMB branch: {:b}", sub_op_idx),
         }
     }
@@ -2775,6 +2940,7 @@ impl GameboyAdvance {
         */
 
         if sub_opcode {
+            trace!("Linking for branch");
             //*self.r.lr_mut() = self.r.pc; + 4;
             *self.r.lr_mut() = self.r.pc;
         }
@@ -2806,6 +2972,23 @@ impl GameboyAdvance {
         // HACK for R15 case
         let old_cpsr = self.r.cpsr;
 
+        //dbg!(sub_opcode, s, imm, rn, rd);
+        // valid programs shouldn't give us invalid instructions
+        // these checks are mostly for debugging, as hitting these in known good code suggests
+        // we're executing garbage data as code
+        debug_assert!(if matches!(sub_opcode, 0xD | 0xF) {
+            rn == 0
+        } else {
+            true
+        });
+        debug_assert!(if matches!(sub_opcode, 0xA | 0xB | 0x8 | 0x9) {
+            rd == 0xF || rd == 0
+        } else {
+            true
+        });
+        // opcodes that don't write back must set flags
+        //debug_assert!(if (0x8..=0xB).contains(&sub_opcode) { s } else { true });
+
         if rn == 0xF {
             if !imm && (opcode >> 4) & 1 == 1 {
                 op1 += 12 - 4;
@@ -2817,16 +3000,8 @@ impl GameboyAdvance {
         if imm {
             let ror_shift = (opcode >> 8) & 0xF;
             op2 = opcode & 0xFF;
-            let shift_amt = (ror_shift * 2) % 32;
-            if shift_amt != 0 {
-                op2 = op2.rotate_right(shift_amt);
-                self.r.cpsr_set_carry_flag((op2 & 0x8000_0000) != 0);
-                // TODO: apply this ROR logic everywhere else ROR is used
-            } else {
-                // TODO: this logic may only be for non-immediate mode
-                let carry_bit = self.r.cpsr_carry_flag() as u32;
-                op2 |= carry_bit << 31;
-            }
+            let shift_amt = ror_shift * 2;
+            op2 = op2.rotate_right(shift_amt);
         } else {
             let shift_by_register = (opcode >> 4) & 1 == 1;
             let rm = opcode & 0xF;
@@ -2847,53 +3022,18 @@ impl GameboyAdvance {
             };
             let shift_type = (opcode >> 5) & 0b11;
 
-            if shift_amt == 0 {
-                // shift amount of 0 is a special case
-                /*
-                          Zero Shift Amount (Shift Register by Immediate, with Immediate=0)
-
-                LSL#0: No shift performed, ie. directly Op2=Rm, the C flag is NOT affected.
-                LSR#0: Interpreted as LSR#32, ie. Op2 becomes zero, C becomes Bit 31 of Rm.
-                ASR#0: Interpreted as ASR#32, ie. Op2 and C are filled by Bit 31 of Rm.
-                ROR#0: Interpreted as RRX#1 (RCR), like ROR#1, but Op2 Bit 31 set to old C.
-
-                           */
-                match shift_type {
-                    // LSL
-                    0 => {
-                        op2 = self.r[rm as u8];
-                    }
-                    // LSR
-                    1 => {
-                        op2 = 0;
-                        self.r.cpsr_set_carry_flag((self.r[rm as u8] >> 31) == 1);
-                    }
-                    // ASR
-                    2 => {
-                        op2 = ((self.r[rm as u8] as i32) >> 31) as u32;
-                        self.r.cpsr_set_carry_flag(op2 & 1 == 1);
-                    }
-                    // ROR
-                    3 => todo!("ROR zero shift amount handling"),
-                    _ => unreachable!(),
-                }
+            if shift_amt == 0 && shift_by_register {
+                op2 = self.r[rm as u8];
             } else {
+                let carry = self.r.cpsr_carry_flag();
+                let val = self.r[rm as u8];
+                let registers = if s { Some(&mut self.r) } else { None };
                 match shift_type {
-                    // LSL
-                    0 => {
-                        // TODO: review overflowing here
-                        op2 = self.r[rm as u8].overflowing_shl(shift_amt as _).0;
-                    }
-                    // LSR
-                    1 => {
-                        op2 = self.r[rm as u8] >> shift_amt;
-                    }
-                    // ASR
-                    2 => {
-                        op2 = ((self.r[rm as u8] as i32) >> shift_amt) as u32;
-                    }
-                    // ROR
-                    3 => todo!("ROR"),
+                    0 => op2 = BarrelShifter::lsl(val, shift_amt as u32, registers),
+                    1 => op2 = BarrelShifter::lsr(val, shift_amt as u32, registers),
+                    2 => op2 = BarrelShifter::asr(val, shift_amt as u32, registers),
+                    3 if shift_amt == 0 => op2 = BarrelShifter::rrx(val, registers, carry),
+                    3 => op2 = BarrelShifter::ror(val, shift_amt as u32, registers),
                     _ => unreachable!(),
                 }
             }
@@ -2902,6 +3042,8 @@ impl GameboyAdvance {
         // detect if ALU instruction is actually an MRS/MSR: PSR transfer
         // TODO: rn != 0xF = SWP
         if (sub_opcode >> 2) == 0b10 && !s {
+            panic!("Refactored out, this should never trigger");
+            // TOOD: delete this code
             let psr_src_dest = (opcode >> 22) & 1 == 1;
             let psr_subopcode = (opcode >> 21) & 1 == 1;
             if psr_subopcode {
@@ -3068,45 +3210,43 @@ impl GameboyAdvance {
             }
             // SBC
             0x6 => {
-                trace!("SBC r{:X} = {:X} - {:X} + C", rd, op1, op2);
-                let result = op1
-                    .wrapping_sub(op2)
-                    .wrapping_add(1 - self.r.cpsr_carry_flag() as u32);
+                trace!("SBC r{} = {:X} - {:X} + C", rd, op1, op2);
+                let result =
+                    op1.wrapping_sub(op2.wrapping_add(1 - self.r.cpsr_carry_flag() as u32));
                 self.r[rd] = result;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
                     self.r.cpsr_set_sign_flag((result >> 31) == 1);
-                    // TODO: check this in more detail
+                    let a = op1;
+                    let b = !op2;
                     self.r
-                        .cpsr_set_overflow_flag((!(op1 ^ !op2) & (!op2 ^ result)) >> 31 == 1);
+                        .cpsr_set_overflow_flag((!(a ^ b) & (b ^ result)) >> 31 == 1);
                     self.r.cpsr_set_carry_flag(
-                        ((op1 as u64) + ((!op2) as u64) + (self.r.cpsr_carry_flag() as u64))
-                            > 0xFFFF_FFFF,
+                        ((a as u64) + (b as u64) + (self.r.cpsr_carry_flag() as u64)) > 0xFFFF_FFFF,
                     );
                 }
             }
             // RSC
             0x7 => {
-                trace!("RSC r{:X} = {:X} - {:X} + C", rd, op2, op1);
-                let result = op2
-                    .wrapping_sub(op1)
-                    .wrapping_add(1 - self.r.cpsr_carry_flag() as u32);
+                trace!("RSC r{} = {:X} - {:X} + C", rd, op2, op1);
+                let result =
+                    op2.wrapping_sub(op1.wrapping_add(1 - self.r.cpsr_carry_flag() as u32));
                 self.r[rd] = result;
+                let a = op2;
+                let b = !op1;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
                     self.r.cpsr_set_sign_flag((result >> 31) == 1);
-                    // TODO: check this in more detail
                     self.r
-                        .cpsr_set_overflow_flag((!(op1 ^ !op2) & (!op2 ^ result)) >> 31 == 1);
+                        .cpsr_set_overflow_flag((!(a ^ b) & (b ^ result)) >> 31 == 1);
                     self.r.cpsr_set_carry_flag(
-                        ((op1 as u64) + ((!op2) as u64) + (self.r.cpsr_carry_flag() as u64))
-                            > 0xFFFF_FFFF,
+                        ((a as u64) + (b as u64) + (self.r.cpsr_carry_flag() as u64)) > 0xFFFF_FFFF,
                     );
                 }
             }
             // TST
             0x8 => {
-                trace!("TST r{:X} = {:X} & {:X}", rd, op1, op2);
+                trace!("TST {:X} & {:X}", op1, op2);
                 let result = op1 & op2;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
@@ -3115,7 +3255,7 @@ impl GameboyAdvance {
             }
             // TEQ
             0x9 => {
-                trace!("TEQ r{:X} = {:X} ^ {:X}", rd, op1, op2);
+                trace!("TEQ {:X} ^ {:X}", op1, op2);
                 let result = op1 ^ op2;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
@@ -3124,7 +3264,8 @@ impl GameboyAdvance {
             }
             // CMP
             0xA => {
-                trace!("CMP r{:X} = {:X} - {:X}", rd, op1, op2);
+                trace!("CMP {:X} - {:X}", op1, op2);
+
                 let result = op1.wrapping_sub(op2);
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
@@ -3134,9 +3275,21 @@ impl GameboyAdvance {
                     self.r.cpsr_set_carry_flag(op2 <= op1);
                 }
             }
+            // CMN
+            0xB => {
+                trace!("CMN {:X} + {:X}", op1, op2);
+                let result = op1.wrapping_add(op2);
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 31) == 1);
+                    self.r
+                        .cpsr_set_overflow_flag((op1 as i32).overflowing_add(op2 as i32).1);
+                    self.r.cpsr_set_carry_flag(op1.checked_add(op2).is_none());
+                }
+            }
             // ORR
             0xC => {
-                trace!("ORR r{:X} = {:X} | {:X}", rd, op1, op2);
+                trace!("ORR r{} = {:X} | {:X}", rd, op1, op2);
                 let result = op1 | op2;
                 self.r[rd] = result;
                 if s {
@@ -3146,7 +3299,7 @@ impl GameboyAdvance {
             }
             // MOV
             0xD => {
-                trace!("MOV r{:X} = {:X}", rd, op2);
+                trace!("MOV r{} = {:X}", rd, op2);
                 self.r[rd] = op2;
                 if s {
                     self.r.cpsr_set_zero_flag(op2 == 0);
@@ -3165,7 +3318,7 @@ impl GameboyAdvance {
             }
             // MVN
             0xF => {
-                trace!("MVN r{:X} = !{:X}", rd, op2);
+                trace!("MVN r{} = !{:X}", rd, op2);
                 let result = !op2;
                 self.r[rd] = result;
                 if s {
@@ -3177,10 +3330,12 @@ impl GameboyAdvance {
         }
 
         // HACK: don't set CPSR if in user mode
+        // TODO: make sure this doesn't break CMP, etc
         if s && rd == 0xF {
             if self.r.register_mode() != Some(RegisterMode::User) {
                 self.r.cpsr = self.r.get_spsr();
             } else {
+                panic!("should be reenabling thumb mode...");
                 self.r.cpsr = old_cpsr;
             }
         }
@@ -3193,7 +3348,139 @@ impl GameboyAdvance {
     }
 
     pub fn dispatch_multiply(&mut self, opcode: u32) -> u8 {
-        todo!("Multiply")
+        let sub_opcode = (opcode >> 21) & 0xF;
+        let s = (opcode >> 20) & 1 == 1;
+        let rd = ((opcode >> 16) & 0xF) as u8;
+        let rn = ((opcode >> 12) & 0xF) as u8;
+        let rs = ((opcode >> 8) & 0xF) as u8;
+        let half_word_multiply = (opcode >> 4) & 1 == 1;
+
+        match sub_opcode {
+            0b0000 => {
+                trace!("MUL r{} = r{} * r{}", rd, rs, rn);
+                let result = self.r[rs].wrapping_mul(self.r[rn]);
+                self.r[rd] = result as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 31) == 1);
+                }
+            }
+            0b0001 => {
+                trace!("MLA r{} = r{} * r{} + r{}", rd, rs, rn, self.r[rd]);
+                let result = self.r[rs].wrapping_mul(self.r[rn]).wrapping_add(self.r[rd]);
+                self.r[rd] = result as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 31) == 1);
+                }
+            }
+            0b0010 => {
+                todo!("UMAAL")
+            }
+            0b0100 => {
+                todo!("UMULL");
+            }
+            0b0101 => {
+                todo!("UMLAL");
+            }
+            0b0110 => {
+                todo!("SMULL");
+            }
+            0b0111 => {
+                todo!("SMLAL");
+            }
+            0b1000 => {
+                todo!("SMLAxy");
+            }
+            0b1001 => {
+                todo!("docs unclear, this could be either multiply, check more docs");
+            }
+            0b1010 => {
+                todo!("SMLALxy");
+            }
+            0b1011 => {
+                todo!("SMULxy");
+            }
+            _ => unreachable!(
+                "multiply instruction 0x{:X} at 0x{:X}",
+                sub_opcode, self.r.pc
+            ),
+        }
+        // for armv4 we always clear this
+        self.r.cpsr_set_carry_flag(false);
+
+        3
+    }
+
+    pub fn dispatch_psr(&mut self, opcode: u32) -> u8 {
+        let psr_src_dest = (opcode >> 22) & 1 == 1;
+        let psr_subopcode = (opcode >> 21) & 1 == 1;
+        let imm = psr_subopcode && (opcode >> 25) & 1 == 1;
+
+        if psr_subopcode {
+            let write_flags = (opcode >> 19) & 1 == 1;
+            let write_status = (opcode >> 18) & 1 == 1;
+            let write_extension = (opcode >> 17) & 1 == 1;
+            let write_control = (opcode >> 16) & 1 == 1;
+            let mask = {
+                let mut mask = 0;
+                if write_flags {
+                    mask |= 0xFF << 24;
+                }
+                if write_status {
+                    mask |= 0xFF << 16;
+                }
+                if write_extension {
+                    mask |= 0xFF << 8;
+                }
+                if write_control {
+                    mask |= 0xFF;
+                }
+                mask
+            };
+            let val = if imm {
+                let shift_amt = (opcode >> 8) & 0xF;
+                (opcode & 0xFF).rotate_right(shift_amt * 2)
+            } else {
+                let rm = ((opcode >> 0) & 0xF) as u8;
+                debug_assert_ne!(rm, 0xF, "MSR from PC");
+                self.r[rm as u8]
+            };
+            trace!(
+                "MSR mode={:?}: 0x{:X} & 0x{:X}",
+                self.r.register_mode(),
+                mask,
+                val
+            );
+            // HACK: if in user mode, just force CPSR
+            if psr_src_dest
+            /*&& self.r.register_mode() != Some(RegisterMode::User)*/
+            {
+                debug_assert_ne!(self.r.register_mode(), Some(RegisterMode::User));
+                *self.r.get_spsr_mut() &= !mask;
+                *self.r.get_spsr_mut() |= val & mask;
+            } else {
+                self.r.cpsr &= !mask;
+                self.r.cpsr |= val & mask;
+            }
+        } else {
+            trace!("MRS mode={:?}", self.r.register_mode());
+            let rd = ((opcode >> 12) & 0xF) as u8;
+            debug_assert_ne!(rd, 0xF, "MRS to PC");
+            debug_assert!(!imm);
+
+            let v = if psr_src_dest
+            /*&& self.r.register_mode() != Some(RegisterMode::User)*/
+            {
+                debug_assert_ne!(self.r.register_mode(), Some(RegisterMode::User));
+                self.r.get_spsr()
+            } else {
+                self.r.cpsr
+            };
+
+            self.r[rd] = v;
+        }
+        1
     }
 
     /*
@@ -3235,9 +3522,10 @@ impl GameboyAdvance {
              When above Bit 22 I=1:
                Immediate Offset (lower 4bits)  (0-255, together with upper bits)
          */
-    pub fn dispatch_data_trans_imm(&mut self, opcode: u32) -> u8 {
+    pub fn dispatch_data_trans(&mut self, opcode: u32) -> u8 {
         let p = (opcode >> 24) & 1 == 1;
         let up = (opcode >> 23) & 1 == 1;
+        let imm = (opcode >> 22) & 1 == 1;
         let write_back = !p || ((opcode >> 21) & 1 == 1);
         let load = (opcode >> 20) & 1 == 1;
         let rn = ((opcode >> 16) & 0xF) as u8;
@@ -3250,7 +3538,13 @@ impl GameboyAdvance {
         if rd == 15 {
             src_val += 8;
         }
-        let offset = (((opcode >> 8) & 0xF) << 4) | (opcode & 0xF);
+        let offset = if imm {
+            (((opcode >> 8) & 0xF) << 4) | (opcode & 0xF)
+        } else {
+            let rm = (opcode & 0xF) as u8;
+            debug_assert_ne!(rm, 0xF, "Data transfer from PC");
+            self.r[(opcode & 0xF) as u8]
+        };
         let opcode = (opcode >> 5) & 0x3;
 
         if p {
@@ -3260,7 +3554,7 @@ impl GameboyAdvance {
                 base_val -= offset;
             }
         }
-        let mut cycles = 0;
+        let cycles;
 
         match (load, opcode) {
             (true, 0b00) => todo!("reserved"),
@@ -3310,9 +3604,9 @@ impl GameboyAdvance {
         }
         if !p {
             if up {
-                base_val += offset;
+                base_val = base_val.wrapping_add(offset);
             } else {
-                base_val -= offset;
+                base_val = base_val.wrapping_sub(offset);
             }
         }
         if write_back {
@@ -3335,7 +3629,7 @@ impl GameboyAdvance {
         let load = (opcode >> 20) & 1 == 1;
         let base_reg = (opcode >> 16) & 0xF;
         let src_dest_reg = (opcode >> 12) & 0xF;
-        if force_nonpriviliged {
+        if force_nonpriviliged && !p {
             todo!("figure this out");
         }
 
@@ -3344,16 +3638,25 @@ impl GameboyAdvance {
             let rm = (opcode & 0xF) as u8;
             let shift_amount = (opcode >> 7) & 0x1F;
             if shift_amount == 0 {
-                // TODO:
-                //panic!("Special logic here? docs don't describe it much, maybe we ignore it here");
-                warn!("Special logic here? docs don't describe it much, maybe we ignore it here");
-            }
-            match shift_type {
-                0b00 => self.r[rm] << shift_amount,
-                0b01 => self.r[rm] >> shift_amount,
-                0b10 => ((self.r[rm] as i32) >> shift_amount) as u32,
-                0b11 => self.r[rm].rotate_right(shift_amount),
-                _ => unreachable!(),
+                match shift_type {
+                    // LSL
+                    0b00 => self.r[rm],
+                    // LSR
+                    0b01 => 0,
+                    // ASR
+                    0b10 => ((self.r[rm] as i32) >> 31) as u32,
+                    // ROR
+                    0b11 => todo!("ROR!"),
+                    _ => unreachable!(),
+                }
+            } else {
+                match shift_type {
+                    0b00 => self.r[rm] << shift_amount,
+                    0b01 => self.r[rm] >> shift_amount,
+                    0b10 => ((self.r[rm] as i32) >> shift_amount) as u32,
+                    0b11 => self.r[rm].rotate_right(shift_amount),
+                    _ => unreachable!(),
+                }
             }
         } else {
             opcode & 0xFFF
@@ -3373,14 +3676,9 @@ impl GameboyAdvance {
 
         if load {
             if byte {
-                trace!("LDRB r{:X} = mem[{:X}]", src_dest_reg, val);
+                trace!("LDRB r{} = mem[{:X}]", src_dest_reg, val);
                 let o = self.get_mem8(val);
                 cycles += o.1;
-                // TODO: does this zero the high bits?
-                /*
-                self.r[src_dest_reg as u8] &= !0xFF;
-                self.r[src_dest_reg as u8] |= o.0 as u32;
-                */
                 self.r[src_dest_reg as u8] = o.0 as u32;
             } else {
                 let o = self.get_mem32(val);
@@ -3402,19 +3700,14 @@ impl GameboyAdvance {
             };
             if byte {
                 trace!(
-                    "STRB mem[{:X}] = r{:X} (0x{:X})",
+                    "STRB mem[{:X}] = r{} (0x{:X})",
                     val,
                     src_dest_reg,
                     write_val as u8
                 );
                 cycles += self.set_mem8(val, write_val as u8);
             } else {
-                trace!(
-                    "STR mem[{:X}] = r{:X} (0x{:X})",
-                    val,
-                    src_dest_reg,
-                    write_val
-                );
+                trace!("STR mem[{:X}] = r{} (0x{:X})", val, src_dest_reg, write_val);
                 cycles += self.set_mem32(val, write_val);
             }
         }
@@ -3440,7 +3733,7 @@ impl GameboyAdvance {
     }
 
     pub fn dispatch_block_data(&mut self, opcode: u32) -> u8 {
-        let p = (opcode >> 24) & 1 == 1;
+        let mut p = (opcode >> 24) & 1 == 1;
         let up = (opcode >> 23) & 1 == 1;
         let force_user_mode = (opcode >> 22) & 1 == 1;
         let mut write_back = (opcode >> 21) & 1 == 1;
@@ -3467,6 +3760,19 @@ impl GameboyAdvance {
             (false, true, true) => "STMFA",
         };
 
+        let r_list_count = r_list.count_ones();
+
+        if r_list_count == 0 {
+            todo!("0 is a special case, handle it when it happens");
+        } else if !up {
+            base = base.wrapping_sub(4 * r_list_count);
+            if write_back {
+                self.r[rn] = base;
+                write_back = false;
+            }
+            p = !p;
+        }
+
         // LDM, STM
         trace!(
             "{} r{} (0x{:X}) - {:016b}: in {:?}",
@@ -3478,9 +3784,7 @@ impl GameboyAdvance {
         );
         // TOOD: all accesses should be done lower to higher
         if load {
-            for i in 0..16
-            /* .rev()*/
-            {
+            for i in 0..16 {
                 if r_list & (1 << i) == 0 {
                     continue;
                 }
@@ -3488,45 +3792,29 @@ impl GameboyAdvance {
                     write_back = false;
                 }
                 if p {
-                    base = if up {
-                        base.wrapping_add(4)
-                    } else {
-                        base.wrapping_sub(4)
-                    }
+                    base = base.wrapping_add(4);
                 }
                 let o = self.get_mem32(base);
                 //println!("Loading r{} (0x{:X}) from 0x{:X}", i, o.0, base);
                 self.r[i as u8] = o.0;
                 cycles += o.1 + 2;
                 if !p {
-                    base = if up {
-                        base.wrapping_add(4)
-                    } else {
-                        base.wrapping_sub(4)
-                    }
+                    base = base.wrapping_add(4);
                 }
             }
         } else {
-            for i in (0..16).rev() {
+            for i in 0..16 {
                 if r_list & (1 << i) == 0 {
                     continue;
                 }
                 if p {
-                    base = if up {
-                        base.wrapping_add(4)
-                    } else {
-                        base.wrapping_sub(4)
-                    }
+                    base = base.wrapping_add(4);
                 }
                 //println!("pushing r{} ({:X}) to 0x{:X}", i, self.r[i as u8], base);
                 cycles += self.set_mem32(base, self.r[i as u8]);
                 cycles += 1;
                 if !p {
-                    base = if up {
-                        base.wrapping_add(4)
-                    } else {
-                        base.wrapping_sub(4)
-                    }
+                    base = base.wrapping_add(4);
                 }
             }
         }
@@ -3595,7 +3883,6 @@ fn button_to_bit(button: Button) -> u16 {
         Button::Down => 0x0080,
         Button::R => 0x0100,
         Button::L => 0x0200,
-        _ => 0,
     }
 }
 
@@ -3608,9 +3895,20 @@ impl crate::io::graphics::renderer::InputReceiver for GameboyAdvance {
         } else {
             self.io_registers[0x130] &= !(bit as u8);
         }
-        if self.keypad_interrupt_enabled() {
-            dbg!("Button interrupt fired");
-            self.keypad_interrupt_requested();
+        let keycnt = self.io_registers.get_mem16(0x4000132);
+        if self.keypad_interrupt_enabled() && (keycnt >> 14) & 1 == 1 {
+            let buttons = self.io_registers.get_mem16(0x4000130) & 0x3F;
+            if (keycnt >> 15) == 1 {
+                // AND mode
+                if (keycnt & 0x3F) & buttons == (keycnt & 0x3F) {
+                    self.keypad_interrupt_requested();
+                }
+            } else {
+                // OR mode
+                if (keycnt & 0x3F) & buttons != 0 {
+                    self.keypad_interrupt_requested();
+                }
+            }
         }
     }
     fn unpress(&mut self, button: Button) {
