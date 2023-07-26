@@ -1958,19 +1958,6 @@ impl GameboyAdvance {
     }
 
     pub fn dispatch(&mut self) -> u32 {
-        /*
-        if self.r.pc > 0x3FFF && self.r.pc < 0x2000000 {
-            panic!("PC is maybe OOB in bios: 0x{:X}", self.r.pc);
-        }
-        */
-        // HACK: ignore no-ops for this test ROM during dev
-        if self.r.pc == 0x8001EBC {
-            return 8;
-        }
-        if self.r.pc >= 0x4000000 && self.r.pc <= 0x4FFFFFF {
-            std::process::exit(0);
-        }
-        //println!("R14 = 0x{:X}", self.r[14]);
         if self.io_registers.dma_waiting() {
             return self.handle_dma();
         }
@@ -2007,10 +1994,6 @@ impl GameboyAdvance {
 
         let cycles = match opcode_idx {
             0b101 => self.dispatch_branch(opcode),
-            // TODO: add 10 to end of above and PSR
-            // TODO: add 000 to end of above and multiply
-            // TODO: add 01 for mul long
-            //  |_Cond__|0_0_0_0_1|U|A|S|_RdHi__|_RdLo__|__Rs___|1_0_0_1|__Rm___| MulLong
             0b000 => {
                 let multiply_end = ((opcode >> 4) & 0xF) == 0b1001;
                 let bits8to11 = (opcode >> 8) & 0xF;
@@ -2018,9 +2001,9 @@ impl GameboyAdvance {
                 let multiply_next2 = multiply_next3 >> 1;
                 match multiply_next2 {
                     0b00 if multiply_next3 == 0 && multiply_end => self.dispatch_multiply(opcode),
-                    0b01 if multiply_end => todo!("mul long"),
+                    0b01 if multiply_end => self.dispatch_multiply(opcode),
                     0b10 if multiply_end && bits8to11 == 0 && ((opcode >> 20) & 0x3) == 0 => {
-                        todo!("transswp12")
+                        self.dispatch_swap(opcode)
                     }
                     0b10 if (opcode >> 20) & 1 == 0 && ((opcode >> 4) & 0xFF) == 0 => {
                         self.dispatch_psr(opcode)
@@ -3039,96 +3022,6 @@ impl GameboyAdvance {
             }
         }
 
-        // detect if ALU instruction is actually an MRS/MSR: PSR transfer
-        // TODO: rn != 0xF = SWP
-        if (sub_opcode >> 2) == 0b10 && !s {
-            panic!("Refactored out, this should never trigger");
-            // TOOD: delete this code
-            let psr_src_dest = (opcode >> 22) & 1 == 1;
-            let psr_subopcode = (opcode >> 21) & 1 == 1;
-            if psr_subopcode {
-                trace!("MSR");
-                // MSR: Psr[field] = Op
-                let write_flags = (opcode >> 19) & 1 == 1;
-                let write_status = (opcode >> 18) & 1 == 1;
-                let write_extension = (opcode >> 17) & 1 == 1;
-                let write_control = (opcode >> 16) & 1 == 1;
-                let mask = {
-                    let mut mask = 0;
-                    if write_flags {
-                        mask |= 0xFF << 24;
-                    }
-                    if write_status {
-                        mask |= 0xFF << 16;
-                    }
-                    if write_extension {
-                        mask |= 0xFF << 8;
-                    }
-                    if write_control {
-                        mask |= 0xFF;
-                    }
-                    mask
-                };
-                let val = if imm {
-                    let shift_amt = (opcode >> 8) & 0xF;
-                    (opcode & 0xFF).rotate_right(shift_amt * 2)
-                    // TODO: set flags?
-                } else {
-                    debug_assert_eq!((opcode >> 4) & 0xFF, 0);
-                    let reg_idx = opcode & 0xF;
-                    debug_assert!(reg_idx < 15);
-                    self.r[reg_idx as u8]
-                };
-                // HACK: if in user mode, just force CPSR
-                if psr_src_dest && self.r.register_mode() != Some(RegisterMode::User) {
-                    *self.r.get_spsr_mut() &= !mask;
-                    *self.r.get_spsr_mut() |= val & mask;
-                } else {
-                    self.r.cpsr &= !mask;
-                    self.r.cpsr |= val & mask;
-                }
-            } else {
-                if rn != 0xF {
-                    let byte = (opcode >> 22) & 1 == 1;
-                    let rn = ((opcode >> 16) & 0xF) as u8;
-                    let rd = ((opcode >> 12) & 0xF) as u8;
-                    let rm = (opcode & 0xF) as u8;
-                    let mut cycles = 0;
-
-                    trace!("SWP r{} r{} [r{}]", rd, rm, rn);
-
-                    if byte {
-                        let o = self.get_mem8(self.r[rn]);
-                        self.r[rd] = o.0 as u32;
-                        cycles += o.1;
-                        cycles += self.set_mem8(self.r[rn], self.r[rm] as u8);
-                    } else {
-                        let o = self.get_mem32(self.r[rn]);
-                        self.r[rd] = o.0;
-                        cycles += o.1;
-                        cycles += self.set_mem32(self.r[rn], self.r[rm]);
-                    }
-
-                    return 4 + cycles;
-                }
-
-                trace!("MRS");
-                debug_assert_eq!(opcode & 0xFFF, 0);
-                debug_assert!(rd < 15);
-                debug_assert_eq!(imm, false);
-
-                // HACK: if in user mode just force CPSR
-                // MRS: Rd = Psr
-                let v = if psr_src_dest && self.r.register_mode() != Some(RegisterMode::User) {
-                    self.r.get_spsr()
-                } else {
-                    self.r.cpsr
-                };
-
-                self.r[rd] = v;
-            }
-            return 1;
-        }
         match sub_opcode {
             // AND
             0x0 => {
@@ -3353,12 +3246,14 @@ impl GameboyAdvance {
         let rd = ((opcode >> 16) & 0xF) as u8;
         let rn = ((opcode >> 12) & 0xF) as u8;
         let rs = ((opcode >> 8) & 0xF) as u8;
+        let rm = (opcode & 0xF) as u8;
+        // is this ARM9 only? maybe we don't need it
         let half_word_multiply = (opcode >> 4) & 1 == 1;
 
         match sub_opcode {
             0b0000 => {
-                trace!("MUL r{} = r{} * r{}", rd, rs, rn);
-                let result = self.r[rs].wrapping_mul(self.r[rn]);
+                trace!("MUL r{} = r{} * r{}", rd, rm, rs);
+                let result = self.r[rm].wrapping_mul(self.r[rs]);
                 self.r[rd] = result as u32;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
@@ -3366,8 +3261,8 @@ impl GameboyAdvance {
                 }
             }
             0b0001 => {
-                trace!("MLA r{} = r{} * r{} + r{}", rd, rs, rn, self.r[rd]);
-                let result = self.r[rs].wrapping_mul(self.r[rn]).wrapping_add(self.r[rd]);
+                trace!("MLA r{} = r{} * r{} + r{}", rd, rm, rs, rn);
+                let result = self.r[rm].wrapping_mul(self.r[rs]).wrapping_add(self.r[rn]);
                 self.r[rd] = result as u32;
                 if s {
                     self.r.cpsr_set_zero_flag(result == 0);
@@ -3378,16 +3273,64 @@ impl GameboyAdvance {
                 todo!("UMAAL")
             }
             0b0100 => {
-                todo!("UMULL");
+                trace!("UMULL r{},r{} = r{} * r{}", rd, rn, rs, rm);
+                let result = (self.r[rs] as u64).wrapping_mul(self.r[rm] as u64);
+                self.r[rd] = (result >> 32) as u32;
+                self.r[rn] = (result & 0xFFFF_FFFF) as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 63) == 1);
+                }
             }
             0b0101 => {
-                todo!("UMLAL");
+                trace!(
+                    "UMLAL r{},r{} = r{} * r{} + r{},r{}",
+                    rd,
+                    rn,
+                    rs,
+                    rm,
+                    rd,
+                    rn
+                );
+                let add_val = ((self.r[rd] as u64) << 32) | (self.r[rn] as u64);
+                let result =
+                    ((self.r[rs] as u64).wrapping_mul(self.r[rm] as u64)).wrapping_add(add_val);
+                self.r[rd] = (result >> 32) as u32;
+                self.r[rn] = (result & 0xFFFF_FFFF) as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 63) == 1);
+                }
             }
             0b0110 => {
-                todo!("SMULL");
+                trace!("SMULL r{},r{} = r{} * r{}", rd, rn, rs, rm);
+                let result = (self.r[rs] as i32 as i64).wrapping_mul(self.r[rm] as i32 as i64);
+                self.r[rd] = (result >> 32) as u32;
+                self.r[rn] = (result & 0xFFFF_FFFF) as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 63) & 1 == 1);
+                }
             }
             0b0111 => {
-                todo!("SMLAL");
+                trace!(
+                    "SMLAL r{},r{} = r{} * r{} + r{},r{}",
+                    rd,
+                    rn,
+                    rs,
+                    rm,
+                    rd,
+                    rn
+                );
+                let add_val = ((self.r[rd] as u64) << 32) | (self.r[rn] as u64);
+                let mul_result = (self.r[rs] as i32 as i64).wrapping_mul(self.r[rm] as i32 as i64);
+                let result = (mul_result as u64).wrapping_add(add_val);
+                self.r[rd] = (result >> 32) as u32;
+                self.r[rn] = (result & 0xFFFF_FFFF) as u32;
+                if s {
+                    self.r.cpsr_set_zero_flag(result == 0);
+                    self.r.cpsr_set_sign_flag((result >> 63) == 1);
+                }
             }
             0b1000 => {
                 todo!("SMLAxy");
@@ -3408,8 +3351,38 @@ impl GameboyAdvance {
         }
         // for armv4 we always clear this
         self.r.cpsr_set_carry_flag(false);
+        //self.r.cpsr_set_overflow_flag(false);
 
         3
+    }
+
+    pub fn dispatch_swap(&mut self, opcode: u32) -> u8 {
+        let byte = (opcode >> 22) & 1 == 1;
+        let rn = ((opcode >> 16) & 0xF) as u8;
+        let rd = ((opcode >> 12) & 0xF) as u8;
+        let rm = (opcode & 0xF) as u8;
+        debug_assert_ne!(rn, 0xF);
+        debug_assert_ne!(rd, 0xF);
+        debug_assert_ne!(rm, 0xF);
+
+        trace!("SWP r{} = r{} <-> r{}", rd, rm, rn);
+
+        let addr = self.r[rn];
+        let rm_val = self.r[rm];
+        let mut cycles = 0;
+        if byte {
+            let o = self.get_mem8(addr);
+            cycles += o.1;
+            self.r[rd] = o.0 as u32;
+            cycles += self.set_mem8(addr, rm_val as u8);
+        } else {
+            let o = self.get_mem32(addr);
+            cycles += o.1;
+            self.r[rd] = o.0;
+            cycles += self.set_mem32(addr, rm_val);
+        }
+
+        cycles + 1
     }
 
     pub fn dispatch_psr(&mut self, opcode: u32) -> u8 {
