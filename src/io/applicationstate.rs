@@ -42,7 +42,7 @@ impl ApplicationState {
     pub fn new(renderer: Box<dyn Renderer>) -> Result<ApplicationState, String> {
         // Set up gameboy and other state
         let gameboy = cpu::Cpu::new();
-        let gba = crate::gba::GameboyAdvance::new();
+        let gba = crate::gba::GameboyAdvance::new(false);
 
         Ok(ApplicationState {
             gameboy,
@@ -73,6 +73,7 @@ impl ApplicationState {
 
     pub fn step_gba(&mut self) {
         let cycles_per_frame = 83776 + (160 * /*1232*/ 960);
+        let audio_timing_cycles = cycles_per_frame / 512;
         let mut cycles = 0;
         let mut frame = [[(0u8, 0u8, 0u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT];
         let mut y = 0;
@@ -90,24 +91,26 @@ impl ApplicationState {
         }
         let mut in_hblank = false;
         let mut hblank_cycles = 0;
+        // we need this?
+        self.gba.ppu_set_vblank(false);
 
         while y < 227 {
             let cycles_from_opcode = self.gba.dispatch() as u64;
-            cycles += cycles_from_opcode;
-            hblank_cycles += cycles_from_opcode;
+            cycles += cycles_from_opcode * 3;
+            hblank_cycles += cycles_from_opcode * 3;
 
             for (i, timer) in self.gba_timers.iter_mut().enumerate() {
                 if !self.gba.io_registers.timer_enabled(i as u8) {
                     continue;
                 }
-                *timer += cycles_from_opcode as u16;
+                *timer = timer.saturating_add(cycles_from_opcode as u16);
                 if *timer >= timer_prescalers[i] {
                     *timer -= timer_prescalers[i];
                     if self.gba.io_registers.increment_timer(i as u8)
                         && self.gba.io_registers.timer_irq_enabled(i as u8)
                         && self.gba.master_interrupts_enabled()
                     {
-                        dbg!("TIMER INTERRUPT!");
+                        //dbg!("TIMER INTERRUPT!");
                         self.gba.set_timer_interrupt(i as u8, true);
                     }
                 }
@@ -118,8 +121,9 @@ impl ApplicationState {
                     in_hblank = false;
                     hblank_cycles -= 272;
                     self.gba.ppu_set_hblank(false);
+                    y += 1;
+                    self.gba.ppu_set_readonly_vcounter(y);
                 }
-                continue;
             }
 
             if hblank_cycles >= 960 {
@@ -127,15 +131,21 @@ impl ApplicationState {
                 if y < 160 {
                     let scanline = deferred_renderer_draw_gba_scanline(y, &mut self.gba);
                     frame[y as usize] = scanline;
+                    self.gba.io_registers.bg2_rotation.cached_x +=
+                        self.gba.io_registers.bg2_rotation.pb as i32;
+                    self.gba.io_registers.bg2_rotation.cached_y +=
+                        self.gba.io_registers.bg2_rotation.pd as i32;
+                    self.gba.io_registers.bg3_rotation.cached_x +=
+                        self.gba.io_registers.bg3_rotation.pb as i32;
+                    self.gba.io_registers.bg3_rotation.cached_y +=
+                        self.gba.io_registers.bg3_rotation.pd as i32;
                 }
 
-                y += 1;
                 in_hblank = true;
                 self.gba.ppu_set_hblank(true);
                 if self.gba.ppu_hblank_irq_enabled() {
                     self.gba.set_lcdc_hblank_interrupt(true);
                 }
-                self.gba.ppu_set_readonly_vcounter(y);
                 if y == self.gba.ppu_vcounter_setting() && self.gba.ppu_vcounter_irq_enabled() {
                     self.gba.set_lcdc_vcounter_interrupt(true);
                 }
@@ -144,7 +154,21 @@ impl ApplicationState {
                     if self.gba.ppu_vblank_irq_enabled() {
                         self.gba.set_lcdc_vblank_interrupt(true);
                     }
+                    self.gba.io_registers.bg2_rotation.cached_x =
+                        self.gba.io_registers.bg2_rotation.x;
+                    self.gba.io_registers.bg2_rotation.cached_y =
+                        self.gba.io_registers.bg2_rotation.y;
+                    self.gba.io_registers.bg3_rotation.cached_x =
+                        self.gba.io_registers.bg3_rotation.x;
+                    self.gba.io_registers.bg3_rotation.cached_y =
+                        self.gba.io_registers.bg3_rotation.y;
                 }
+                //y += 1;
+            }
+            self.sound_cycles += cycles_from_opcode as u64;
+            if self.sound_cycles >= audio_timing_cycles as u64 {
+                self.renderer.audio_step(&self.gba.io_registers.apu);
+                self.sound_cycles -= audio_timing_cycles as u64;
             }
         }
         self.gba.ppu_set_vblank(false);
@@ -153,19 +177,19 @@ impl ApplicationState {
             self.debug_gba_last_seen_ppu_bg_mode = Some(self.gba.ppu_bg_mode());
         }
         /*
-            if
-        self.gba.ppu_bg_mode() != 0 ||
-                    self.gba.ppu_bg0_enabled() ||
-                self.gba.ppu_bg1_enabled() ||
-                self.gba.ppu_bg2_enabled() ||
-                self.gba.ppu_bg3_enabled() ||
-                self.gba.ppu_obj_enabled() ||
-                self.gba.ppu_win0_enabled() ||
-                self.gba.ppu_win1_enabled() ||
-                self.gba.ppu_obj_win_enabled() {
-                dbg!(
-                    self.gba.ppu_bg_mode(),
-                    self.gba.ppu_bg0_enabled(),
+        if self.gba.ppu_bg_mode() != 0
+            || self.gba.ppu_bg0_enabled()
+            || self.gba.ppu_bg1_enabled()
+            || self.gba.ppu_bg2_enabled()
+            || self.gba.ppu_bg3_enabled()
+            || self.gba.ppu_obj_enabled()
+            || self.gba.ppu_win0_enabled()
+            || self.gba.ppu_win1_enabled()
+            || self.gba.ppu_obj_win_enabled()
+        {
+            dbg!(
+                self.gba.ppu_bg_mode(),
+                self.gba.ppu_bg0_enabled(),
                 self.gba.ppu_bg1_enabled(),
                 self.gba.ppu_bg2_enabled(),
                 self.gba.ppu_bg3_enabled(),
@@ -366,7 +390,7 @@ impl ApplicationState {
                 //   and APU state (i.e. not here, somewhere CPU accessible)
                 // HACK: we just update it randomly
                 //self.update_channel_vars();
-                self.renderer.audio_step(&self.gameboy);
+                self.renderer.audio_step(&self.gameboy.apu);
                 self.sound_cycles -= audio_timing_cycles as u64;
             }
 

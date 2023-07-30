@@ -1,3 +1,4 @@
+use crate::cpu::apu::Apu;
 use crate::cpu::Cpu;
 use crate::io::constants::{
     GBA_SCREEN_HEIGHT, GBA_SCREEN_WIDTH, GB_SCREEN_HEIGHT, GB_SCREEN_WIDTH,
@@ -42,7 +43,8 @@ pub trait Renderer {
     }
     fn handle_events(&mut self, _: &mut dyn InputReceiver) -> Vec<EventResponse>;
 
-    fn audio_step(&mut self, _gb: &Cpu) {
+    #[allow(unused_variables)]
+    fn audio_step(&mut self, apu: &Apu) {
         unimplemented!();
     }
 }
