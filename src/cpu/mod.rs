@@ -7,6 +7,7 @@ mod macros;
 pub mod apu;
 pub mod cartridge;
 pub mod constants;
+pub mod fifo;
 pub mod memory;
 pub mod memvis;
 mod tests;
@@ -2288,5 +2289,45 @@ impl Cpu {
                 break;
             }
         }
+    }
+}
+
+use crate::io::graphics::renderer::Button;
+
+impl crate::io::graphics::renderer::InputReceiver for Cpu {
+    fn press(&mut self, button: Button) {
+        match button {
+            Button::A => self.press_a(),
+            Button::B => self.press_b(),
+            Button::Start => self.press_start(),
+            Button::Select => self.press_select(),
+            Button::Up => self.press_up(),
+            Button::Down => self.press_down(),
+            Button::Left => self.press_left(),
+            Button::Right => self.press_right(),
+            _ => (),
+        }
+    }
+    fn unpress(&mut self, button: Button) {
+        match button {
+            Button::A => self.unpress_a(),
+            Button::B => self.unpress_b(),
+            Button::Start => self.unpress_start(),
+            Button::Select => self.unpress_select(),
+            Button::Up => self.unpress_up(),
+            Button::Down => self.unpress_down(),
+            Button::Left => self.unpress_left(),
+            Button::Right => self.unpress_right(),
+            _ => (),
+        }
+    }
+    fn reset(&mut self) {
+        Cpu::reset(self);
+    }
+    fn toggle_logger(&mut self) {
+        Cpu::toggle_logger(self);
+    }
+    fn reinit_logger(&mut self) {
+        Cpu::reinit_logger(self);
     }
 }

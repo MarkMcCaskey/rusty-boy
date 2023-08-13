@@ -1,4 +1,6 @@
 //! Everything for making sound play
+use std::collections::VecDeque;
+
 use sdl2;
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
@@ -9,6 +11,8 @@ pub struct GBSound {
     pub channel2: SquareWave,
     pub channel3: SquareWaveRam,
     pub channel4: Noise,
+    pub gba_fifo_a: SquareWaveRamGba,
+    pub gba_fifo_b: SquareWaveRamGba,
 }
 
 /// Contains information for a single channel of audio
@@ -57,6 +61,27 @@ pub struct SquareWaveRam {
     pub shift_amount: u8,
 }
 
+pub struct SquareWaveRamGba {
+    /// Whether or not the channel is enabled
+    pub enabled: bool,
+    /// The amount by which the `phase` is changed at each callback
+    pub phase_inc: f32,
+
+    /// The "current" value of the wave
+    pub phase: f32,
+
+    pub volume: f32,
+    /// Multiplier for wave between 0 and 1 (functions as volume (0 is off))
+    base_volume: f32,
+
+    /// A flag indicating the direction the phase will be changed
+    pub add: bool,
+
+    pub wave_ram: VecDeque<i8>,
+    //pub wave_ram_index: usize,
+    //pub val: i8,
+}
+
 pub struct Noise {
     pub enabled: bool,
     pub phase_inc: f32,
@@ -70,6 +95,9 @@ pub struct Noise {
 
 trait SoundChannel {
     fn generate_sample(&mut self) -> f32;
+    fn generate_sample_i8(&mut self) -> i8 {
+        unimplemented!();
+    }
 }
 
 impl SoundChannel for SquareWave {
@@ -131,10 +159,50 @@ impl SoundChannel for Noise {
     }
 }
 
+impl SoundChannel for SquareWaveRamGba {
+    fn generate_sample(&mut self) -> f32 {
+        if !self.enabled {
+            return 0.;
+        }
+        //let adj = self.wave_ram[self.wave_ram_index] as f32;
+        let adj = self.wave_ram[0] as f32;
+        let out = adj / 128. * 4.; //* self.base_volume * self.volume;
+                                   //let out = self.base_volume * out;
+
+        let v = self.phase + self.phase_inc;
+        self.phase = (self.phase + self.phase_inc) % 1.0;
+
+        if v >= 1.0 {
+            self.wave_ram.rotate_left(1);
+            //self.wave_ram_index = (self.wave_ram_index + 1) % 512;
+        }
+        out
+    }
+    fn generate_sample_i8(&mut self) -> i8 {
+        if !self.enabled {
+            return 0;
+        }
+        //let adj = self.wave_ram[self.wave_ram_index] as f32;
+        let adj = self.wave_ram[0]; // as f32;
+        let out = adj;
+        //let out = self.base_volume * out;
+
+        let v = self.phase + self.phase_inc;
+        self.phase = (self.phase + self.phase_inc) % 1.0;
+
+        if v >= 1.0 {
+            self.wave_ram.rotate_left(1);
+            //self.wave_ram_index = (self.wave_ram_index + 1) % 512;
+        }
+        out
+    }
+}
+
 impl AudioCallback for GBSound {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
+        /*
         for x in out.iter_mut() {
             let val = self.channel1.generate_sample()
                 + self.channel2.generate_sample()
@@ -142,8 +210,40 @@ impl AudioCallback for GBSound {
                 + self.channel4.generate_sample();
             *x = val / 4.;
         }
+        */
+        for x in out.iter_mut() {
+            let val = self.channel1.generate_sample()
+                + self.channel2.generate_sample()
+                + self.channel3.generate_sample()
+                + self.channel4.generate_sample()
+                + self.gba_fifo_a.generate_sample()
+                + self.gba_fifo_b.generate_sample();
+            *x = val / 6.;
+        }
     }
 }
+/*
+impl AudioCallback for GBSound {
+    type Channel = i8;
+
+    fn callback(&mut self, out: &mut [i8]) {
+        /*
+        for x in out.iter_mut() {
+            let val = self.channel1.generate_sample()
+                + self.channel2.generate_sample()
+                + self.channel3.generate_sample()
+                + self.channel4.generate_sample();
+            *x = val / 4.;
+        }
+        */
+        for x in out.iter_mut() {
+            let val =  self.gba_fifo_a.generate_sample_i8() as i16
+                + self.gba_fifo_b.generate_sample_i8() as i16;
+            *x = (val / 2) as i8;
+        }
+    }
+}
+*/
 
 /// Creates a device from a context
 /// May have to be changed to allow each GB channel to have its own `Wave`
@@ -151,8 +251,17 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
     // set up audio
     let audio_subsystem = sdl_context.audio()?;
 
+    /*
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
+        channels: Some(1),
+        samples: Some(64),
+    };
+    */
+    let desired_spec = AudioSpecDesired {
+        //freq: Some(44100),
+        //freq: Some(16000),
+        freq: Some(32768),
         channels: Some(1),
         samples: Some(64),
     };
@@ -202,6 +311,26 @@ pub fn setup_audio(sdl_context: &sdl2::Sdl) -> Result<AudioDevice<GBSound>, Stri
                 add: true,
                 lfsr_width: false,
                 lfsr: 0x7FFF,
+            },
+            gba_fifo_a: SquareWaveRamGba {
+                enabled: true,
+                phase_inc: 0.0,
+                phase: 0.0,
+                base_volume: 0.100,
+                volume: 1.0,
+                add: true,
+                wave_ram: VecDeque::from([0; 1]),
+                //wave_ram_index: 0,
+            },
+            gba_fifo_b: SquareWaveRamGba {
+                enabled: true,
+                phase_inc: 0.0,
+                phase: 0.0,
+                base_volume: 0.100,
+                volume: 1.0,
+                add: true,
+                wave_ram: VecDeque::from([0; 1]),
+                //wave_ram_index: 0,
             },
         }
     })

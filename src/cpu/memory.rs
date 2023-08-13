@@ -252,7 +252,7 @@ impl IndexMut<usize> for Memory {
                     0xFF02 => {
                         //self.io_ports[0x02] = 0x7E;
                         // interrupt handler should be called, but let's try not doing it for now
-                        print!("{}", self.io_ports[0x01] as char);
+                        //print!("{}", self.io_ports[0x01] as char);
                         &mut self.io_ports[0x02]
                     }
                     _ => &mut self.io_ports[index - 0xFF00],

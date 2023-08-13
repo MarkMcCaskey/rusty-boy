@@ -28,6 +28,10 @@ pub mod disasm;
 /// Functionality for making the Gameboy emulator useful
 pub mod io;
 
+pub mod gba;
+
+pub mod prelude;
+
 use crate::debugger::graphics::Debugger;
 use crate::io::applicationsettings::*;
 use crate::io::applicationstate::*;
@@ -78,6 +82,7 @@ fn main() {
     };
 
     trace!("loading ROM");
+    let is_gba = application_settings.rom_file_name.ends_with("gba");
     let rom_bytes = {
         use std::fs::File;
         use std::io::Read;
@@ -91,7 +96,23 @@ fn main() {
             .unwrap();
         rom_buffer
     };
-    appstate.gameboy.load_rom(rom_bytes);
+    if is_gba {
+        info!("GameBoy Advance ROM detected... Attempting to run");
+        appstate.gba.load_rom(rom_bytes);
+        if std::path::Path::new("../roms/gba_bios.bin").exists() {
+            use std::io::Read;
+            info!("Loading BIOS");
+            let mut bios = std::fs::File::open("../roms/gba_bios.bin").unwrap();
+            let mut bios_buffer = Vec::with_capacity(0x4000);
+            bios.read_to_end(&mut bios_buffer).unwrap();
+
+            appstate.gba.load_bios(&bios_buffer);
+        } else {
+            info!("No BIOS found, skipping");
+        }
+    } else {
+        appstate.gameboy.load_rom(rom_bytes);
+    }
     //    application_settings.data_path.clone(),
 
     // delay debugger so loading rom can be logged if need be
@@ -100,6 +121,56 @@ fn main() {
     } else {
         None
     };
+
+    let mut running_frame_counter = 0;
+    let mut running_frame_time = std::time::Instant::now();
+    if is_gba {
+        loop {
+            let time_since_last_frame = std::time::Instant::now();
+            for event in appstate
+                .renderer
+                .handle_events(&mut appstate.gba /* , &application_settings*/)
+                .iter()
+            {
+                match *event {
+                    EventResponse::ProgramTerminated => {
+                        info!("Program exiting!");
+                        if let Some(ref mut debugger) = debugger {
+                            debugger.die();
+                        }
+                        /*
+                        appstate
+                            .gameboy
+                            .save_ram(application_settings.data_path.clone());
+                        */
+                        std::process::exit(0);
+                    }
+                    EventResponse::Reset => {
+                        info!("Resetting gameboy advance");
+                        todo!("GBA reset");
+                        //appstate.gba.reset();
+                    }
+                }
+            }
+
+            appstate.step_gba();
+            /*//check for new controller every frame
+            self.load_controller_if_none_exist();*/
+            running_frame_counter += 1;
+            if running_frame_counter > (60 * 1) {
+                let time_diff = running_frame_time.elapsed();
+                let fps = (running_frame_counter as f32) / time_diff.as_secs_f32();
+                running_frame_counter = 0;
+                running_frame_time = std::time::Instant::now();
+                appstate.renderer.update_fps(fps);
+            }
+
+            let time_diff = time_since_last_frame.elapsed();
+            if time_diff < std::time::Duration::from_millis(16) {
+                std::thread::sleep(std::time::Duration::from_millis(16) - time_diff);
+            }
+        }
+    }
 
     loop {
         let time_since_last_frame = std::time::Instant::now();

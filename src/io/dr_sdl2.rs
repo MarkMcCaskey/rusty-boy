@@ -4,7 +4,7 @@ use sdl2::rect::{Point, Rect};
 use sdl2::surface::Surface;
 use sdl2::*;
 
-use crate::cpu::Cpu;
+use crate::cpu::apu::Apu;
 use crate::io::applicationsettings::ApplicationSettings;
 use crate::io::constants::*;
 use crate::io::graphics::renderer;
@@ -13,11 +13,14 @@ use crate::io::graphics::renderer::Renderer;
 use crate::io::graphics::sdl2::input::setup_controller_subsystem;
 use crate::io::sound::*;
 
+use super::graphics::renderer::{Button, InputReceiver};
+
 pub struct Sdl2Renderer {
     sdl_context: Sdl,
     sound_system: sdl2::audio::AudioDevice<GBSound>,
     canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
+    base_title: String,
     _sound_cycles: u64,
 }
 
@@ -72,9 +75,16 @@ impl Sdl2Renderer {
         let video_subsystem = sdl_context.video()?;
 
         let window = {
+            // TODO: flag to toggle this
+            /*
             let (window_width, window_height) = (
                 ((GB_SCREEN_WIDTH as f32) * 3.0) as u32,
                 ((GB_SCREEN_HEIGHT as f32) * 3.0) as u32,
+            );
+            */
+            let (window_width, window_height) = (
+                ((GBA_SCREEN_WIDTH as f32) * 3.0) as u32,
+                ((GBA_SCREEN_HEIGHT as f32) * 3.0) as u32,
             );
 
             match video_subsystem
@@ -103,6 +113,7 @@ impl Sdl2Renderer {
         Ok(Sdl2Renderer {
             sdl_context,
             sound_system,
+            base_title: app_settings.rom_file_name.clone(),
             canvas: renderer,
             controller,
             _sound_cycles: 0,
@@ -198,7 +209,80 @@ impl Renderer for Sdl2Renderer {
         self.canvas.present();
     }
 
-    fn handle_events(&mut self, gameboy: &mut Cpu) -> Vec<renderer::EventResponse> {
+    fn update_fps(&mut self, fps: f32) {
+        self.canvas
+            .window_mut()
+            .set_title(format!("{} ({:.1} FPS)", self.base_title, fps).as_str())
+            .unwrap();
+    }
+
+    fn draw_gba_frame(&mut self, frame: &[[(u8, u8, u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT]) {
+        let scale = 3.0;
+        //app_settings.ui_scale;
+        match self.canvas.set_scale(scale, scale) {
+            Ok(_) => (),
+            Err(_) => error!("Could not set render scale"),
+        }
+
+        self.canvas.set_draw_color(NICER_COLOR);
+        self.canvas.clear();
+
+        let tc = self.canvas.texture_creator();
+        let temp_surface = Surface::new(
+            (GBA_SCREEN_WIDTH as f32) as u32,
+            (GBA_SCREEN_HEIGHT as f32) as u32,
+            PixelFormatEnum::RGBA8888,
+        )
+        .unwrap();
+
+        let mut temp_canvas = temp_surface.into_canvas().unwrap();
+
+        for y in 0..GBA_SCREEN_HEIGHT {
+            for x in 0..GBA_SCREEN_WIDTH {
+                let (r, g, b) = frame[y][x];
+                let color = sdl2::pixels::Color::RGB(r, g, b);
+
+                temp_canvas.set_draw_color(color);
+                temp_canvas
+                    .draw_point(Point::new(x as i32, y as i32))
+                    .unwrap();
+            }
+        }
+
+        let mut texture = tc
+            .create_texture_from_surface(&temp_canvas.into_surface())
+            .unwrap();
+
+        texture.set_blend_mode(sdl2::render::BlendMode::None);
+
+        self.canvas
+            .copy(
+                &texture,
+                None,
+                Some(Rect::new(
+                    0,
+                    0,
+                    GBA_SCREEN_WIDTH as u32,
+                    GBA_SCREEN_HEIGHT as u32,
+                    //MEM_DISP_WIDTH as u32,
+                    //MEM_DISP_HEIGHT as u32,
+                )),
+            )
+            .unwrap();
+
+        // feature disabled while graphics are being generalized
+        // TODO add a way to enable/disable this while running
+        /*let record_screen = false;
+        if record_screen {
+            save_screenshot(&self.canvas,
+                            format!("screen{:010}.bmp", self.screenshot_frame_num.0).as_ref());
+            self.screenshot_frame_num += Wrapping(1);
+        }*/
+
+        self.canvas.present();
+    }
+
+    fn handle_events(&mut self, ir: &mut dyn InputReceiver) -> Vec<renderer::EventResponse> {
         let mut ret_vec: Vec<renderer::EventResponse> = vec![];
         for event in self.sdl_context.event_pump().unwrap().poll_iter() {
             use sdl2::event::Event;
@@ -212,29 +296,29 @@ impl Renderer for Sdl2Renderer {
                     match axis {
                         controller::Axis::LeftX if deadzone < (val as i32).abs() => {
                             if val < 0 {
-                                gameboy.press_left();
-                                gameboy.unpress_right();
+                                ir.press(Button::Left);
+                                ir.unpress(Button::Right);
                             } else {
-                                gameboy.press_right();
-                                gameboy.unpress_left();
+                                ir.press(Button::Right);
+                                ir.unpress(Button::Left);
                             };
                         }
                         controller::Axis::LeftX => {
-                            gameboy.unpress_left();
-                            gameboy.unpress_right();
+                            ir.unpress(Button::Left);
+                            ir.press(Button::Right);
                         }
                         controller::Axis::LeftY if deadzone < (val as i32).abs() => {
                             if val < 0 {
-                                gameboy.press_up();
-                                gameboy.unpress_down();
+                                ir.press(Button::Up);
+                                ir.unpress(Button::Down);
                             } else {
-                                gameboy.press_down();
-                                gameboy.unpress_up();
+                                ir.press(Button::Down);
+                                ir.unpress(Button::Up);
                             }
                         }
                         controller::Axis::LeftY => {
-                            gameboy.unpress_up();
-                            gameboy.unpress_down();
+                            ir.unpress(Button::Up);
+                            ir.unpress(Button::Down);
                         }
                         _ => {}
                     }
@@ -243,13 +327,13 @@ impl Renderer for Sdl2Renderer {
                     trace!("Button {:?} down", button);
                     match button {
                         controller::Button::A => {
-                            gameboy.press_a();
+                            ir.press(Button::A);
                             // TODO: sound
                             // device.resume();
                         }
-                        controller::Button::B => gameboy.press_b(),
-                        controller::Button::Back => gameboy.press_select(),
-                        controller::Button::Start => gameboy.press_start(),
+                        controller::Button::B => ir.press(Button::B),
+                        controller::Button::Back => ir.press(Button::Select),
+                        controller::Button::Start => ir.press(Button::Start),
                         _ => (),
                     }
                 }
@@ -258,11 +342,11 @@ impl Renderer for Sdl2Renderer {
                     trace!("Button {:?} up", button);
                     match button {
                         controller::Button::A => {
-                            gameboy.unpress_a();
+                            ir.unpress(Button::A);
                         }
-                        controller::Button::B => gameboy.unpress_b(),
-                        controller::Button::Back => gameboy.unpress_select(),
-                        controller::Button::Start => gameboy.unpress_start(),
+                        controller::Button::B => ir.unpress(Button::B),
+                        controller::Button::Back => ir.unpress(Button::Select),
+                        controller::Button::Start => ir.unpress(Button::Start),
                         _ => (),
                     }
                 }
@@ -306,15 +390,15 @@ impl Renderer for Sdl2Renderer {
                 } => {
                     if !repeat {
                         match keycode {
-                            Keycode::F3 => gameboy.toggle_logger(),
+                            Keycode::F3 => ir.toggle_logger(),
                             Keycode::R => {
                                 // Reset/reload emu
                                 // TODO Keep previous visualization settings
-                                gameboy.reset();
+                                ir.reset();
                                 ret_vec.push(EventResponse::Reset);
                                 //let gbcopy = self.initial_gameboy_state.clone();
                                 //gameboy = gbcopy;
-                                gameboy.reinit_logger();
+                                ir.reinit_logger();
 
                                 // // This way makes it possible to edit rom
                                 // // with external editor and see changes
@@ -322,14 +406,22 @@ impl Renderer for Sdl2Renderer {
                                 // gameboy = Cpu::new();
                                 // gameboy.load_rom(rom_file);
                             }
-                            Keycode::A => gameboy.press_a(),
-                            Keycode::S => gameboy.press_b(),
-                            Keycode::D => gameboy.press_select(),
-                            Keycode::F => gameboy.press_start(),
-                            Keycode::Up => gameboy.press_up(),
-                            Keycode::Down => gameboy.press_down(),
-                            Keycode::Left => gameboy.press_left(),
-                            Keycode::Right => gameboy.press_right(),
+                            Keycode::A => ir.press(Button::A),
+                            Keycode::S => ir.press(Button::B),
+                            Keycode::D => ir.press(Button::Select),
+                            Keycode::F => ir.press(Button::Start),
+                            Keycode::Up => ir.press(Button::Up),
+                            Keycode::Down => ir.press(Button::Down),
+                            Keycode::Left => ir.press(Button::Left),
+                            Keycode::Right => ir.press(Button::Right),
+                            /*
+                            Keycode::L => {
+                                let env = env_logger::Env::default()
+                                    .filter_or("GAMEBOY_LOG_LEVEL", "info")
+                                    .write_style_or("GAMEBOY_LOG_STYLE", "always");
+                                let _handle = env_logger::init_from_env(env);
+                            }
+                            */
                             _ => (),
                         }
                     }
@@ -341,15 +433,14 @@ impl Renderer for Sdl2Renderer {
                 } => {
                     if !repeat {
                         match keycode {
-                            Keycode::A => gameboy.unpress_a(),
-                            Keycode::S => gameboy.unpress_b(),
-                            Keycode::D => gameboy.unpress_select(),
-                            Keycode::F => gameboy.unpress_start(),
-                            Keycode::Up => gameboy.unpress_up(),
-                            Keycode::Down => gameboy.unpress_down(),
-                            Keycode::Left => gameboy.unpress_left(),
-                            Keycode::Right => gameboy.unpress_right(),
-
+                            Keycode::A => ir.unpress(Button::A),
+                            Keycode::S => ir.unpress(Button::B),
+                            Keycode::D => ir.unpress(Button::Select),
+                            Keycode::F => ir.unpress(Button::Start),
+                            Keycode::Up => ir.unpress(Button::Up),
+                            Keycode::Down => ir.unpress(Button::Down),
+                            Keycode::Left => ir.unpress(Button::Left),
+                            Keycode::Right => ir.unpress(Button::Right),
                             _ => (),
                         }
                     }
@@ -388,7 +479,7 @@ impl Renderer for Sdl2Renderer {
         return ret_vec;
     }
 
-    fn audio_step(&mut self, gb: &Cpu) {
+    fn audio_step(&mut self, gb_apu: &Apu) {
         // TODO:
         /*
                if gb.get_sound_all() && (gb.get_sound1() || gb.get_sound2() || gb.get_sound3() || gb.get_sound4()) {
@@ -402,48 +493,96 @@ impl Renderer for Sdl2Renderer {
         self.sound_system.resume();
         let mut sound_system = self.sound_system.lock();
         // TODO move this to channel.update() or something
-        sound_system.channel1.enabled = gb.apu.get_sound1();
-        sound_system.channel2.enabled = gb.apu.get_sound2();
-        sound_system.channel3.enabled = gb.apu.get_sound3();
-        sound_system.channel4.enabled = gb.apu.get_sound4();
+        sound_system.channel1.enabled = gb_apu.get_sound1();
+        sound_system.channel2.enabled = gb_apu.get_sound2();
+        sound_system.channel3.enabled = gb_apu.get_sound3();
+        sound_system.channel4.enabled = gb_apu.get_sound4();
         //if gb.apu.get_sound1() {
-        sound_system.channel1.volume = gb.apu.channel1_envelope_volume as f32 / 15.0;
-        sound_system.channel1.wave_duty = gb.apu.channel1_wave_pattern_duty();
-        let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel1_frequency() as f32));
+        sound_system.channel1.volume = gb_apu.channel1_envelope_volume as f32 / 15.0;
+        sound_system.channel1.wave_duty = gb_apu.channel1_wave_pattern_duty();
+        let channel1_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb_apu.channel1_frequency() as f32));
         sound_system.channel1.phase_inc = channel1_freq / sound_system.out_freq;
         //}
 
         //if gb.apu.get_sound2() {
-        sound_system.channel2.wave_duty = gb.apu.channel2_wave_pattern_duty();
-        sound_system.channel2.volume = gb.apu.channel2_envelope_volume as f32 / 15.0;
-        let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb.apu.channel2_frequency() as f32));
+        sound_system.channel2.wave_duty = gb_apu.channel2_wave_pattern_duty();
+        sound_system.channel2.volume = gb_apu.channel2_envelope_volume as f32 / 15.0;
+        let channel2_freq = 4194304.0 / (4.0 * 8.0 * (2048.0 - gb_apu.channel2_frequency() as f32));
         sound_system.channel2.phase_inc = channel2_freq / sound_system.out_freq;
         //}
 
         //if gb.apu.get_sound3() {
-        let channel3_freq = 2097152.0 / (2048.0 - gb.apu.channel3_frequency() as f32);
-        sound_system.channel3.volume = gb.apu.channel3_output_level() as f32;
-        sound_system.channel3.shift_amount = gb.apu.channel3_shift_amount();
+        let channel3_freq = 2097152.0 / (2048.0 - gb_apu.channel3_frequency() as f32);
+        sound_system.channel3.volume = gb_apu.channel3_output_level() as f32;
+        sound_system.channel3.shift_amount = gb_apu.channel3_shift_amount();
         sound_system.channel3.phase_inc = channel3_freq / sound_system.out_freq;
-        sound_system.channel3.wave_ram = gb.apu.channel3_wave_pattern_ram();
+        sound_system.channel3.wave_ram = gb_apu.channel3_wave_pattern_ram();
         //} else {
 
-        if !gb.apu.get_sound3() {
+        if !gb_apu.get_sound3() {
             // HACK: retrigger logic
             sound_system.channel3.wave_ram_index = 0;
         }
         //if gb.apu.get_sound4() {
-        sound_system.channel4.volume = gb.apu.channel4_envelope_volume as f32 / 15.0;
-        let clock_div = gb.apu.channel4_clock_divider();
-        let clock_shift = gb.apu.channel4_clock_shift();
+        sound_system.channel4.volume = gb_apu.channel4_envelope_volume as f32 / 15.0;
+        let clock_div = gb_apu.channel4_clock_divider();
+        let clock_shift = gb_apu.channel4_clock_shift();
         //let channel4_freq = 262144. / (clock_div * (2 << clock_shift) as f32);
         let channel4_freq = 262144. / (clock_div * (2_u32.pow(clock_shift as _)) as f32);
         sound_system.channel4.phase_inc = channel4_freq / sound_system.out_freq;
-        sound_system.channel4.lfsr_width = gb.apu.channel4_lfsr_width();
+        sound_system.channel4.lfsr_width = gb_apu.channel4_lfsr_width();
         //} else {
-        if !gb.apu.get_sound4() {
+        if !gb_apu.get_sound4() {
             // HACK: this is because we can't do it on trigger until we refactor APU
             sound_system.channel4.lfsr = 0x7FFF;
         }
+    }
+
+    fn gba_audio_step(&mut self, gb_apu: &Apu) {
+        //self.sound_system.resume();
+        // TODO: this function gets called a lot, we can definitely track information about
+        // whether it's worth getting this lock or not.
+        // AKA, has the enabled state changed? or is there new sound data?
+        let mut sound_system = self.sound_system.lock();
+
+        // if gba
+        let gba_fifo_freq = 32768.0 / 2.;
+        //sound_system.gba_fifo_a.wave_ram = gb_apu.gba_fifo_a.get_buffer();
+        sound_system.gba_fifo_a.enabled =
+            gb_apu.gba_sound_a_enabled.0 || gb_apu.gba_sound_a_enabled.1;
+        if gb_apu.gba_fifo_a.get_current_data().len() + gb_apu.gba_fifo_b.get_current_data().len()
+            != 0
+        {
+            //dbg!(gb_apu.gba_fifo_a.get_current_data().len(), gb_apu.gba_fifo_b.get_current_data().len());
+        }
+
+        if gb_apu.gba_fifo_a.reset_flag {
+            sound_system.gba_fifo_a.wave_ram.clear();
+            sound_system.gba_fifo_a.wave_ram.push_back(0);
+        }
+        for &data in gb_apu.gba_fifo_a.get_current_data() {
+            if sound_system.gba_fifo_a.wave_ram.len() >= 1024 {
+                sound_system.gba_fifo_a.wave_ram.pop_back();
+            }
+            sound_system.gba_fifo_a.wave_ram.push_front(data);
+        }
+        sound_system.gba_fifo_a.phase_inc = gb_apu.gba_fifo_a_sample_rate / sound_system.out_freq;
+        //sound_system.gba_fifo_a.phase_inc = gba_fifo_freq / sound_system.out_freq;
+        //sound_system.gba_fifo_b.wave_ram = gb_apu.gba_fifo_b.get_buffer();
+
+        if gb_apu.gba_fifo_b.reset_flag {
+            sound_system.gba_fifo_b.wave_ram.clear();
+            sound_system.gba_fifo_b.wave_ram.push_back(0);
+        }
+        sound_system.gba_fifo_b.enabled =
+            gb_apu.gba_sound_b_enabled.0 || gb_apu.gba_sound_b_enabled.1;
+        for &data in gb_apu.gba_fifo_b.get_current_data() {
+            if sound_system.gba_fifo_b.wave_ram.len() >= 1024 {
+                sound_system.gba_fifo_b.wave_ram.pop_back();
+            }
+            sound_system.gba_fifo_b.wave_ram.push_front(data);
+        }
+        sound_system.gba_fifo_b.phase_inc = gb_apu.gba_fifo_b_sample_rate / sound_system.out_freq;
+        //sound_system.gba_fifo_b.phase_inc = gba_fifo_freq / sound_system.out_freq;
     }
 }

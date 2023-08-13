@@ -102,6 +102,9 @@ pub const SCREEN_BUFFER_TILES_Y: u32 = 32;
 pub const GB_SCREEN_WIDTH: usize = 160;
 pub const GB_SCREEN_HEIGHT: usize = 144;
 
+pub const GBA_SCREEN_HEIGHT: usize = 160;
+pub const GBA_SCREEN_WIDTH: usize = 240;
+
 pub const OBJECT_ATTRIBUTE_START: u16 = 0xFE00;
 pub const OBJECT_ATTRIBUTE_END: u16 = 0xFE9F;
 pub const OBJECT_ATTRIBUTE_BLOCK_SIZE: u16 = 4;
