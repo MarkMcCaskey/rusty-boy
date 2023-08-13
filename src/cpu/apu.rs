@@ -23,6 +23,12 @@ pub struct Apu {
     pub div_apu: u8,
     /// 0xFF10..=0xFF3F
     pub apu_mem: [u8; 0x30],
+    pub gba_fifo_a: super::fifo::Fifo,
+    pub gba_fifo_b: super::fifo::Fifo,
+    pub gba_fifo_a_sample_rate: f32,
+    pub gba_fifo_b_sample_rate: f32,
+    pub gba_sound_a_enabled: (bool, bool),
+    pub gba_sound_b_enabled: (bool, bool),
 }
 
 impl Apu {
@@ -44,6 +50,12 @@ impl Apu {
             // We default to 7 as the next tick wraps us back to 0
             div_apu: 7,
             apu_mem: [0; 0x30],
+            gba_fifo_a: super::fifo::Fifo::new(),
+            gba_fifo_b: super::fifo::Fifo::new(),
+            gba_fifo_a_sample_rate: 0.,
+            gba_fifo_b_sample_rate: 0.,
+            gba_sound_a_enabled: (false, false),
+            gba_sound_b_enabled: (false, false),
         }
     }
 

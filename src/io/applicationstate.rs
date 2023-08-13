@@ -6,6 +6,7 @@
 use std;
 
 use crate::cpu;
+use crate::gba::DmaStartTiming;
 use crate::io::constants::*;
 
 use crate::io::deferred_renderer::deferred_renderer_draw_scanline;
@@ -31,8 +32,10 @@ pub struct ApplicationState {
     cycles_per_second: u64,
     /// counts cycles since last sound update
     sound_cycles: u64,
+    /// counts cycles since last GBA sound update
+    gba_sound_cycles: u64,
     _screenshot_frame_num: Wrapping<u64>,
-    gba_timers: [u16; 4],
+    gba_timers: [u32; 4],
     debug_gba_last_seen_ppu_bg_mode: Option<u8>,
     pub renderer: Box<dyn Renderer>,
 }
@@ -55,6 +58,7 @@ impl ApplicationState {
             div_timer_cycles: 0,
             cycles_per_second: CPU_CYCLES_PER_SECOND,
             sound_cycles: 0,
+            gba_sound_cycles: 0,
             _screenshot_frame_num: Wrapping(0),
             gba_timers: [0, 0, 0, 0],
             debug_gba_last_seen_ppu_bg_mode: None,
@@ -72,17 +76,18 @@ impl ApplicationState {
     */
 
     pub fn step_gba(&mut self) {
-        let cycles_per_frame = 83776 + (160 * /*1232*/ 960);
-        let audio_timing_cycles = cycles_per_frame / 512;
+        //let cycles_per_frame = 83776 + (160 * /*1232*/ 960);
+        // TODO: derive this more properly
+        let cycles_per_frame = 279709;
+        let audio_timing_cycles = (cycles_per_frame * 60) / 512;
+        let gba_audio_timing_cycles = 512; //(cycles_per_frame * 60) / 32768;
+                                           //let audio_timing_cycles = (cycles_per_frame * 60) / 32768;
+        let mut fifo_a_sample_counter = 0;
+        let mut fifo_b_sample_counter = 0;
+        //let audio_timing_cycles = (cycles_per_frame * 4) / 32768;
         let mut cycles = 0;
         let mut frame = [[(0u8, 0u8, 0u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT];
         let mut y = 0;
-        let timer_prescalers = [
-            self.gba.io_registers.timer0_prescaler(),
-            self.gba.io_registers.timer1_prescaler(),
-            self.gba.io_registers.timer2_prescaler(),
-            self.gba.io_registers.timer3_prescaler(),
-        ];
 
         #[derive(Debug, Clone, Copy)]
         enum GameBoyAdvanceMode {
@@ -93,25 +98,80 @@ impl ApplicationState {
         let mut hblank_cycles = 0;
         // we need this?
         self.gba.ppu_set_vblank(false);
+        self.gba.ppu_set_readonly_vcounter(0);
+        if y == self.gba.ppu_vcounter_setting()
+            && self.gba.ppu_vcounter_irq_enabled()
+            && self.gba.master_interrupts_enabled()
+        {
+            self.gba.set_lcdc_vcounter_interrupt(true);
+        }
 
         while y < 227 {
             let cycles_from_opcode = self.gba.dispatch() as u64;
-            cycles += cycles_from_opcode * 3;
-            hblank_cycles += cycles_from_opcode * 3;
+            cycles += cycles_from_opcode; // * 2;
+            hblank_cycles += cycles_from_opcode; // * 2;
 
             for (i, timer) in self.gba_timers.iter_mut().enumerate() {
                 if !self.gba.io_registers.timer_enabled(i as u8) {
                     continue;
                 }
-                *timer = timer.saturating_add(cycles_from_opcode as u16);
-                if *timer >= timer_prescalers[i] {
-                    *timer -= timer_prescalers[i];
-                    if self.gba.io_registers.increment_timer(i as u8)
-                        && self.gba.io_registers.timer_irq_enabled(i as u8)
-                        && self.gba.master_interrupts_enabled()
-                    {
-                        //dbg!("TIMER INTERRUPT!");
-                        self.gba.set_timer_interrupt(i as u8, true);
+                let timer_prescaler = match i {
+                    0 => self.gba.io_registers.timer0_prescaler() as u32,
+                    1 => self.gba.io_registers.timer1_prescaler() as u32,
+                    2 => self.gba.io_registers.timer2_prescaler() as u32,
+                    3 => self.gba.io_registers.timer3_prescaler() as u32,
+                    _ => unreachable!(),
+                };
+                //*timer = timer.saturating_add(cycles_from_opcode as u32);
+                *timer += cycles_from_opcode as u32;
+                while *timer >= timer_prescaler {
+                    *timer -= timer_prescaler;
+                    if self.gba.io_registers.increment_timer(i as u8) {
+                        //dbg!(i, timer_prescalers[i]);
+                        // NOTE: this condition may be incorrect,
+                        // we may want to still `inc_note` even if DMA is enabled.
+                        // This should be a very small edge case though and if this is, in fact,
+                        // incorerct then we would just expect to drop at most 32 samples which would
+                        // be hard to notice.
+                        if self.gba.io_registers.dma1_enabled || self.gba.io_registers.dma2_enabled
+                        {
+                            if i == 1 && self.gba.io_registers.sound_a_timer1 {
+                                //debug_assert!(self.gba.io_registers.apu.gba_sound_a_enabled.0 || self.gba.io_registers.apu.gba_sound_a_enabled.1);
+                                self.gba.io_registers.apu.gba_fifo_a.inc_note();
+                                fifo_a_sample_counter += 1;
+                                if self.gba.io_registers.apu.gba_fifo_a.ready_for_more_data() {
+                                    self.gba.io_registers.trigger_sound_a_dma();
+                                }
+                            } else if i == 0 && !self.gba.io_registers.sound_a_timer1 {
+                                //debug_assert!(self.gba.io_registers.apu.gba_sound_a_enabled.0 || self.gba.io_registers.apu.gba_sound_a_enabled.1);
+                                self.gba.io_registers.apu.gba_fifo_a.inc_note();
+                                fifo_a_sample_counter += 1;
+                                if self.gba.io_registers.apu.gba_fifo_a.ready_for_more_data() {
+                                    self.gba.io_registers.trigger_sound_a_dma();
+                                }
+                            }
+                            if i == 1 && self.gba.io_registers.sound_b_timer1 {
+                                //debug_assert!(self.gba.io_registers.apu.gba_sound_b_enabled.0 || self.gba.io_registers.apu.gba_sound_b_enabled.1);
+                                self.gba.io_registers.apu.gba_fifo_b.inc_note();
+                                fifo_b_sample_counter += 1;
+                                if self.gba.io_registers.apu.gba_fifo_b.ready_for_more_data() {
+                                    self.gba.io_registers.trigger_sound_b_dma();
+                                }
+                            } else if i == 0 && !self.gba.io_registers.sound_b_timer1 {
+                                //debug_assert!(self.gba.io_registers.apu.gba_sound_b_enabled.0 || self.gba.io_registers.apu.gba_sound_b_enabled.1);
+                                self.gba.io_registers.apu.gba_fifo_b.inc_note();
+                                fifo_b_sample_counter += 1;
+                                if self.gba.io_registers.apu.gba_fifo_b.ready_for_more_data() {
+                                    self.gba.io_registers.trigger_sound_b_dma();
+                                }
+                            }
+                        }
+                        if self.gba.io_registers.timer_irq_enabled(i as u8)
+                            && self.gba.master_interrupts_enabled()
+                        {
+                            //dbg!("TIMER INTERRUPT!");
+                            self.gba.set_timer_interrupt(i as u8, true);
+                        }
                     }
                 }
             }
@@ -123,6 +183,27 @@ impl ApplicationState {
                     self.gba.ppu_set_hblank(false);
                     y += 1;
                     self.gba.ppu_set_readonly_vcounter(y);
+                    if y == self.gba.ppu_vcounter_setting()
+                        && self.gba.ppu_vcounter_irq_enabled()
+                        && self.gba.master_interrupts_enabled()
+                    {
+                        self.gba.set_lcdc_vcounter_interrupt(true);
+                    }
+                    if y == 160 {
+                        self.gba.ppu_set_vblank(true);
+                        if self.gba.ppu_vblank_irq_enabled() && self.gba.master_interrupts_enabled()
+                        {
+                            self.gba.set_lcdc_vblank_interrupt(true);
+                        }
+                        self.gba.io_registers.bg2_rotation.cached_x =
+                            self.gba.io_registers.bg2_rotation.x;
+                        self.gba.io_registers.bg2_rotation.cached_y =
+                            self.gba.io_registers.bg2_rotation.y;
+                        self.gba.io_registers.bg3_rotation.cached_x =
+                            self.gba.io_registers.bg3_rotation.x;
+                        self.gba.io_registers.bg3_rotation.cached_y =
+                            self.gba.io_registers.bg3_rotation.y;
+                    }
                 }
             }
 
@@ -143,15 +224,14 @@ impl ApplicationState {
 
                 in_hblank = true;
                 self.gba.ppu_set_hblank(true);
-                if self.gba.ppu_hblank_irq_enabled() {
+                if self.gba.ppu_hblank_irq_enabled() && self.gba.master_interrupts_enabled() {
                     self.gba.set_lcdc_hblank_interrupt(true);
                 }
-                if y == self.gba.ppu_vcounter_setting() && self.gba.ppu_vcounter_irq_enabled() {
-                    self.gba.set_lcdc_vcounter_interrupt(true);
-                }
+
+                /*
                 if y == 160 {
                     self.gba.ppu_set_vblank(true);
-                    if self.gba.ppu_vblank_irq_enabled() {
+                    if self.gba.ppu_vblank_irq_enabled() && self.gba.master_interrupts_enabled() {
                         self.gba.set_lcdc_vblank_interrupt(true);
                     }
                     self.gba.io_registers.bg2_rotation.cached_x =
@@ -163,13 +243,70 @@ impl ApplicationState {
                     self.gba.io_registers.bg3_rotation.cached_y =
                         self.gba.io_registers.bg3_rotation.y;
                 }
-                //y += 1;
+                */
+
+                if y >= 2 && y <= 163 {
+                    if self.gba.io_registers.dma3_enabled {
+                        let dma3 = self.gba.io_registers.dma3();
+                        if dma3.start_timing == DmaStartTiming::Special {
+                            self.gba.io_registers.trigger_dma(3);
+                        }
+                    }
+                }
+                if self.gba.io_registers.dma1_enabled {
+                    let dma1 = self.gba.io_registers.dma1();
+                    if dma1.start_timing == DmaStartTiming::HBlank {
+                        self.gba.io_registers.trigger_dma(1);
+                    }
+                }
             }
             self.sound_cycles += cycles_from_opcode as u64;
             if self.sound_cycles >= audio_timing_cycles as u64 {
                 self.renderer.audio_step(&self.gba.io_registers.apu);
                 self.sound_cycles -= audio_timing_cycles as u64;
+
+                //self.gba_sound_cycles -= gba_audio_timing_cycles as u64;
+                //let rate = 4000. / 512.;
+                let rate = 64. * 8.; // * 18.;//2000.;// / 512.;
+                self.gba.io_registers.apu.gba_fifo_a_sample_rate =
+                    fifo_a_sample_counter as f32 * rate; // / 0.00025;
+                self.gba.io_registers.apu.gba_fifo_b_sample_rate =
+                    fifo_b_sample_counter as f32 * rate; // / 0.00025;
+                if fifo_b_sample_counter != 0
+                    || self.gba.io_registers.apu.gba_fifo_b_sample_rate != 0.
+                {
+                    /*
+                    dbg!(
+                        fifo_b_sample_counter,
+                        self.gba.io_registers.apu.gba_fifo_b_sample_rate
+                    );
+                    */
+                }
+                self.renderer.gba_audio_step(&self.gba.io_registers.apu);
+                self.gba.io_registers.apu.gba_fifo_a.clear_sound_buffer();
+                fifo_a_sample_counter = 0;
+                fifo_b_sample_counter = 0;
+                self.gba.io_registers.apu.gba_fifo_a.reset_flag = false;
+                self.gba.io_registers.apu.gba_fifo_b.reset_flag = false;
             }
+            /*
+            self.gba_sound_cycles += cycles_from_opcode as u64;
+            if self.gba_sound_cycles >= gba_audio_timing_cycles as u64 {
+                self.gba_sound_cycles -= gba_audio_timing_cycles as u64;
+                //let rate = 4000. / 512.;
+                let rate = 64.;//4000.;// / 512.;
+                self.gba.io_registers.apu.gba_fifo_a_sample_rate = fifo_a_sample_counter as f32 * rate; // / 0.00025;
+                self.gba.io_registers.apu.gba_fifo_b_sample_rate = fifo_b_sample_counter as f32 * rate; // / 0.00025;
+                if fifo_b_sample_counter != 0 ||  self.gba.io_registers.apu.gba_fifo_b_sample_rate != 0. {
+                    //dbg!(fifo_b_sample_counter, self.gba.io_registers.apu.gba_fifo_b_sample_rate);
+                }
+                fifo_a_sample_counter = 0;
+                fifo_b_sample_counter = 0;
+                self.renderer.gba_audio_step(&self.gba.io_registers.apu);
+                self.gba.io_registers.apu.gba_fifo_a.clear_sound_buffer();
+                self.gba.io_registers.apu.gba_fifo_b.clear_sound_buffer();
+            }
+            */
         }
         self.gba.ppu_set_vblank(false);
         if Some(self.gba.ppu_bg_mode()) != self.debug_gba_last_seen_ppu_bg_mode {

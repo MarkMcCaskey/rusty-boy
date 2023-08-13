@@ -47,4 +47,13 @@ pub trait Renderer {
     fn audio_step(&mut self, apu: &Apu) {
         unimplemented!();
     }
+    // just for DMA sound A and B.
+    // testing to see if this works better.
+    fn gba_audio_step(&mut self, _: &Apu) {
+        unimplemented!();
+    }
+
+    fn update_fps(&mut self, _fps: f32) {
+        // NOP
+    }
 }

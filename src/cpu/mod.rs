@@ -7,6 +7,7 @@ mod macros;
 pub mod apu;
 pub mod cartridge;
 pub mod constants;
+pub mod fifo;
 pub mod memory;
 pub mod memvis;
 mod tests;

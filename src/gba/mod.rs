@@ -11,7 +11,7 @@ pub struct GameboyAdvance {
     pub obj_palette_ram: [u8; 0x400],
     pub vram: [u8; 0x18000],
     pub oam: [u8; 0x400],
-    sram: [u8; 0x10000],
+    sram: [u8; 0x80000],
     // used for "break points" for counting loops, etc while I debug the basics
     debug_counter: usize,
 }
@@ -50,7 +50,7 @@ impl PpuBgControl {
             character_base_block: ((bits >> 2) & 0b11) as u8,
             mosaic: (bits & 0x40) != 0,
             color_mode: (bits & 0x80) != 0,
-            screen_base_block: ((bits >> 8) & 0b11111) as u8,
+            screen_base_block: ((bits >> 8) & 0b1_1111) as u8,
             display_area_overflow: (bits & 0x2000) != 0,
             screen_size: ((bits >> 14) & 0b11) as u8,
         }
@@ -122,7 +122,7 @@ impl BarrelShifter {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DmaAddrControl {
     Increment,
     Decrement,
@@ -142,7 +142,7 @@ impl DmaAddrControl {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DmaStartTiming {
     Immediately,
     VBlank,
@@ -211,13 +211,21 @@ const CGB_APU_BASE: u16 = 0xFF10;
 pub struct IoRegisters {
     io_registers: [u8; 0x400],
     dma0_enabled: bool,
-    dma1_enabled: bool,
-    dma2_enabled: bool,
-    dma3_enabled: bool,
+    pub dma1_enabled: bool,
+    pub dma2_enabled: bool,
+    pub dma3_enabled: bool,
+    pub dma_triggered: [bool; 4],
+    pub dma_just_enabled: [bool; 4],
     dma0_delay_counter: u8,
     dma1_delay_counter: u8,
     dma2_delay_counter: u8,
     dma3_delay_counter: u8,
+    /// cached values
+    dma_source: [u32; 4],
+    /// cached values
+    dma_dest: [u32; 4],
+    /// cached values
+    dma_count: [u16; 4],
     timer0: u16,
     timer1: u16,
     timer2: u16,
@@ -225,15 +233,21 @@ pub struct IoRegisters {
     pub bg2_rotation: BitMapBgRotationScale,
     pub bg3_rotation: BitMapBgRotationScale,
     pub apu: crate::cpu::apu::Apu,
+    pub sound_a_timer1: bool,
+    pub sound_b_timer1: bool,
+    pub sram_wait: u8,
+    pub wait_state0: (u8, u8),
+    pub wait_state1: (u8, u8),
+    pub wait_state2: (u8, u8),
 }
 
 impl IoRegisters {
     pub fn new(direct_boot: bool) -> Self {
         let mut io_registers = [0; 0x400];
-        if direct_boot {
-            io_registers[0x130] = 0xFF;
-            io_registers[0x131] = 0x3;
-        }
+        //if direct_boot {
+        io_registers[0x130] = 0xFF;
+        io_registers[0x131] = 0x3;
+        //}
         io_registers[0x88] = 0;
         io_registers[0x89] = 0x2;
         IoRegisters {
@@ -242,10 +256,16 @@ impl IoRegisters {
             dma1_enabled: false,
             dma2_enabled: false,
             dma3_enabled: false,
+            dma_triggered: [false; 4],
+            dma_just_enabled: [false; 4],
             dma0_delay_counter: 0,
             dma1_delay_counter: 0,
             dma2_delay_counter: 0,
             dma3_delay_counter: 0,
+            // TODO: we must also cache the length
+            dma_source: [0; 4],
+            dma_dest: [0; 4],
+            dma_count: [0; 4],
             timer0: 0,
             timer1: 0,
             timer2: 0,
@@ -261,39 +281,79 @@ impl IoRegisters {
                 ..BitMapBgRotationScale::default()
             },
             apu: crate::cpu::apu::Apu::new(),
+            sound_a_timer1: false,
+            sound_b_timer1: false,
+            sram_wait: 4,
+            wait_state0: (4, 2),
+            wait_state1: (4, 4),
+            wait_state2: (4, 8),
         }
     }
 
     pub const fn dma_waiting(&self) -> bool {
-        self.dma0_enabled || self.dma1_enabled || self.dma2_enabled || self.dma3_enabled
+        (self.dma0_enabled && self.dma_triggered[0])
+            || (self.dma1_enabled && self.dma_triggered[1])
+            || (self.dma2_enabled && self.dma_triggered[2])
+            || (self.dma3_enabled && self.dma_triggered[3])
+        /*
+            (self.dma0_enabled || self.dma1_enabled || self.dma2_enabled || self.dma3_enabled)
+            &&
+            ((self.dma_triggered[0] || self.dma_triggered[1] || self.dma_triggered[2] || self.dma_triggered[3])
+            || (self.dma_just_enabled[0] || self.dma_just_enabled[1] || self.dma_just_enabled[2] || self.dma_just_enabled[3])
+        )
+            */
     }
     pub const fn dma0_ready(&self) -> bool {
-        self.dma0_enabled && self.dma0_delay_counter > 2
+        self.dma0_enabled && self.dma_just_enabled[0] && self.dma0_delay_counter > 4
     }
     pub const fn dma1_ready(&self) -> bool {
-        self.dma1_enabled && self.dma1_delay_counter > 2
+        self.dma1_enabled && self.dma_just_enabled[1] && self.dma1_delay_counter > 4
     }
     pub const fn dma2_ready(&self) -> bool {
-        self.dma2_enabled && self.dma2_delay_counter > 2
+        self.dma2_enabled && self.dma_just_enabled[2] && self.dma2_delay_counter > 4
     }
     pub const fn dma3_ready(&self) -> bool {
-        self.dma3_enabled && self.dma3_delay_counter > 2
+        self.dma3_enabled && self.dma_just_enabled[3] && self.dma3_delay_counter > 4
     }
     pub const fn dma_ready(&self) -> bool {
         self.dma0_ready() || self.dma1_ready() || self.dma2_ready() || self.dma3_ready()
     }
-    pub fn dma_inc_delay_counter(&mut self, cycles: u8) {
-        if self.dma0_enabled {
-            self.dma0_delay_counter += cycles;
-        }
-        if self.dma1_enabled {
-            self.dma1_delay_counter += cycles;
-        }
-        if self.dma2_enabled {
-            self.dma2_delay_counter += cycles;
-        }
-        if self.dma3_enabled {
-            self.dma3_delay_counter += cycles;
+    pub fn load_internal_dma_values(&mut self, dma: u8) {
+        self.dma_source[dma as usize] = match dma {
+            0 => self.dma0_source_addr_raw(),
+            1 => self.dma1_source_addr_raw(),
+            2 => self.dma2_source_addr_raw(),
+            3 => self.dma3_source_addr_raw(),
+            _ => unreachable!(),
+        };
+        self.dma_dest[dma as usize] = match dma {
+            0 => self.dma0_dest_addr_raw(),
+            1 => self.dma1_dest_addr_raw(),
+            2 => self.dma2_dest_addr_raw(),
+            3 => self.dma3_dest_addr_raw(),
+            _ => unreachable!(),
+        };
+        self.dma_count[dma as usize] = match dma {
+            0 => self.dma0_word_count_raw(),
+            1 => self.dma1_word_count_raw(),
+            2 => self.dma2_word_count_raw(),
+            3 => self.dma3_word_count_raw(),
+            _ => unreachable!(),
+        };
+    }
+    pub fn trigger_dma(&mut self, dma: u8) {
+        self.dma_triggered[dma as usize] = true;
+    }
+    pub fn dma_inc_delay_counter(&mut self, dma_id: u8, cycles: u8) {
+        // TODO: maybe also inc only if dma is enabled
+        if self.dma_just_enabled[dma_id as usize] {
+            match dma_id {
+                0 => self.dma0_delay_counter += cycles,
+                1 => self.dma1_delay_counter += cycles,
+                2 => self.dma2_delay_counter += cycles,
+                3 => self.dma3_delay_counter += cycles,
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -317,64 +377,165 @@ impl IoRegisters {
             self.io_registers[0xDE] as u16 | ((self.io_registers[0xDF] as u16) << 8),
         )
     }
+    pub fn dma1_trigger(&mut self) {
+        self.dma_triggered[1] = true;
+        //self.dma1_delay_counter = 4;
+    }
+    pub fn dma2_trigger(&mut self) {
+        self.dma_triggered[2] = true;
+        /*
+        self.dma2_enabled = true;
+        self.dma2_delay_counter = 4;
+        */
+    }
+    pub fn trigger_sound_a_dma(&mut self) {
+        let dma1 = self.dma1();
+        let dma2 = self.dma2();
+        let dma1_dest = self.dma1_dest_addr();
+        let dma2_dest = self.dma2_dest_addr();
+        if dma1_dest == 0x40000A0
+            && dma1.start_timing == DmaStartTiming::Special
+            && self.dma1_enabled
+        {
+            self.dma1_trigger();
+        }
+        if dma2_dest == 0x40000A0
+            && dma2.start_timing == DmaStartTiming::Special
+            && self.dma2_enabled
+        {
+            self.dma2_trigger();
+        }
+    }
+    pub fn trigger_sound_b_dma(&mut self) {
+        let dma1 = self.dma1();
+        let dma2 = self.dma2();
+        let dma1_dest = self.dma1_dest_addr();
+        let dma2_dest = self.dma2_dest_addr();
+        if dma1_dest == 0x40000A4
+            && dma1.start_timing == DmaStartTiming::Special
+            && self.dma1_enabled
+        {
+            self.dma1_trigger();
+        }
+        if dma2_dest == 0x40000A4
+            && dma2.start_timing == DmaStartTiming::Special
+            && self.dma2_enabled
+        {
+            self.dma2_trigger();
+        }
+    }
     pub fn dma0_source_addr(&self) -> u32 {
+        self.dma_source[0]
+    }
+    pub fn dma1_source_addr(&self) -> u32 {
+        self.dma_source[1]
+    }
+    pub fn dma2_source_addr(&self) -> u32 {
+        self.dma_source[2]
+    }
+    pub fn dma3_source_addr(&self) -> u32 {
+        self.dma_source[3]
+    }
+    pub fn dma0_dest_addr(&self) -> u32 {
+        self.dma_dest[0]
+    }
+    pub fn dma1_dest_addr(&self) -> u32 {
+        self.dma_dest[1]
+    }
+    pub fn dma2_dest_addr(&self) -> u32 {
+        self.dma_dest[2]
+    }
+    pub fn dma3_dest_addr(&self) -> u32 {
+        self.dma_dest[3]
+    }
+    const fn dma0_source_addr_raw(&self) -> u32 {
         self.io_registers[0xB0] as u32
             | ((self.io_registers[0xB1] as u32) << 8)
             | ((self.io_registers[0xB2] as u32) << 16)
             | ((self.io_registers[0xB3] as u32) << 24)
     }
-    pub fn dma0_dest_addr(&self) -> u32 {
+    const fn dma0_dest_addr_raw(&self) -> u32 {
         self.io_registers[0xB4] as u32
             | ((self.io_registers[0xB5] as u32) << 8)
             | ((self.io_registers[0xB6] as u32) << 16)
             | ((self.io_registers[0xB7] as u32) << 24)
     }
-    pub fn dma0_word_count(&self) -> u16 {
-        self.io_registers[0xB8] as u16 | ((self.io_registers[0xB9] as u16) << 8)
+    pub fn reload_dma_word_count(&mut self, dma_id: u8) {
+        self.dma_count[dma_id as usize] = match dma_id {
+            0 => self.dma0_word_count_raw(),
+            1 => self.dma1_word_count_raw(),
+            2 => self.dma2_word_count_raw(),
+            3 => self.dma3_word_count_raw(),
+            _ => unreachable!(),
+        };
     }
-    pub fn dma1_source_addr(&self) -> u32 {
+    pub fn reload_dma_dest(&mut self, dma_id: u8) {
+        self.dma_dest[dma_id as usize] = match dma_id {
+            0 => self.dma0_dest_addr_raw(),
+            1 => self.dma1_dest_addr_raw(),
+            2 => self.dma2_dest_addr_raw(),
+            3 => self.dma3_dest_addr_raw(),
+            _ => unreachable!(),
+        };
+    }
+    pub fn dma0_word_count(&self) -> u16 {
+        self.dma_count[0]
+    }
+    fn dma0_word_count_raw(&self) -> u16 {
+        self.io_registers[0xB8] as u16 | (((self.io_registers[0xB9] & 0x3F) as u16) << 8)
+    }
+    const fn dma1_source_addr_raw(&self) -> u32 {
         self.io_registers[0xBC] as u32
             | ((self.io_registers[0xBD] as u32) << 8)
             | ((self.io_registers[0xBE] as u32) << 16)
             | ((self.io_registers[0xBF] as u32) << 24)
     }
-    pub fn dma1_dest_addr(&self) -> u32 {
-        self.io_registers[0xC2] as u32
-            | ((self.io_registers[0xC3] as u32) << 8)
-            | ((self.io_registers[0xC4] as u32) << 16)
-            | ((self.io_registers[0xC5] as u32) << 24)
+    const fn dma1_dest_addr_raw(&self) -> u32 {
+        self.io_registers[0xC0] as u32
+            | ((self.io_registers[0xC1] as u32) << 8)
+            | ((self.io_registers[0xC2] as u32) << 16)
+            | ((self.io_registers[0xC3] as u32) << 24)
     }
     pub fn dma1_word_count(&self) -> u16 {
-        self.io_registers[0xC4] as u16 | ((self.io_registers[0xC5] as u16) << 8)
+        self.dma_count[1]
     }
-    pub fn dma2_source_addr(&self) -> u32 {
+    fn dma1_word_count_raw(&self) -> u16 {
+        self.io_registers[0xC4] as u16 | (((self.io_registers[0xC5] & 0x3F) as u16) << 8)
+    }
+    const fn dma2_source_addr_raw(&self) -> u32 {
         self.io_registers[0xC8] as u32
             | ((self.io_registers[0xC9] as u32) << 8)
             | ((self.io_registers[0xCA] as u32) << 16)
             | ((self.io_registers[0xCB] as u32) << 24)
     }
-    pub fn dma2_dest_addr(&self) -> u32 {
+    const fn dma2_dest_addr_raw(&self) -> u32 {
         self.io_registers[0xCC] as u32
             | ((self.io_registers[0xCD] as u32) << 8)
             | ((self.io_registers[0xCE] as u32) << 16)
             | ((self.io_registers[0xCF] as u32) << 24)
     }
     pub fn dma2_word_count(&self) -> u16 {
-        self.io_registers[0xD0] as u16 | ((self.io_registers[0xD1] as u16) << 8)
+        self.dma_count[2]
     }
-    pub fn dma3_source_addr(&self) -> u32 {
+    fn dma2_word_count_raw(&self) -> u16 {
+        self.io_registers[0xD0] as u16 | (((self.io_registers[0xD1] & 0x3F) as u16) << 8)
+    }
+    const fn dma3_source_addr_raw(&self) -> u32 {
         self.io_registers[0xD4] as u32
             | ((self.io_registers[0xD5] as u32) << 8)
             | ((self.io_registers[0xD6] as u32) << 16)
             | ((self.io_registers[0xD7] as u32) << 24)
     }
-    pub fn dma3_dest_addr(&self) -> u32 {
+    const fn dma3_dest_addr_raw(&self) -> u32 {
         self.io_registers[0xD8] as u32
             | ((self.io_registers[0xD9] as u32) << 8)
             | ((self.io_registers[0xDA] as u32) << 16)
             | ((self.io_registers[0xDB] as u32) << 24)
     }
     pub fn dma3_word_count(&self) -> u16 {
+        self.dma_count[3]
+    }
+    fn dma3_word_count_raw(&self) -> u16 {
         self.io_registers[0xDC] as u16 | ((self.io_registers[0xDD] as u16) << 8)
     }
     pub fn disable_dma0(&mut self) {
@@ -437,7 +598,9 @@ impl IoRegisters {
                 if let Some(v) = self.timer0.checked_add(1) {
                     self.timer0 = v;
                 } else {
-                    self.timer0 = self.get_mem16(0x4000100);
+                    self.timer0 = (self.io_registers[0x100] as u16)
+                        | ((self.io_registers[0x101] as u16) << 8);
+                    //println!("timer 0 overflow 0x{:X}", self.timer0);
                     return true;
                 }
             }
@@ -445,7 +608,8 @@ impl IoRegisters {
                 if let Some(v) = self.timer1.checked_add(1) {
                     self.timer1 = v;
                 } else {
-                    self.timer1 = self.get_mem16(0x4000104);
+                    self.timer1 = (self.io_registers[0x104] as u16)
+                        | ((self.io_registers[0x105] as u16) << 8);
                     return true;
                 }
             }
@@ -453,7 +617,8 @@ impl IoRegisters {
                 if let Some(v) = self.timer2.checked_add(1) {
                     self.timer2 = v;
                 } else {
-                    self.timer2 = self.get_mem16(0x4000108);
+                    self.timer2 = (self.io_registers[0x108] as u16)
+                        | ((self.io_registers[0x109] as u16) << 8);
                     return true;
                 }
             }
@@ -461,7 +626,8 @@ impl IoRegisters {
                 if let Some(v) = self.timer3.checked_add(1) {
                     self.timer3 = v;
                 } else {
-                    self.timer3 = self.get_mem16(0x400010C);
+                    self.timer3 = (self.io_registers[0x10C] as u16)
+                        | ((self.io_registers[0x10D] as u16) << 8);
                     return true;
                 }
             }
@@ -506,9 +672,30 @@ impl IoRegisters {
             _ => unreachable!(),
         }
     }
+    // TODO: inaccessible to the sound player, need to move this to the APU
+    pub fn sound_a_enabled(&self) -> (bool, bool) {
+        (
+            (self.io_registers[0x83] >> 1) & 1 == 1,
+            (self.io_registers[0x83] & 1) == 1,
+        )
+    }
+    pub fn sound_b_enabled(&self) -> (bool, bool) {
+        (
+            (self.io_registers[0x83] >> 5) & 1 == 1,
+            ((self.io_registers[0x83] >> 4) & 1) == 1,
+        )
+    }
 
     pub fn set_mem8(&mut self, addr: u32, val: u8) {
         debug_assert!((0x4000000..=0x4FFFFFF).contains(&addr));
+
+        // possibly useful for emulating on-board work RAM wait state configuration
+        /*
+        let undocumented_reg_check = addr & 0x10000;
+        if undocumented_reg_check >= 0x800 && undocumented_reg_check < 0x804 {
+            panic!("found write to undocumented register 0x04000800");
+        }
+        */
 
         let addr = addr & 0x3FF;
         match addr {
@@ -632,6 +819,24 @@ impl IoRegisters {
             0x7C => self.apu.set_mem(CGB_APU_BASE + 0x12, val),
             0x7D => self.apu.set_mem(CGB_APU_BASE + 0x13, val),
             0x7E | 0x7F => (),
+            // SOUNDCNT_H
+            // just write data as bits for now here
+            // 0x82 => {}
+            0x83 => {
+                if (val >> 3) & 1 == 1 {
+                    self.apu.gba_fifo_a.reset();
+                }
+                if (val >> 7) & 1 == 1 {
+                    self.apu.gba_fifo_b.reset();
+                }
+                let sound_a_enabled = ((val >> 1) & 1 == 1, (val & 1) == 1);
+                let sound_b_enabled = ((val >> 5) & 1 == 1, ((val >> 4) & 1) == 1);
+                self.apu.gba_sound_a_enabled = sound_a_enabled;
+                self.apu.gba_sound_b_enabled = sound_b_enabled;
+                self.sound_a_timer1 = (val >> 2) & 1 == 1;
+                self.sound_b_timer1 = (val >> 6) & 1 == 1;
+                self.io_registers[addr as usize] = val;
+            }
             // Wave RAM
             0x90..=0x9F => {
                 self.apu.set_mem(CGB_APU_BASE + (addr as u16 - 0x90), val);
@@ -662,10 +867,12 @@ impl IoRegisters {
                 */
                 warn!("Writing to Sound A FIFO but discarding the data!");
                 self.io_registers[addr as usize] = val;
+                todo!("8 bit writes to sound FIFO not implemented. How do we do this?");
             }
             0xA4..=0xA7 => {
                 warn!("Writing to Sound B FIFO but discarding the data!");
                 self.io_registers[addr as usize] = val;
+                todo!("8 bit writes to sound FIFO not implemented. How do we do this?");
             }
             // IF: interrupt request flags
             // writes to this register clear set bits to aknowledge interrupts
@@ -676,23 +883,63 @@ impl IoRegisters {
                 match addr {
                     0xBB if val & 0x80 != 0 => {
                         // DMA 0 start
+                        if !self.dma0_enabled {
+                            self.dma_just_enabled[0] = true;
+                        }
                         self.dma0_enabled = true;
                         self.dma0_delay_counter = 0;
+                        self.load_internal_dma_values(0);
+                        /*
+                        self.dma_source[0] = self.dma0_source_addr_raw();
+                        self.dma_dest[0] = self.dma0_dest_addr_raw();
+                        */
                     }
-                    0xC7 if val & 0x80 != 0 => {
-                        // DMA 1 start
-                        self.dma1_enabled = true;
-                        self.dma1_delay_counter = 0;
+                    0xC7 => {
+                        if val & 0x80 != 0 {
+                            // DMA 1 start
+                            if !self.dma1_enabled {
+                                self.dma_just_enabled[1] = true;
+                            }
+                            self.dma1_enabled = true;
+                            self.dma1_delay_counter = 0;
+                            self.load_internal_dma_values(1);
+                            /*
+                            self.dma_source[1] = self.dma1_source_addr_raw();
+                            self.dma_dest[1] = self.dma1_dest_addr_raw();
+                            */
+                        } else {
+                            self.dma1_enabled = false;
+                        }
                     }
-                    0xD3 if val & 0x80 != 0 => {
-                        // DMA 2 start
-                        self.dma2_enabled = true;
-                        self.dma2_delay_counter = 0;
+                    0xD3 => {
+                        if val & 0x80 != 0 {
+                            // DMA 2 start
+                            if !self.dma2_enabled {
+                                self.dma_just_enabled[2] = true;
+                            }
+                            self.dma2_enabled = true;
+                            self.dma2_delay_counter = 0;
+                            self.load_internal_dma_values(2);
+                            /*
+                            self.dma_source[2] = self.dma2_source_addr_raw();
+                            self.dma_dest[2] = self.dma2_dest_addr_raw();
+                            */
+                        } else {
+                            self.dma2_enabled = false;
+                        }
                     }
                     0xDF if val & 0x80 != 0 => {
                         // DMA3 start
+                        if !self.dma3_enabled {
+                            self.dma_just_enabled[3] = true;
+                        }
                         self.dma3_enabled = true;
                         self.dma3_delay_counter = 0;
+                        self.load_internal_dma_values(3);
+                        /*
+                        self.dma_source[3] = self.dma3_source_addr_raw();
+                        self.dma_dest[3] = self.dma3_dest_addr_raw();
+                        */
                     }
                     _ => (),
                 }
@@ -700,31 +947,70 @@ impl IoRegisters {
             }
             0x102 => {
                 if (self.io_registers[0x102] >> 7) == 0 && (val >> 7) == 1 {
-                    self.timer0 = self.get_mem16(0x4000100);
+                    self.timer0 = (self.io_registers[0x100] as u16)
+                        | ((self.io_registers[0x101] as u16) << 8);
                 }
                 self.io_registers[addr as usize] = val;
             }
             0x106 => {
+                if (val >> 2) & 1 == 1 {
+                    todo!("Count up timing!");
+                }
                 if (self.io_registers[0x106] >> 7) == 0 && (val >> 7) == 1 {
-                    self.timer1 = self.get_mem16(0x4000104);
+                    self.timer1 = (self.io_registers[0x104] as u16)
+                        | ((self.io_registers[0x105] as u16) << 8);
                 }
                 self.io_registers[addr as usize] = val;
             }
             0x10A => {
+                if (val >> 2) & 1 == 1 {
+                    todo!("Count up timing!");
+                }
                 if (self.io_registers[0x10A] >> 7) == 0 && (val >> 7) == 1 {
-                    self.timer2 = self.get_mem16(0x4000108);
+                    self.timer2 = (self.io_registers[0x108] as u16)
+                        | ((self.io_registers[0x109] as u16) << 8);
                 }
                 self.io_registers[addr as usize] = val;
             }
             0x10E => {
+                if (val >> 2) & 1 == 1 {
+                    todo!("Count up timing!");
+                }
                 if (self.io_registers[0x10E] >> 7) == 0 && (val >> 7) == 1 {
-                    self.timer3 = self.get_mem16(0x400010C);
+                    self.timer3 = (self.io_registers[0x10C] as u16)
+                        | ((self.io_registers[0x10D] as u16) << 8);
                 }
                 self.io_registers[addr as usize] = val;
             }
-            0x100..=0x110 => {
+            0x100..=0x11D => {
                 self.io_registers[addr as usize] = val;
             }
+            0x130 | 0x131 => {
+                // writes to button registetrs are ignored
+                // TODO: why does the bios try to write here at 0xA0C?
+            }
+            0x204 => {
+                const DEFAULT_WAITSTATES: [u8; 4] = [4, 3, 2, 8];
+                const SRAM_WAITSTATES: [u8; 4] = DEFAULT_WAITSTATES;
+                self.sram_wait = SRAM_WAITSTATES[(val & 0x3) as usize];
+                self.wait_state0.0 = DEFAULT_WAITSTATES[((val >> 2) & 0x3) as usize];
+                self.wait_state0.1 = if (val >> 4) & 1 == 1 { 1 } else { 2 };
+                self.wait_state1.0 = DEFAULT_WAITSTATES[((val >> 5) & 0x3) as usize];
+                self.wait_state1.1 = if (val >> 7) & 1 == 1 { 1 } else { 4 };
+                self.io_registers[addr as usize] = val;
+            }
+            0x205 => {
+                const DEFAULT_WAITSTATES: [u8; 4] = [4, 3, 2, 8];
+                self.wait_state2.0 = DEFAULT_WAITSTATES[(val & 0x3) as usize];
+                self.wait_state2.1 = if val >> 2 & 1 == 1 { 1 } else { 8 };
+                // TODO: GBA ROM prefetch
+                if (self.io_registers[addr as usize] >> 6) & 1 == 0 && (val >> 6) & 1 == 1 {
+                    warn!("prefetch toggled on but it's not implemented!");
+                }
+                self.io_registers[addr as usize] = val;
+            }
+            // unused
+            0x206 | 0x207 => {}
             0x208 => {
                 self.io_registers[addr as usize] = val & 1;
             }
@@ -754,6 +1040,21 @@ impl IoRegisters {
         // REVIEW: make sure this is correct
         let lo_addr = addr & !3;
         let hi_addr = addr | 2;
+
+        if addr == 0x40000A0 {
+            //println!("FIFO A: 0x{:x}", val);
+            u32::to_le_bytes(val)
+                .iter()
+                .for_each(|&b| self.apu.gba_fifo_a.push(b as i8));
+            return;
+        }
+        if addr == 0x40000A4 {
+            //println!("FIFO B: 0x{:x}", val);
+            u32::to_le_bytes(val)
+                .iter()
+                .for_each(|&b| self.apu.gba_fifo_b.push(b as i8));
+            return;
+        }
 
         let lo_half_word = val as u16;
         let hi_half_word = (val >> 16) as u16;
@@ -798,6 +1099,28 @@ impl IoRegisters {
             0x7C => self.apu.get_mem(CGB_APU_BASE + 0x12),
             0x7D => self.apu.get_mem(CGB_APU_BASE + 0x13),
             0x7E | 0x7F => 0,
+            // TODO: implement proper read handling here like other
+            //
+            0xA0..=0xDD => 0,
+            /*
+            0xA0..=0xA3 => panic!("Can't read from DMA0 FIFO buffer"),
+            0xA4..=0xA7 => panic!("Can't read from DMA1 FIFO buffer"),
+            0xB0..=0xB3 => panic!("Can't read from DMA0 source"),
+            0xB4..=0xB7 => panic!("Can't read from DMA0 dest"),
+            0xB8..=0xB9 => panic!("Can't read from DMA0 word count"),
+            0xBC..=0xBF => panic!("Can't read from DMA1 source"),
+            0xC0..=0xC3 => panic!("Can't read from DMA1 dest"),
+            //0xC4..=0xC5 => panic!("Can't read from DMA1 word count"),
+            // TODO:
+            0xC4..=0xC5 => 0,
+            0xC8..=0xCB => panic!("Can't read from DMA2 source"),
+            0xCC..=0xCF => panic!("Can't read from DMA2 dest"),
+            //0xD0..=0xD1 => panic!("Can't read from DMA2 word count"),
+            0xD0..=0xD1 => 0,
+            //0xD4..=0xD7 => panic!("Can't read from DMA3 source"),
+            0xD8..=0xDB => panic!("Can't read from DMA3 dest"),
+            0xDC..=0xDD => 0,//panic!("Can't read from DMA3 word count"),
+            */
             // Wave RAM
             0x90..=0x9F => self.apu.get_mem(CGB_APU_BASE + (addr as u16 - 0x90)),
             // TODO: 0xA0... GBA register stuff
@@ -1245,7 +1568,9 @@ impl Registers {
     pub fn get_spsr(&self) -> u32 {
         let mode = self.register_mode().unwrap();
         match mode {
-            RegisterMode::User | RegisterMode::System => unimplemented!("Is this possible?"),
+            RegisterMode::User | RegisterMode::System => {
+                unimplemented!("Is this possible? at pc={:X}", self.pc)
+            }
             RegisterMode::FIQ => self.spsr_fiq,
             RegisterMode::Supervisor => self.spsr_svc,
             RegisterMode::Abort => self.spsr_abt,
@@ -1256,7 +1581,9 @@ impl Registers {
     pub fn get_spsr_mut(&mut self) -> &mut u32 {
         let mode = self.register_mode().unwrap();
         match mode {
-            RegisterMode::User | RegisterMode::System => unimplemented!("Is this possible?"),
+            RegisterMode::User | RegisterMode::System => {
+                unimplemented!("Is this possible? at pc={:X}", self.pc)
+            }
             RegisterMode::FIQ => &mut self.spsr_fiq,
             RegisterMode::Supervisor => &mut self.spsr_svc,
             RegisterMode::Abort => &mut self.spsr_abt,
@@ -1344,6 +1671,18 @@ impl Registers {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SramType {
+    // 64kb
+    Flash64,
+    // 128kb
+    Flash128,
+    // 512 bytes or 8kb
+    Eeprom,
+    // 32kb
+    Sram(Box<[u8; 0x8000]>),
+}
+
 impl GameboyAdvance {
     pub fn new(direct_boot: bool) -> GameboyAdvance {
         GameboyAdvance {
@@ -1356,9 +1695,47 @@ impl GameboyAdvance {
             obj_palette_ram: [0u8; 0x400],
             vram: [0u8; 0x18000],
             oam: [0u8; 0x400],
-            sram: [0u8; 0x10000],
+            sram: [0u8; 0x80000],
             debug_counter: 0,
         }
+    }
+
+    // not perfect but good enough.
+    fn detect_sram(rom_bytes: &[u8]) -> Option<SramType> {
+        const EEPROM: (u8, u8, u8, u8, u8, u8) = (
+            'E' as u8, 'E' as u8, 'P' as u8, 'R' as u8, 'O' as u8, 'M' as u8,
+        );
+        const SRAM_V: (u8, u8, u8, u8, u8, u8) = (
+            'S' as u8, 'R' as u8, 'A' as u8, 'M' as u8, '_' as u8, 'V' as u8,
+        );
+        const FLASH_: (u8, u8, u8, u8, u8, u8) = (
+            'F' as u8, 'L' as u8, 'A' as u8, 'S' as u8, 'H' as u8, '_' as u8,
+        );
+        const FLASH5: (u8, u8, u8, u8, u8, u8) = (
+            'F' as u8, 'L' as u8, 'A' as u8, 'S' as u8, 'H' as u8, '5' as u8,
+        );
+        const FLASH1: (u8, u8, u8, u8, u8, u8) = (
+            'F' as u8, 'L' as u8, 'A' as u8, 'S' as u8, 'H' as u8, '1' as u8,
+        );
+        for i in 0..((rom_bytes.len() / 4) - 1) {
+            let i = i * 4;
+            match (
+                rom_bytes[i],
+                rom_bytes[i + 1],
+                rom_bytes[i + 2],
+                rom_bytes[i + 3],
+                rom_bytes[i + 4],
+                rom_bytes[i + 5],
+            ) {
+                EEPROM => return Some(SramType::Eeprom),
+                SRAM_V => return Some(SramType::Sram(Box::new([0u8; 0x8000]))),
+                FLASH_ => return Some(SramType::Flash64),
+                FLASH5 => return Some(SramType::Flash64),
+                FLASH1 => return Some(SramType::Flash128),
+                _ => continue,
+            }
+        }
+        None
     }
 
     /// Very useful link:
@@ -1379,6 +1756,14 @@ impl GameboyAdvance {
         });
 
         info!("Found GBA ROM: `{}` ({})", title, game_code);
+        let sram_type = GameboyAdvance::detect_sram(&bytes);
+        match &sram_type {
+            Some(SramType::Eeprom) => info!("Found EEPROM"),
+            Some(SramType::Sram(_)) => info!("Found SRAM"),
+            Some(SramType::Flash64) => info!("Found 64kb Flash"),
+            Some(SramType::Flash128) => info!("Found 128kb Flash"),
+            None => info!("No SRAM found"),
+        }
 
         let fixed_value = bytes[0xB2];
         if fixed_value != 0x96 {
@@ -1390,8 +1775,6 @@ impl GameboyAdvance {
             warn!("Non-zero main unit code: {} found!", main_unit_code);
         }
 
-        // TODO: 0xBD is the complement check, check header for validity
-        let first_opcode = bytes[0];
         self.entire_rom = bytes;
     }
 
@@ -1428,48 +1811,63 @@ impl GameboyAdvance {
     pub fn ppu_frame_select(&self) -> bool {
         (self.io_registers[0] >> 4) & 1 == 1
     }
+    pub fn ppu_obj_mapping_1d(&self) -> bool {
+        (self.io_registers[0] >> 6) & 1 == 1
+    }
     pub fn ppu_bg0_x_scroll(&self) -> u16 {
-        ((self.io_registers[0x10] as u16) << 8) | (self.io_registers[0x11] as u16) & 0x1F
+        (((self.io_registers[0x11] as u16) << 8) | (self.io_registers[0x10] as u16)) & 0x1FF
     }
     pub fn ppu_bg0_y_scroll(&self) -> u16 {
-        ((self.io_registers[0x12] as u16) << 8) | (self.io_registers[0x13] as u16) & 0x1F
+        (((self.io_registers[0x13] as u16) << 8) | (self.io_registers[0x12] as u16)) & 0x1FF
     }
     pub fn ppu_bg1_x_scroll(&self) -> u16 {
-        ((self.io_registers[0x14] as u16) << 8) | (self.io_registers[0x15] as u16) & 0x1F
+        (((self.io_registers[0x15] as u16) << 8) | (self.io_registers[0x14] as u16)) & 0x1FF
     }
     pub fn ppu_bg1_y_scroll(&self) -> u16 {
-        ((self.io_registers[0x16] as u16) << 8) | (self.io_registers[0x17] as u16) & 0x1F
+        (((self.io_registers[0x17] as u16) << 8) | (self.io_registers[0x16] as u16)) & 0x1FF
     }
     pub fn ppu_bg2_x_scroll(&self) -> u16 {
-        ((self.io_registers[0x18] as u16) << 8) | (self.io_registers[0x19] as u16) & 0x1F
+        (((self.io_registers[0x19] as u16) << 8) | (self.io_registers[0x18] as u16)) & 0x1FF
     }
     pub fn ppu_bg2_y_scroll(&self) -> u16 {
-        ((self.io_registers[0x1A] as u16) << 8) | (self.io_registers[0x1B] as u16) & 0x1F
+        (((self.io_registers[0x1B] as u16) << 8) | (self.io_registers[0x1A] as u16)) & 0x1FF
     }
     pub fn ppu_bg3_x_scroll(&self) -> u16 {
-        ((self.io_registers[0x1C] as u16) << 8) | (self.io_registers[0x1D] as u16) & 0x1F
+        (((self.io_registers[0x1D] as u16) << 8) | (self.io_registers[0x1C] as u16)) & 0x1FF
     }
     pub fn ppu_bg3_y_scroll(&self) -> u16 {
-        ((self.io_registers[0x1E] as u16) << 8) | (self.io_registers[0x1F] as u16) & 0x1F
+        (((self.io_registers[0x1F] as u16) << 8) | (self.io_registers[0x1E] as u16)) & 0x1FF
+    }
+    pub fn ppu_bg_scroll(&self, bg: u8) -> (u16, u16) {
+        match bg {
+            0 => (self.ppu_bg0_x_scroll(), self.ppu_bg0_y_scroll()),
+            1 => (self.ppu_bg1_x_scroll(), self.ppu_bg1_y_scroll()),
+            2 => (self.ppu_bg2_x_scroll(), self.ppu_bg2_y_scroll()),
+            3 => (self.ppu_bg3_x_scroll(), self.ppu_bg3_y_scroll()),
+            _ => unreachable!(),
+        }
     }
     pub fn ppu_bg0_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0x8] as u16) << 8) | (self.io_registers[0x9] as u16);
+        let bits = ((self.io_registers[0x9] as u16) << 8) | (self.io_registers[0x8] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg1_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xA] as u16) << 8) | (self.io_registers[0xB] as u16);
+        let bits = ((self.io_registers[0xB] as u16) << 8) | (self.io_registers[0xA] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg2_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xC] as u16) << 8) | (self.io_registers[0xD] as u16);
+        let bits = ((self.io_registers[0xD] as u16) << 8) | (self.io_registers[0xC] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg3_control(&self) -> PpuBgControl {
-        let bits = ((self.io_registers[0xE] as u16) << 8) | (self.io_registers[0xF] as u16);
+        let bits = ((self.io_registers[0xF] as u16) << 8) | (self.io_registers[0xE] as u16);
         PpuBgControl::from_bits(bits)
     }
     pub fn ppu_bg_mode(&self) -> u8 {
         self.io_registers[0x0] & 0x7
+    }
+    pub fn ppu_force_blank(&self) -> bool {
+        (self.io_registers[0x0] >> 7) & 1 == 1
     }
     pub fn ppu_bg0_enabled(&self) -> bool {
         self.io_registers[0x1] & 1 == 1
@@ -1494,6 +1892,18 @@ impl GameboyAdvance {
     }
     pub fn ppu_obj_win_enabled(&self) -> bool {
         (self.io_registers[0x1] >> 7) & 1 == 1
+    }
+    pub fn ppu_bg_mosaic_h(&self) -> u8 {
+        (self.io_registers[0x4C] & 0xF) + 1
+    }
+    pub fn ppu_bg_mosaic_v(&self) -> u8 {
+        ((self.io_registers[0x4C] >> 4) & 0xF) + 1
+    }
+    pub fn ppu_obj_mosaic_h(&self) -> u8 {
+        (self.io_registers[0x4D] & 0xF) + 1
+    }
+    pub fn ppu_obj_mosaic_v(&self) -> u8 {
+        ((self.io_registers[0x4D] >> 4) & 0xF) + 1
     }
 
     pub fn ppu_set_vblank(&mut self, v: bool) {
@@ -1521,7 +1931,7 @@ impl GameboyAdvance {
         self.io_registers[0x5]
     }
     pub fn ppu_set_readonly_vcounter(&mut self, ly: u8) {
-        self.io_registers[0x6] = ly as u8;
+        self.io_registers[0x6] = ly;
     }
 
     pub fn master_interrupts_enabled(&self) -> bool {
@@ -1680,22 +2090,6 @@ impl GameboyAdvance {
         self.io_registers[0x203] |= (value as u8) << 5;
     }
 
-    pub fn dma3_source_address(&self) -> u32 {
-        (self.io_registers[0x0D7] as u32) << 24
-            | (self.io_registers[0x0D6] as u32) << 16
-            | (self.io_registers[0x0D5] as u32) << 8
-            | (self.io_registers[0x0D4] as u32)
-    }
-    pub fn dma3_dest_address(&self) -> u32 {
-        (self.io_registers[0x0DE] as u32) << 24
-            | (self.io_registers[0x0DC] as u32) << 16
-            | (self.io_registers[0x0DB] as u32) << 8
-            | (self.io_registers[0x0DA] as u32)
-    }
-    pub fn dma3_count(&self) -> u16 {
-        (self.io_registers[0x0DD] as u16) << 8 | (self.io_registers[0x0DC] as u16)
-    }
-
     pub fn get_mem8(&self, address: u32) -> (u8, u8) {
         match address {
             0x00000000..=0x00003FFF => {
@@ -1703,7 +2097,9 @@ impl GameboyAdvance {
                     // bios
                     (self.bios[address as usize], 3)
                 } else {
-                    todo!("Reading from bios while PC is not in the bios");
+                    // implementing this properly requires keeping track of the last executed BIOS instruction
+                    // TODO: implement this properly
+                    (self.bios[0xDC + 8], 1)
                 }
             }
             0x00004000..=0x01FFFFFF => {
@@ -1726,23 +2122,45 @@ impl GameboyAdvance {
             //0x05000000..=0x050003FF => (self.obj_palette_ram[(address & 0x3FF) as usize], 1),
             0x05000000..=0x05FFFFFF => (self.obj_palette_ram[(address & 0x3FF) as usize], 1),
             //0x06000000..=0x06017FFF => (self.vram[(address & 0x17FFF) as usize], 1),
-            0x06000000..=0x06FFFFFF => (self.vram[(address & 0x17FFF) as usize], 1),
+            0x06000000..=0x06FFFFFF => {
+                let mut i = address & 0x1FFFF;
+                if i > 0x17FFF {
+                    i &= !0x08000
+                };
+                (self.vram[i as usize], 1)
+            }
             //0x07000000..=0x070003FF => (self.oam[(address & 0x3FF) as usize], 1),
             0x07000000..=0x07FFFFFF => (self.oam[(address & 0x3FF) as usize], 1),
             0x08000000..=0x09FFFFFF => {
+                let timing = self.io_registers.wait_state0.0 + 1;
                 if (address - 0x0800_0000) > self.entire_rom.len() as u32 {
-                    return (0, 5);
+                    return (0, timing);
                 }
-                (self.entire_rom[(address & 0x1FFFFFF) as usize], 5)
+                (self.entire_rom[(address & 0x1FFFFFF) as usize], timing)
             }
-            0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
-            0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2"),
+            0x0A000000..=0x0BFFFFFF => {
+                let timing = self.io_registers.wait_state1.0 + 1;
+                if (address - 0x0A00_0000) > self.entire_rom.len() as u32 {
+                    return (0, timing);
+                }
+                (self.entire_rom[(address & 0x1FFFFFF) as usize], timing)
+            }
+            0x0C000000..=0x0DFFFFFF => {
+                let timing = self.io_registers.wait_state2.0 + 1;
+                if (address - 0x0C00_0000) > self.entire_rom.len() as u32 {
+                    return (0, timing);
+                }
+                (self.entire_rom[(address & 0x1FFFFFF) as usize], timing)
+            }
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
-            0x0E000000..=0x0FFFFFFF => (self.sram[(address & 0xFFFF) as usize], 5),
+            0x0E000000..=0x0FFFFFFF => (
+                self.sram[(address & 0x7FFFF) as usize],
+                self.io_registers.sram_wait + 1,
+            ),
             _ => (0, 1),
         }
     }
-    pub fn get_mem16(&self, address: u32) -> (u16, u8) {
+    pub fn get_mem16(&self, address: u32, sequential: bool) -> (u16, u8) {
         let lo_bit_idx = address & !0x1;
         let hi_bit_idx = address | 0x1;
         match address {
@@ -1756,9 +2174,9 @@ impl GameboyAdvance {
             0x00004000..=0x01FFFFFF => {
                 if self.r.thumb_enabled() {
                     // TODO: handle all cases
-                    self.get_mem16(self.r.pc + 2)
+                    self.get_mem16(self.r.pc + 2, true)
                 } else {
-                    self.get_mem16(self.r.pc + 4)
+                    self.get_mem16(self.r.pc + 4, true)
                 }
             }
             0x02000000..=0x02FFFFFF => {
@@ -1784,8 +2202,16 @@ impl GameboyAdvance {
             }
             0x06000000..=0x06FFFFFF => {
                 //0x06000000..=0x06017FFF => {
-                let lo_bit = self.vram[(lo_bit_idx & 0x17FFF) as usize] as u16;
-                let hi_bit = self.vram[(hi_bit_idx & 0x17FFF) as usize] as u16;
+                let mut i1 = lo_bit_idx & 0x1FFFF;
+                let mut i2 = hi_bit_idx & 0x1FFFF;
+                if i1 > 0x17FFF {
+                    i1 &= !0x08000
+                };
+                if i2 > 0x17FFF {
+                    i2 &= !0x08000
+                };
+                let lo_bit = self.vram[i1 as usize] as u16;
+                let hi_bit = self.vram[i2 as usize] as u16;
                 ((hi_bit << 8) | lo_bit, 1)
             }
             0x07000000..=0x07FFFFFF => {
@@ -1795,38 +2221,53 @@ impl GameboyAdvance {
                 ((hi_bit << 8) | lo_bit, 1)
             }
             0x08000000..=0x09FFFFFF => {
+                let timing = if sequential {
+                    self.io_registers.wait_state0.1 + 1
+                } else {
+                    self.io_registers.wait_state0.0 + 1
+                };
                 if (hi_bit_idx - 0x0800_0000) > self.entire_rom.len() as u32 {
-                    return (((address >> 1) & 0xFFFF) as u16, 5);
+                    return (((address >> 1) & 0xFFFF) as u16, timing);
                 }
                 let lo_bit = self.entire_rom[(lo_bit_idx & 0x1FFFFFF) as usize] as u16;
                 let hi_bit = self.entire_rom[(hi_bit_idx & 0x1FFFFFF) as usize] as u16;
-                ((hi_bit << 8) | lo_bit, 5)
+                ((hi_bit << 8) | lo_bit, timing)
             }
             0x0A000000..=0x0BFFFFFF => {
+                let timing = if sequential {
+                    self.io_registers.wait_state1.1 + 1
+                } else {
+                    self.io_registers.wait_state1.0 + 1
+                };
                 if (hi_bit_idx - 0x0A00_0000) > self.entire_rom.len() as u32 {
-                    return (((address >> 1) & 0xFFFF) as u16, 5);
+                    return (((address >> 1) & 0xFFFF) as u16, timing);
                 }
                 let lo_bit = self.entire_rom[(lo_bit_idx & 0x1FFFFFF) as usize] as u16;
                 let hi_bit = self.entire_rom[(hi_bit_idx & 0x1FFFFFF) as usize] as u16;
-                ((hi_bit << 8) | lo_bit, 5)
+                ((hi_bit << 8) | lo_bit, timing)
             }
             0x0C000000..=0x0DFFFFFF => {
+                let timing = if sequential {
+                    self.io_registers.wait_state2.1 + 1
+                } else {
+                    self.io_registers.wait_state2.0 + 1
+                };
                 if (hi_bit_idx - 0x0C00_0000) > self.entire_rom.len() as u32 {
-                    return (((address >> 1) & 0xFFFF) as u16, 5);
+                    return (((address >> 1) & 0xFFFF) as u16, timing);
                 }
                 let lo_bit = self.entire_rom[(lo_bit_idx & 0x1FFFFFF) as usize] as u16;
                 let hi_bit = self.entire_rom[(hi_bit_idx & 0x1FFFFFF) as usize] as u16;
-                ((hi_bit << 8) | lo_bit, 5)
+                ((hi_bit << 8) | lo_bit, timing)
             }
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
             0x0E000000..=0x0FFFFFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
             _ => (0, 1),
         }
     }
-    pub fn get_mem32(&self, address: u32) -> (u32, u8) {
+    pub fn get_mem32(&self, address: u32, sequential: bool) -> (u32, u8) {
         if address != address & !3 {
-            let lo = self.get_mem16(address);
-            let hi = self.get_mem16(address - 2);
+            let lo = self.get_mem16(address, sequential);
+            let hi = self.get_mem16(address - 2, true);
             return ((hi.0 as u32) << 16 | lo.0 as u32, lo.1);
         }
         //address = address & 0x0FFF_FFFF;
@@ -1847,9 +2288,9 @@ impl GameboyAdvance {
             0x00004000..=0x01FFFFFF => {
                 if self.r.thumb_enabled() {
                     // TODO: handle all cases
-                    self.get_mem32(self.r.pc + 2)
+                    self.get_mem32(self.r.pc + 2, true)
                 } else {
-                    self.get_mem32(self.r.pc + 4)
+                    self.get_mem32(self.r.pc + 4, true)
                 }
             }
             0x02000000..=0x02FFFFFF => {
@@ -1884,10 +2325,26 @@ impl GameboyAdvance {
             }
             0x06000000..=0x06FFFFFF => {
                 //0x06000000..=0x06017FFF => {
-                let bit1 = self.vram[(bit1_idx & 0x17FFF) as usize] as u32;
-                let bit2 = self.vram[(bit2_idx & 0x17FFF) as usize] as u32;
-                let bit3 = self.vram[(bit3_idx & 0x17FFF) as usize] as u32;
-                let bit4 = self.vram[(bit4_idx & 0x17FFF) as usize] as u32;
+                let mut i1 = bit1_idx & 0x1FFFF;
+                let mut i2 = bit2_idx & 0x1FFFF;
+                let mut i3 = bit3_idx & 0x1FFFF;
+                let mut i4 = bit4_idx & 0x1FFFF;
+                if i1 > 0x17FFF {
+                    i1 &= !0x08000
+                };
+                if i2 > 0x17FFF {
+                    i2 &= !0x08000
+                };
+                if i3 > 0x17FFF {
+                    i3 &= !0x08000
+                };
+                if i4 > 0x17FFF {
+                    i4 &= !0x08000
+                };
+                let bit1 = self.vram[i1 as usize] as u32;
+                let bit2 = self.vram[i2 as usize] as u32;
+                let bit3 = self.vram[i3 as usize] as u32;
+                let bit4 = self.vram[i4 as usize] as u32;
                 let out = (bit4 << 24) | (bit3 << 16) | (bit2 << 8) | bit1;
                 (out, 2)
             }
@@ -1901,16 +2358,31 @@ impl GameboyAdvance {
                 (out, 1)
             }
             0x0A000000..=0x0BFFFFFF | 0x0C000000..=0x0DFFFFFF | 0x08000000..=0x09FFFFFF => {
+                let timing = match (sequential, address) {
+                    (false, 0x08000000..=0x09FFFFFF) => {
+                        self.io_registers.wait_state0.0 + 1 + self.io_registers.wait_state0.1 + 1
+                    }
+                    (false, 0x0A000000..=0x0BFFFFFF) => {
+                        self.io_registers.wait_state1.0 + 1 + self.io_registers.wait_state1.1 + 1
+                    }
+                    (false, 0x0C000000..=0x0DFFFFFF) => {
+                        self.io_registers.wait_state2.0 + 1 + self.io_registers.wait_state2.1 + 1
+                    }
+                    (true, 0x08000000..=0x09FFFFFF) => self.io_registers.wait_state0.1 * 2 + 2,
+                    (true, 0x0A000000..=0x0BFFFFFF) => self.io_registers.wait_state1.1 * 2 + 2,
+                    (true, 0x0C000000..=0x0DFFFFFF) => self.io_registers.wait_state2.1 * 2 + 2,
+                    _ => unreachable!(),
+                };
                 // TODO: properly handle later bytes overflowing too
                 if bit1_idx & 0x1FFFFFF >= self.entire_rom.len() as u32 {
-                    return ((address >> 1) & 0xFFFF, 8);
+                    return ((address >> 1) & 0xFFFF, timing);
                 }
                 let bit1 = self.entire_rom[(bit1_idx & 0x1FFFFFF) as usize] as u32;
                 let bit2 = self.entire_rom[(bit2_idx & 0x1FFFFFF) as usize] as u32;
                 let bit3 = self.entire_rom[(bit3_idx & 0x1FFFFFF) as usize] as u32;
                 let bit4 = self.entire_rom[(bit4_idx & 0x1FFFFFF) as usize] as u32;
                 let out = (bit4 << 24) | (bit3 << 16) | (bit2 << 8) | bit1;
-                (out, 8)
+                (out, timing)
             }
             /*
             0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
@@ -1950,18 +2422,28 @@ impl GameboyAdvance {
             //0x06000000..=0x06017FFF => {
             0x06000000..=0x06FFFFFF => {
                 // INACCUARY: GBA can't do 8 bit writes here
-                self.vram[(address & 0x17FFF) as usize] = val;
+                let mut i = address & 0x1FFFF;
+                if i > 0x17FFF {
+                    i &= !0x08000
+                };
+                self.vram[i as usize] = val;
                 1
             }
             0x07000000..=0x070003FF => {
-                todo!("OAM")
+                // 8 bit writes to OAM are ignored
+                1
             }
-            0x08000000..=0x09FFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 0"),
+            0x08000000..=0x09FFFFFF => todo!(
+                "Game Pak ROM/FlashROM (max 32MB) - Wait State 0, addr={:X}, val ={:X}, pc={:X}",
+                address,
+                val,
+                self.r.pc
+            ),
             0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
             0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2"),
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
             0x0E000000..=0x0FFFFFFF => {
-                self.sram[(address & 0xFFFF) as usize] = val;
+                self.sram[(address & 0x7FFFF) as usize] = val;
                 5
             }
             _ => 1,
@@ -1976,7 +2458,8 @@ impl GameboyAdvance {
         match address {
             0x00000000..=0x00003FFF => {
                 // bios system ROM
-                todo!("bios system ROM")
+                //todo!("bios system ROM")
+                1
             }
             0x02000000..=0x02FFFFFF => {
                 //0x02000000..=0x0203FFFF => {
@@ -2004,8 +2487,16 @@ impl GameboyAdvance {
             }
             0x06000000..=0x06FFFFFF => {
                 //0x06000000..=0x06017FFF => {
-                self.vram[(lo_bit_idx & 0x17FFF) as usize] = lo_val;
-                self.vram[(hi_bit_idx & 0x17FFF) as usize] = hi_val;
+                let mut i1 = lo_bit_idx & 0x1FFFF;
+                let mut i2 = hi_bit_idx & 0x1FFFF;
+                if i1 > 0x17FFF {
+                    i1 &= !0x08000
+                };
+                if i2 > 0x17FFF {
+                    i2 &= !0x08000
+                };
+                self.vram[i1 as usize] = lo_val;
+                self.vram[i2 as usize] = hi_val;
                 1
             }
             0x07000000..=0x07FFFFFF => {
@@ -2016,7 +2507,14 @@ impl GameboyAdvance {
             }
             0x08000000..=0x09FFFFFF => 0, //todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 0"),
             0x0A000000..=0x0BFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 1"),
-            0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2"),
+            //0x0C000000..=0x0DFFFFFF => todo!("Game Pak ROM/FlashROM (max 32MB) - Wait State 2 0x{:X} = 0x{:X}", address, val),
+            // TODO: proper flashROM support
+            0x0C000000..=0x0DFFFFFF => {
+                self.entire_rom[(lo_bit_idx & 0x1FFFFF) as usize] = lo_val;
+                self.entire_rom[(hi_bit_idx & 0x1FFFFF) as usize] = hi_val;
+                // TODO:
+                5
+            }
             //0x0E000000..=0x0E00FFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
             0x0E000000..=0x0FFFFFFF => todo!("Game Pak SRAM    (max 64 KBytes) - 8bit Bus width"),
             _ => 1,
@@ -2035,7 +2533,11 @@ impl GameboyAdvance {
         match address {
             0x00000000..=0x00003FFF => {
                 // bios system ROM
-                todo!("bios system ROM")
+                todo!(
+                    "bios system ROM (addr 0x{:X}) caused by instr at 0x{:X}",
+                    address,
+                    self.r.pc
+                );
             }
             0x02000000..=0x02FFFFFF => {
                 //0x02000000..=0x0203FFFF => {
@@ -2069,10 +2571,26 @@ impl GameboyAdvance {
             }
             0x06000000..=0x06FFFFFF => {
                 //0x06000000..=0x06017FFF => {
-                self.vram[(bit1_idx & 0x17FFF) as usize] = val1;
-                self.vram[(bit2_idx & 0x17FFF) as usize] = val2;
-                self.vram[(bit3_idx & 0x17FFF) as usize] = val3;
-                self.vram[(bit4_idx & 0x17FFF) as usize] = val4;
+                let mut i1 = bit1_idx & 0x1FFFF;
+                let mut i2 = bit2_idx & 0x1FFFF;
+                let mut i3 = bit3_idx & 0x1FFFF;
+                let mut i4 = bit4_idx & 0x1FFFF;
+                if i1 > 0x17FFF {
+                    i1 &= !0x08000
+                };
+                if i2 > 0x17FFF {
+                    i2 &= !0x08000
+                };
+                if i3 > 0x17FFF {
+                    i3 &= !0x08000
+                };
+                if i4 > 0x17FFF {
+                    i4 &= !0x08000
+                };
+                self.vram[i1 as usize] = val1;
+                self.vram[i2 as usize] = val2;
+                self.vram[i3 as usize] = val3;
+                self.vram[i4 as usize] = val4;
                 2
             }
             0x07000000..=0x07FFFFFF => {
@@ -2165,6 +2683,78 @@ impl GameboyAdvance {
         }
     }
 
+    fn do_dma(&mut self, control: DmaControl, src: u32, dest: u32, count: u32, dma_id: u8) -> u32 {
+        let mut cycles = 0;
+
+        println!(
+            "DMA{} Transfering data from 0x{:X} to 0x{:X}: 0x{:X} bytes at pc=0x{:X}",
+            dma_id, src, dest, count, self.r.pc
+        );
+        let adj_src = |i: u32| -> u32 {
+            match control.source_addr_control {
+                DmaAddrControl::Increment | DmaAddrControl::IncrementReload => src + i,
+                DmaAddrControl::Decrement => src - i,
+                DmaAddrControl::Fixed => src,
+            }
+        };
+        let adj_dest = |i: u32| -> u32 {
+            match control.dest_addr_control {
+                DmaAddrControl::Increment | DmaAddrControl::IncrementReload => dest + i,
+                DmaAddrControl::Decrement => dest - i,
+                DmaAddrControl::Fixed => dest,
+            }
+        };
+        let mut seq = false;
+        if control.transfer_type {
+            for i in 0..count {
+                let src_addr = adj_src(i * 4);
+                let dest_addr = adj_dest(i * 4);
+                let val = self.get_mem32(src_addr, seq);
+                let o = self.set_mem32(dest_addr, val.0);
+                cycles += val.1 as u32 + o as u32;
+                seq = true;
+            }
+        } else {
+            for i in 0..count {
+                let src_addr = adj_src(i * 2);
+                let dest_addr = adj_dest(i * 2);
+                let val = self.get_mem16(src_addr, seq);
+                let o = self.set_mem16(dest_addr, val.0);
+                cycles += val.1 as u32 + o as u32;
+                seq = true;
+            }
+        }
+        let bytes_transferred = count * if control.transfer_type { 4 } else { 2 };
+        match control.source_addr_control {
+            DmaAddrControl::Increment => {
+                self.io_registers.dma_source[dma_id as usize] = src + bytes_transferred;
+            }
+            DmaAddrControl::Decrement => {
+                self.io_registers.dma_source[dma_id as usize] = src - bytes_transferred;
+            }
+            DmaAddrControl::Fixed => {}
+            // TODO: what does increment reload mean?
+            // operating under the assumption it means increment but reload old value
+            // DAD is reloaded on repeat
+            _ => unreachable!(""),
+        }
+        match control.dest_addr_control {
+            DmaAddrControl::Increment => {
+                self.io_registers.dma_dest[dma_id as usize] = src + bytes_transferred;
+            }
+            DmaAddrControl::Decrement => {
+                self.io_registers.dma_dest[dma_id as usize] = src - bytes_transferred;
+            }
+            // TODO: what does increment reload mean?
+            // operating under the assumption it means increment but reload old value
+            // DAD is reloaded on repeat
+            DmaAddrControl::IncrementReload => (), //todo!("DMA increment reload"),
+            DmaAddrControl::Fixed => {}
+        }
+
+        cycles
+    }
+
     pub fn run_dma(
         &mut self,
         control: DmaControl,
@@ -2176,23 +2766,7 @@ impl GameboyAdvance {
         let mut cycles = 0;
         match control.start_timing {
             DmaStartTiming::Immediately => {
-                println!(
-                    "Transfering data from 0x{:X} to 0x{:X}: 0x{:X} bytes",
-                    src, dest, count
-                );
-                if control.transfer_type {
-                    for i in 0..count {
-                        let val = self.get_mem32(src + (i * 4) as u32);
-                        let o = self.set_mem32(dest + (i * 4) as u32, val.0);
-                        cycles += val.1 as u32 + o as u32;
-                    }
-                } else {
-                    for i in 0..count {
-                        let val = self.get_mem16(src + (i * 2) as u32);
-                        let o = self.set_mem16(dest + (i * 2) as u32, val.0);
-                        cycles += val.1 as u32 + o as u32;
-                    }
-                }
+                cycles += self.do_dma(control, src, dest, count, dma_id);
                 if control.repeat {
                     todo!("repeat dma");
                 }
@@ -2212,7 +2786,45 @@ impl GameboyAdvance {
                         debug_assert!(matches!(dest, 0x40000A0 | 0x40000A4), "0x{:X}", dest);
                         // TODO: transfer 16 bytes when sound channel requests it
                         */
-                        warn!("DMA1 Sound FIFO");
+                        // sound channel has to request this?
+                        //warn!("DMA1 Sound FIFO 0x{:X}, {}, {}", src, count, control.transfer_type);
+                        let adj_src = |i: u32| -> u32 {
+                            match control.source_addr_control {
+                                DmaAddrControl::Increment | DmaAddrControl::IncrementReload => {
+                                    src + i
+                                }
+                                DmaAddrControl::Decrement => src - i,
+                                DmaAddrControl::Fixed => src,
+                            }
+                        };
+                        // TODO: 16 byte transfers?
+                        if dest == 0x40000A0 || dest == 0x40000A4 {
+                            let mut seq = false;
+                            for i in 0..4 {
+                                let src_addr = adj_src(i * 4);
+                                //println!("src_addr: 0x{:X}", src_addr);
+                                let val = self.get_mem32(src_addr, seq);
+                                cycles += self.set_mem32(dest, val.0) as u32;
+                                cycles += val.1 as u32;
+                                seq = true;
+                            }
+                        }
+                        let bytes_transferred = 16;
+                        match control.source_addr_control {
+                            DmaAddrControl::Increment => {
+                                self.io_registers.dma_source[dma_id as usize] =
+                                    src + bytes_transferred;
+                            }
+                            DmaAddrControl::Decrement => {
+                                self.io_registers.dma_source[dma_id as usize] =
+                                    src - bytes_transferred;
+                            }
+                            DmaAddrControl::Fixed => {}
+                            // TODO: what does increment reload mean?
+                            // operating under the assumption it means increment but reload old value
+                            // DAD is reloaded on repeat
+                            _ => unreachable!(""),
+                        }
                     }
                     2 => {
                         /*
@@ -2220,9 +2832,47 @@ impl GameboyAdvance {
                         debug_assert!(matches!(dest, 0x40000A0 | 0x40000A4), "0x{:X}", dest);
                         // TODO: transfer 16 bytes when sound channel requests it
                         */
-                        warn!("DMA2 Sound FIFO");
+                        //warn!("DMA2 Sound FIFO");
+                        let adj_src = |i: u32| -> u32 {
+                            match control.source_addr_control {
+                                DmaAddrControl::Increment | DmaAddrControl::IncrementReload => {
+                                    src + i
+                                }
+                                DmaAddrControl::Decrement => src - i,
+                                DmaAddrControl::Fixed => src,
+                            }
+                        };
+                        if dest == 0x40000A0 || dest == 0x40000A4 {
+                            let mut seq = false;
+                            for i in 0..4 {
+                                let src_addr = adj_src(i * 4);
+                                //println!("src_addr: 0x{:X}", src_addr);
+                                let val = self.get_mem32(src_addr, seq);
+                                cycles += self.set_mem32(dest, val.0) as u32;
+                                cycles += val.1 as u32;
+                                seq = true;
+                            }
+                        }
+                        let bytes_transferred = 16;
+                        match control.source_addr_control {
+                            DmaAddrControl::Increment => {
+                                self.io_registers.dma_source[dma_id as usize] =
+                                    src + bytes_transferred;
+                            }
+                            DmaAddrControl::Decrement => {
+                                self.io_registers.dma_source[dma_id as usize] =
+                                    src - bytes_transferred;
+                            }
+                            DmaAddrControl::Fixed => {}
+                            // TODO: what does increment reload mean?
+                            // operating under the assumption it means increment but reload old value
+                            // DAD is reloaded on repeat
+                            _ => unreachable!(""),
+                        }
                     }
-                    3 => todo!("DMA3 Video capture"),
+                    3 => {
+                        cycles += self.do_dma(control, src, dest, count, dma_id);
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -2230,13 +2880,84 @@ impl GameboyAdvance {
         cycles
     }
 
+    pub fn handle_dma_delay(&mut self) {
+        if self.io_registers.dma0_ready() && self.io_registers.dma_just_enabled[0] {
+            self.io_registers.dma_just_enabled[0] = false;
+            // TODO: implement this when something needs it
+            // NOTE: special does not exist for dma0
+            debug_assert_ne!(
+                self.io_registers.dma0().start_timing,
+                DmaStartTiming::Special
+            );
+            //debug_assert_ne!(self.io_registers.dma0().start_timing, DmaStartTiming::HBlank);
+            debug_assert_ne!(
+                self.io_registers.dma0().start_timing,
+                DmaStartTiming::VBlank
+            );
+            //self.io_registers.load_internal_dma_values(0);
+            if self.io_registers.dma0().start_timing == DmaStartTiming::Immediately {
+                self.io_registers.trigger_dma(0);
+            }
+        }
+        if self.io_registers.dma1_ready() && self.io_registers.dma_just_enabled[1] {
+            // TODO: implement this when something needs it
+            debug_assert!(!matches!(
+                self.io_registers.dma1().start_timing,
+                DmaStartTiming::VBlank | DmaStartTiming::HBlank
+            ));
+            self.io_registers.dma_just_enabled[1] = false;
+            //self.io_registers.load_internal_dma_values(1);
+            if self.io_registers.dma1().start_timing == DmaStartTiming::Immediately {
+                self.io_registers.trigger_dma(1);
+            }
+        }
+        if self.io_registers.dma2_ready() && self.io_registers.dma_just_enabled[2] {
+            // TODO: implement this when something needs it
+            debug_assert!(!matches!(
+                self.io_registers.dma2().start_timing,
+                DmaStartTiming::VBlank | DmaStartTiming::HBlank
+            ));
+            self.io_registers.dma_just_enabled[2] = false;
+            //self.io_registers.load_internal_dma_values(2);
+            if self.io_registers.dma2().start_timing == DmaStartTiming::Immediately {
+                self.io_registers.trigger_dma(2);
+            }
+        }
+        if self.io_registers.dma3_ready() && self.io_registers.dma_just_enabled[3] {
+            // TODO: implement this when something needs it
+            debug_assert_ne!(
+                self.io_registers.dma3().start_timing,
+                DmaStartTiming::VBlank
+            );
+            debug_assert_ne!(
+                self.io_registers.dma3().start_timing,
+                DmaStartTiming::HBlank
+            );
+            debug_assert_ne!(
+                self.io_registers.dma3().start_timing,
+                DmaStartTiming::Special
+            );
+            self.io_registers.dma_just_enabled[3] = false;
+            //self.io_registers.load_internal_dma_values(3);
+            if self.io_registers.dma3().start_timing == DmaStartTiming::Immediately {
+                self.io_registers.trigger_dma(3);
+            }
+        }
+    }
+
     pub fn handle_dma(&mut self) -> u32 {
         // TODO: only process Immediate DMA here
         // TODO: structure the code so that the tight dispatch loop doesn't need
         // to do a lot of work to check which DMA is ready: do the logic in IoRegisters
-        if self.io_registers.dma0_ready() {
-            self.io_registers.dma0_enabled = false;
+        if self.io_registers.dma0_enabled && self.io_registers.dma_triggered[0] {
+            self.io_registers.dma_triggered[0] = false;
             let dma = self.io_registers.dma0();
+            if dma.repeat {
+                self.io_registers.reload_dma_word_count(0);
+                if dma.dest_addr_control == DmaAddrControl::IncrementReload {
+                    self.io_registers.reload_dma_dest(0);
+                }
+            }
             let src = self.io_registers.dma0_source_addr();
             let dest = self.io_registers.dma0_dest_addr();
             let mut count = self.io_registers.dma0_word_count();
@@ -2247,11 +2968,20 @@ impl GameboyAdvance {
             if dma.irq_at_end && self.dma0_interrupt_enabled() {
                 self.set_dma0_interrupt(true);
             }
-            self.io_registers.disable_dma0();
+            if !dma.repeat {
+                self.io_registers.dma0_enabled = false;
+                self.io_registers.disable_dma0();
+            }
             out
-        } else if self.io_registers.dma1_ready() {
-            self.io_registers.dma1_enabled = false;
+        } else if self.io_registers.dma1_enabled && self.io_registers.dma_triggered[1] {
+            self.io_registers.dma_triggered[1] = false;
             let dma = self.io_registers.dma1();
+            if dma.repeat {
+                self.io_registers.reload_dma_word_count(1);
+                if dma.dest_addr_control == DmaAddrControl::IncrementReload {
+                    self.io_registers.reload_dma_dest(1);
+                }
+            }
             let src = self.io_registers.dma1_source_addr();
             let dest = self.io_registers.dma1_dest_addr();
             let mut count = self.io_registers.dma1_word_count();
@@ -2262,11 +2992,20 @@ impl GameboyAdvance {
             if dma.irq_at_end && self.dma1_interrupt_enabled() {
                 self.set_dma1_interrupt(true);
             }
-            self.io_registers.disable_dma1();
+            if !dma.repeat {
+                self.io_registers.dma1_enabled = false;
+                self.io_registers.disable_dma1();
+            }
             out
-        } else if self.io_registers.dma2_ready() {
-            self.io_registers.dma2_enabled = false;
+        } else if self.io_registers.dma2_enabled && self.io_registers.dma_triggered[2] {
+            self.io_registers.dma_triggered[2] = false;
             let dma = self.io_registers.dma2();
+            if dma.repeat {
+                self.io_registers.reload_dma_word_count(2);
+                if dma.dest_addr_control == DmaAddrControl::IncrementReload {
+                    self.io_registers.reload_dma_dest(2);
+                }
+            }
             let src = self.io_registers.dma2_source_addr();
             let dest = self.io_registers.dma2_dest_addr();
             let mut count = self.io_registers.dma2_word_count();
@@ -2277,11 +3016,20 @@ impl GameboyAdvance {
             if dma.irq_at_end && self.dma2_interrupt_enabled() {
                 self.set_dma2_interrupt(true);
             }
-            self.io_registers.disable_dma2();
+            if !dma.repeat {
+                self.io_registers.dma2_enabled = false;
+                self.io_registers.disable_dma2();
+            }
             out
-        } else if self.io_registers.dma3_ready() {
-            self.io_registers.dma3_enabled = false;
+        } else if self.io_registers.dma3_enabled && self.io_registers.dma_triggered[3] {
             let dma = self.io_registers.dma3();
+            if dma.repeat {
+                self.io_registers.reload_dma_word_count(3);
+                if dma.dest_addr_control == DmaAddrControl::IncrementReload {
+                    self.io_registers.reload_dma_dest(3);
+                }
+            }
+            self.io_registers.dma_triggered[3] = false;
             let src = self.io_registers.dma3_source_addr();
             let dest = self.io_registers.dma3_dest_addr();
             let mut count = self.io_registers.dma3_word_count() as u32;
@@ -2292,7 +3040,10 @@ impl GameboyAdvance {
             if dma.irq_at_end && self.dma3_interrupt_enabled() {
                 self.set_dma3_interrupt(true);
             }
-            self.io_registers.disable_dma3();
+            if !dma.repeat {
+                self.io_registers.dma3_enabled = false;
+                self.io_registers.disable_dma3();
+            }
             out
         } else {
             0
@@ -2300,14 +3051,12 @@ impl GameboyAdvance {
     }
 
     // TODO: aligned reads
-    pub fn get_opcode(&self) -> u32 {
-        // TODO: the timing of reading from mem for PC should be handled?
-        self.get_mem32(self.r.pc).0
+    pub fn get_opcode(&self) -> (u32, u8) {
+        self.get_mem32(self.r.pc, true)
     }
 
-    pub fn get_thumb_opcode(&self) -> u16 {
-        // TODO: the timing of reading from mem for PC should be handled?
-        self.get_mem16(self.r.pc).0
+    pub fn get_thumb_opcode(&self) -> (u16, u8) {
+        self.get_mem16(self.r.pc, true)
     }
 
     pub fn dispatch(&mut self) -> u32 {
@@ -2322,12 +3071,20 @@ impl GameboyAdvance {
         }
         */
         let mut cycles = 0;
-        let dma_waiting = self.io_registers.dma_waiting();
         let dma_ready = self.io_registers.dma_ready();
-        if dma_waiting && dma_ready {
-            return self.handle_dma();
+        let dma_just_enabled_old = self.io_registers.dma_just_enabled.clone();
+        if dma_ready {
+            self.handle_dma_delay();
         }
-        if self.get_mem16(0x4000202).0 != 0 && self.master_interrupts_enabled() {
+        let dma_waiting = self.io_registers.dma_waiting();
+        if dma_waiting {
+            let dma_cycles = self.handle_dma();
+            // TODO: 0 should never be returned, the fact that is means our checking logic is wrong
+            if dma_cycles != 0 {
+                return dma_cycles;
+            }
+        }
+        if self.get_mem16(0x4000202, false).0 != 0 && self.master_interrupts_enabled() {
             self.maybe_handle_interrupts();
         }
         if self.r.thumb_enabled() {
@@ -2338,15 +3095,24 @@ impl GameboyAdvance {
 
         // TODO: this probably needs to be tracked per DMA channel
         // TODO: do we need to recheck DMA to see if it's been disabled by this last instruction?
-        if dma_waiting && !dma_ready {
-            self.io_registers.dma_inc_delay_counter(cycles as u8);
+        // TODO: make new condition
+        for i in 0..4 {
+            /*
+            if !dma_just_enabled_old[i] && self.io_registers.dma_just_enabled[i] {
+                continue;
+            }*/
+            if dma_just_enabled_old[i] && self.io_registers.dma_just_enabled[i] {
+                self.io_registers.dma_inc_delay_counter(i as u8, 1);
+            }
         }
+        //if dma_waiting && !dma_ready {
+        //}
 
         cycles
     }
 
     pub fn dispatch_arm(&mut self) -> u8 {
-        let opcode = self.get_opcode();
+        let (opcode, mut cycles) = self.get_opcode();
         let opcode_idx = (opcode >> 25) & 0x7;
 
         self.r.pc = self.r.pc.wrapping_add(4);
@@ -2354,22 +3120,28 @@ impl GameboyAdvance {
         // TODO: some instructions can't be skipped, handle those
         if opcode == 0 {
             //self.r.pc = self.r.pc.wrapping_add(4);
-            return 4;
+            return 4 + cycles;
         }
         trace!("opcode: {:032b} at 0x{:X}", opcode, self.r.pc - 4);
         let cond = Cond::from_u8(((opcode >> 28) & 0xF) as u8);
         if !self.cond_should_execute(cond) {
             trace!("Skipped!");
-            return 1;
+            return 1 + cycles;
         }
-        //if self.r.pc != (0x08001CF0 - 4){
         /*
-        let mut reg_str = String::new();
-        for i in 0..15 {
-            reg_str += &format!("r{}=0x{:X}, ", i, self.r[i as u8]);
+            //if self.r.pc != (0x08001CF0 - 4){
+            let mut reg_str = String::new();
+            for i in 0..15 {
+                reg_str += &format!("r{}=0x{:X}, ", i, self.r[i as u8]);
+            }
+        use std::hash::Hasher;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for i in 0..0x18000 {
+            hasher.write_u8(self.vram[i]);
         }
-        println!("pc=0x{:X}: regs={}", self.r.pc + 4, reg_str);
-        */
+        let hash = hasher.finish();
+            println!("pc=0x{:X}: regs={} vram_hash={:X}", self.r.pc + 4, reg_str, hash);
+            */
         /*
         } else {
             std::process::exit(0);
@@ -2377,10 +3149,11 @@ impl GameboyAdvance {
         */
 
         if (opcode >> 8) & 0xF_FFFF == 0b0001_0010_1111_1111_1111 {
-            return self.dispatch_branch_and_exchange(opcode);
+            cycles += self.dispatch_branch_and_exchange(opcode);
+            return cycles;
         }
 
-        let cycles = match opcode_idx {
+        cycles += match opcode_idx {
             0b101 => self.dispatch_branch(opcode),
             0b000 => {
                 let multiply_end = ((opcode >> 4) & 0xF) == 0b1001;
@@ -2427,7 +3200,8 @@ impl GameboyAdvance {
                 if next_bit {
                     self.dispatch_software_interrupt(opcode)
                 } else {
-                    todo!("SWI with next bit not set");
+                    self.dispatch_software_interrupt(opcode)
+                    //todo!("SWI with next bit not set");
                 }
             }
             //0b111 => self.dispatch_codata_op(opcode),
@@ -2439,24 +3213,29 @@ impl GameboyAdvance {
     }
 
     pub fn dispatch_thumb(&mut self) -> u8 {
-        let opcode = self.get_thumb_opcode();
+        let (opcode, mut cycles) = self.get_thumb_opcode();
         let opcode_idx = (opcode >> 13) & 0x7;
         self.r.pc += 2;
 
         /*
-        let mut reg_str = String::new();
-        for i in 0..15 {
-            reg_str += &format!("r{}=0x{:X}, ", i, self.r[i as u8]);
+            let mut reg_str = String::new();
+            for i in 0..15 {
+                reg_str += &format!("r{}=0x{:X}, ", i, self.r[i as u8]);
+            }
+        use std::hash::Hasher;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for i in 0..0x18000 {
+            hasher.write_u8(self.vram[i]);
         }
-        println!("THUMB pc=0x{:X}: regs={}", self.r.pc + 2, reg_str);
-        */
-
+        let hash = hasher.finish();
+            println!("THUMB pc=0x{:X}: regs={} vram_hash={:X}", self.r.pc + 2, reg_str, hash);
+            */
         if opcode == 0 {
             return 4;
         }
         trace!("THUMB opcode: {:016b} at 0x{:X}", opcode, self.r.pc - 2);
 
-        let cycles = match opcode_idx {
+        cycles += match opcode_idx {
             0b000 => self.dispatch_thumb_shift_add_sub(opcode),
             0b001 => self.dispatch_thumb_imm(opcode),
             0b010 => {
@@ -2696,7 +3475,7 @@ impl GameboyAdvance {
         let pc = (self.r.pc + 2) & !2;
         let addr = pc + nn as u32;
 
-        let o = self.get_mem32(addr);
+        let o = self.get_mem32(addr, false);
         trace!("LDR r{}, [PC, #{} (0x{:X})] (0x{:X})", rd, nn, addr, o.0);
         self.r[rd] = o.0;
 
@@ -2792,7 +3571,7 @@ impl GameboyAdvance {
 
         match sub_op_idx {
             0b00 => {
-                trace!("STR r{}, [r{}, r{}]", rd, rb, ro);
+                trace!("STR r{} (0x{:X}), [r{}, r{}]", rd, self.r[rd], rb, ro);
                 let o = self.set_mem32(self.r[rb].wrapping_add(self.r[ro]), self.r[rd]);
                 1 + o
             }
@@ -2803,7 +3582,7 @@ impl GameboyAdvance {
             }
             0b10 => {
                 trace!("LDR r{}, [r{}, r{}]", rd, rb, ro);
-                let o = self.get_mem32(self.r[rb].wrapping_add(self.r[ro]));
+                let o = self.get_mem32(self.r[rb].wrapping_add(self.r[ro]), false);
                 self.r[rd] = o.0;
                 2 + o.1
             }
@@ -2838,13 +3617,13 @@ impl GameboyAdvance {
             }
             0b10 => {
                 trace!("LDRH r{}, [r{}, r{}]", rd, rb, ro);
-                let o = self.get_mem16(self.r[rb].wrapping_add(self.r[ro]));
+                let o = self.get_mem16(self.r[rb].wrapping_add(self.r[ro]), false);
                 self.r[rd] = o.0 as u32;
                 2 + o.1
             }
             0b11 => {
                 trace!("LDSH r{}, [r{}, r{}]", rd, rb, ro);
-                let o = self.get_mem16(self.r[rb].wrapping_add(self.r[ro]));
+                let o = self.get_mem16(self.r[rb].wrapping_add(self.r[ro]), false);
                 // TODO: double check that this sign extends properly
                 self.r[rd] = (o.0 as i16) as i32 as u32;
                 2 + o.1
@@ -2861,7 +3640,7 @@ impl GameboyAdvance {
         if sub_opcode {
             // LDRH
             trace!("LDRH r{}, [r{}, r{}]", rd, rb, offset);
-            let o = self.get_mem16(self.r[rb] + (offset * 2));
+            let o = self.get_mem16(self.r[rb] + (offset * 2), false);
             self.r[rd] = o.0 as u32;
             2 + o.1
         } else {
@@ -2880,25 +3659,32 @@ impl GameboyAdvance {
 
         match sub_op_idx {
             0b00 => {
-                trace!("STR r{}, [r{}, #{}]", rd, rb, offset);
+                trace!(
+                    "STR r{} (0x{:X}), [r{} (0x{:X}), #{:X}]",
+                    rd,
+                    self.r[rd],
+                    rb,
+                    self.r[rb],
+                    offset
+                );
                 let o = self.set_mem32(self.r[rb].wrapping_add(offset * 4), self.r[rd]);
                 // 2N?
                 1 + o
             }
             0b01 => {
-                trace!("LDR r{}, [r{}, #{}]", rd, rb, offset);
-                let o = self.get_mem32(self.r[rb].wrapping_add(offset * 4));
+                trace!("LDR r{}, [r{}, #{:X}]", rd, rb, offset);
+                let o = self.get_mem32(self.r[rb].wrapping_add(offset * 4), false);
                 self.r[rd] = o.0;
                 2 + o.1
             }
             0b10 => {
-                trace!("STRB r{}, [r{}, #{}]", rd, rb, offset);
+                trace!("STRB r{}, [r{}, #{:X}]", rd, rb, offset);
                 let o = self.set_mem8(self.r[rb].wrapping_add(offset), self.r[rd] as u8);
                 // 2N?
                 1 + o
             }
             0b11 => {
-                trace!("LDRB r{}, [r{}, #{}]", rd, rb, offset);
+                trace!("LDRB r{}, [r{}, #{:X}]", rd, rb, offset);
                 // TODO: do we clear the upper 24 bits here?
                 let o = self.get_mem8(self.r[rb].wrapping_add(offset));
                 self.r[rd] = o.0 as u32;
@@ -2922,7 +3708,7 @@ impl GameboyAdvance {
             for i in 0..8 {
                 if r_list & (1 << i) != 0 {
                     cycles += 2;
-                    let o = self.get_mem32(self.r[rb]);
+                    let o = self.get_mem32(self.r[rb], true);
                     self.r[rb] = self.r[rb].wrapping_add(4);
                     self.r[i as u8] = o.0;
                     cycles += o.1;
@@ -2949,7 +3735,7 @@ impl GameboyAdvance {
 
         if subop {
             trace!("LDR r{}, [SP, #{}]", rd, nn);
-            let o = self.get_mem32(self.r.sp() + (nn * 4));
+            let o = self.get_mem32(self.r.sp() + (nn * 4), false);
             self.r[rd] = o.0;
             o.1 + 2
         } else {
@@ -2986,7 +3772,7 @@ impl GameboyAdvance {
 
             for i in 0..8 {
                 if r_list & (1 << i) != 0 {
-                    let o = self.get_mem32(self.r.sp());
+                    let o = self.get_mem32(self.r.sp(), true);
                     *self.r.sp_mut() += 4;
                     self.r[i as u8] = o.0;
                     //println!("popping value 0x{:X} to r{}", o.0, i);
@@ -2995,7 +3781,7 @@ impl GameboyAdvance {
                 }
             }
             if pc_lr {
-                let o = self.get_mem32(self.r.sp());
+                let o = self.get_mem32(self.r.sp(), true);
                 //println!("popping PC ({:X}) to 0x{:X}", self.r.sp(), o.0 & !1);
                 *self.r.sp_mut() += 4;
                 self.r.pc = o.0 & !1;
@@ -3193,7 +3979,7 @@ impl GameboyAdvance {
         if self.master_interrupts_enabled() {
             self.r.set_svc_mode();
             *self.r.lr_mut() = self.r.pc;
-            *self.r.get_spsr_mut() = self.r.cpsr;
+            //*self.r.get_spsr_mut() = self.r.cpsr;
             self.r.set_thumb(false);
             self.r.cpsr_disable_irq();
             self.r.pc = 0x08;
@@ -3206,7 +3992,7 @@ impl GameboyAdvance {
         if self.master_interrupts_enabled() {
             self.r.set_svc_mode();
             *self.r.lr_mut() = self.r.pc | 0;
-            *self.r.get_spsr_mut() = self.r.cpsr;
+            //*self.r.get_spsr_mut() = self.r.cpsr;
             self.r.set_thumb(false);
             self.r.cpsr_disable_irq();
             self.r.pc = 0x08;
@@ -3365,6 +4151,12 @@ impl GameboyAdvance {
         } else {
             true
         });
+        if matches!(sub_opcode, 0xA | 0xB | 0x8 | 0x9) && (rd != 0xF && rd != 0) {
+            println!("{:b}", opcode);
+            println!("pc={:X}", self.r.pc);
+            dbg!(sub_opcode, s, imm, rn, rd);
+        }
+
         debug_assert!(if matches!(sub_opcode, 0xA | 0xB | 0x8 | 0x9) {
             rd == 0xF || rd == 0
         } else {
@@ -3786,7 +4578,7 @@ impl GameboyAdvance {
             self.r[rd] = o.0 as u32;
             cycles += self.set_mem8(addr, rm_val as u8);
         } else {
-            let o = self.get_mem32(addr);
+            let o = self.get_mem32(addr, false);
             cycles += o.1;
             self.r[rd] = o.0;
             cycles += self.set_mem32(addr, rm_val);
@@ -3926,7 +4718,7 @@ impl GameboyAdvance {
             (((opcode >> 8) & 0xF) << 4) | (opcode & 0xF)
         } else {
             let rm = (opcode & 0xF) as u8;
-            debug_assert_ne!(rm, 0xF, "Data transfer from PC");
+            debug_assert_ne!(rm, 0xF, "Data transfer from PC at pc={:X}", self.r.pc);
             self.r[(opcode & 0xF) as u8]
         };
         let sub_opcode = (opcode >> 5) & 0x3;
@@ -3947,7 +4739,7 @@ impl GameboyAdvance {
             (true, 0b00) => todo!("reserved"),
             (true, 0b01) => {
                 trace!("LDRH r{} = [r{} + 0x{:X}]", rd, rn, offset);
-                let o = self.get_mem16(base_val);
+                let o = self.get_mem16(base_val, false);
                 self.r[rd] = o.0 as u32;
                 cycles = 2 + o.1;
             }
@@ -3959,7 +4751,7 @@ impl GameboyAdvance {
             }
             (true, 0b11) => {
                 trace!("LDRSH r{} = [r{} + 0x{:X}]", rd, rn, offset);
-                let o = self.get_mem16(base_val);
+                let o = self.get_mem16(base_val, false);
                 self.r[rd] = (o.0 as i16) as i32 as u32;
                 cycles = 2 + o.1;
             }
@@ -3971,8 +4763,8 @@ impl GameboyAdvance {
             }
             (false, 0b10) => {
                 trace!("LDRD r{} = [r{} + 0x{:X}]", rd, rn, offset);
-                let o1 = self.get_mem32(base_val);
-                let o2 = self.get_mem32(base_val + 4);
+                let o1 = self.get_mem32(base_val, false);
+                let o2 = self.get_mem32(base_val + 4, true);
                 self.r[rd] = o1.0;
                 self.r[rd + 1] = o2.0;
                 cycles = 2 + o1.1 + o2.1;
@@ -4064,11 +4856,11 @@ impl GameboyAdvance {
             } else {
                 let o = if val & 0x3 != 0 {
                     let shift_amt = (val & 0x3) << 3;
-                    let o = self.get_mem32(val & !0x3);
+                    let o = self.get_mem32(val & !0x3, true);
                     let v = BarrelShifter::ror(o.0, shift_amt, Some(&mut self.r));
                     (v, o.1)
                 } else {
-                    self.get_mem32(val)
+                    self.get_mem32(val, true)
                 };
                 trace!(
                     "LDR r{} = mem[r{} (0x{:X})] (0x{:X})",
@@ -4184,7 +4976,7 @@ impl GameboyAdvance {
                 if p {
                     base = base.wrapping_add(4);
                 }
-                let o = self.get_mem32(base);
+                let o = self.get_mem32(base, true);
                 //println!("Loading r{} (0x{:X}) from 0x{:X}", i, o.0, base);
                 self.r[i as u8] = o.0;
                 if i == 15 && load_psr {
@@ -4245,7 +5037,6 @@ impl GameboyAdvance {
     pub fn dispatch_branch_and_exchange(&mut self, opcode: u32) -> u8 {
         let subopcode = (opcode >> 4) & 0xF;
         let op_reg = opcode & 0xF;
-        debug_assert!(op_reg < 15);
         let mut op = self.r[op_reg as u8];
         if op_reg == 15 {
             op += 4;
@@ -4314,7 +5105,10 @@ impl crate::io::graphics::renderer::InputReceiver for GameboyAdvance {
             self.io_registers[0x130] &= !(bit as u8);
         }
         let keycnt = self.io_registers.get_mem16(0x4000132);
-        if self.keypad_interrupt_enabled() && (keycnt >> 14) & 1 == 1 {
+        if self.keypad_interrupt_enabled()
+            && self.master_interrupts_enabled()
+            && (keycnt >> 14) & 1 == 1
+        {
             let buttons = self.io_registers.get_mem16(0x4000130) & 0x3F;
             if (keycnt >> 15) == 1 {
                 // AND mode

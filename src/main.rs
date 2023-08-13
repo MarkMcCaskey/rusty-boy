@@ -122,6 +122,8 @@ fn main() {
         None
     };
 
+    let mut running_frame_counter = 0;
+    let mut running_frame_time = std::time::Instant::now();
     if is_gba {
         loop {
             let time_since_last_frame = std::time::Instant::now();
@@ -154,6 +156,14 @@ fn main() {
             appstate.step_gba();
             /*//check for new controller every frame
             self.load_controller_if_none_exist();*/
+            running_frame_counter += 1;
+            if running_frame_counter > (60 * 1) {
+                let time_diff = running_frame_time.elapsed();
+                let fps = (running_frame_counter as f32) / time_diff.as_secs_f32();
+                running_frame_counter = 0;
+                running_frame_time = std::time::Instant::now();
+                appstate.renderer.update_fps(fps);
+            }
 
             let time_diff = time_since_last_frame.elapsed();
             if time_diff < std::time::Duration::from_millis(16) {

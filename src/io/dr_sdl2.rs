@@ -20,6 +20,7 @@ pub struct Sdl2Renderer {
     sound_system: sdl2::audio::AudioDevice<GBSound>,
     canvas: render::Canvas<video::Window>,
     controller: Option<sdl2::controller::GameController>, // storing to keep alive
+    base_title: String,
     _sound_cycles: u64,
 }
 
@@ -112,6 +113,7 @@ impl Sdl2Renderer {
         Ok(Sdl2Renderer {
             sdl_context,
             sound_system,
+            base_title: app_settings.rom_file_name.clone(),
             canvas: renderer,
             controller,
             _sound_cycles: 0,
@@ -205,6 +207,13 @@ impl Renderer for Sdl2Renderer {
         }*/
 
         self.canvas.present();
+    }
+
+    fn update_fps(&mut self, fps: f32) {
+        self.canvas
+            .window_mut()
+            .set_title(format!("{} ({:.1} FPS)", self.base_title, fps).as_str())
+            .unwrap();
     }
 
     fn draw_gba_frame(&mut self, frame: &[[(u8, u8, u8); GBA_SCREEN_WIDTH]; GBA_SCREEN_HEIGHT]) {
@@ -405,6 +414,14 @@ impl Renderer for Sdl2Renderer {
                             Keycode::Down => ir.press(Button::Down),
                             Keycode::Left => ir.press(Button::Left),
                             Keycode::Right => ir.press(Button::Right),
+                            /*
+                            Keycode::L => {
+                                let env = env_logger::Env::default()
+                                    .filter_or("GAMEBOY_LOG_LEVEL", "info")
+                                    .write_style_or("GAMEBOY_LOG_STYLE", "always");
+                                let _handle = env_logger::init_from_env(env);
+                            }
+                            */
                             _ => (),
                         }
                     }
@@ -519,5 +536,53 @@ impl Renderer for Sdl2Renderer {
             // HACK: this is because we can't do it on trigger until we refactor APU
             sound_system.channel4.lfsr = 0x7FFF;
         }
+    }
+
+    fn gba_audio_step(&mut self, gb_apu: &Apu) {
+        //self.sound_system.resume();
+        // TODO: this function gets called a lot, we can definitely track information about
+        // whether it's worth getting this lock or not.
+        // AKA, has the enabled state changed? or is there new sound data?
+        let mut sound_system = self.sound_system.lock();
+
+        // if gba
+        let gba_fifo_freq = 32768.0 / 2.;
+        //sound_system.gba_fifo_a.wave_ram = gb_apu.gba_fifo_a.get_buffer();
+        sound_system.gba_fifo_a.enabled =
+            gb_apu.gba_sound_a_enabled.0 || gb_apu.gba_sound_a_enabled.1;
+        if gb_apu.gba_fifo_a.get_current_data().len() + gb_apu.gba_fifo_b.get_current_data().len()
+            != 0
+        {
+            //dbg!(gb_apu.gba_fifo_a.get_current_data().len(), gb_apu.gba_fifo_b.get_current_data().len());
+        }
+
+        if gb_apu.gba_fifo_a.reset_flag {
+            sound_system.gba_fifo_a.wave_ram.clear();
+            sound_system.gba_fifo_a.wave_ram.push_back(0);
+        }
+        for &data in gb_apu.gba_fifo_a.get_current_data() {
+            if sound_system.gba_fifo_a.wave_ram.len() >= 1024 {
+                sound_system.gba_fifo_a.wave_ram.pop_back();
+            }
+            sound_system.gba_fifo_a.wave_ram.push_front(data);
+        }
+        sound_system.gba_fifo_a.phase_inc = gb_apu.gba_fifo_a_sample_rate / sound_system.out_freq;
+        //sound_system.gba_fifo_a.phase_inc = gba_fifo_freq / sound_system.out_freq;
+        //sound_system.gba_fifo_b.wave_ram = gb_apu.gba_fifo_b.get_buffer();
+
+        if gb_apu.gba_fifo_b.reset_flag {
+            sound_system.gba_fifo_b.wave_ram.clear();
+            sound_system.gba_fifo_b.wave_ram.push_back(0);
+        }
+        sound_system.gba_fifo_b.enabled =
+            gb_apu.gba_sound_b_enabled.0 || gb_apu.gba_sound_b_enabled.1;
+        for &data in gb_apu.gba_fifo_b.get_current_data() {
+            if sound_system.gba_fifo_b.wave_ram.len() >= 1024 {
+                sound_system.gba_fifo_b.wave_ram.pop_back();
+            }
+            sound_system.gba_fifo_b.wave_ram.push_front(data);
+        }
+        sound_system.gba_fifo_b.phase_inc = gb_apu.gba_fifo_b_sample_rate / sound_system.out_freq;
+        //sound_system.gba_fifo_b.phase_inc = gba_fifo_freq / sound_system.out_freq;
     }
 }
